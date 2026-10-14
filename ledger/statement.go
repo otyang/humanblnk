@@ -15,8 +15,8 @@ import (
 // BalanceAt returns the account's posted balance at t, e.g. a month-end
 // balance. It uses Blnk's historical balance endpoint recomputed from
 // transactions (Core 0.10.1+). Pending (INFLIGHT) amounts aren't included.
-func (s *Service) BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error) {
-	const op = "ledger.BalanceAt"
+func (s accountsAPI) BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error) {
+	const op = "ledger.Accounts.BalanceAt"
 	if accountID == "" {
 		return Money{}, invalid(op, "account id is required")
 	}
@@ -24,7 +24,7 @@ func (s *Service) BalanceAt(ctx context.Context, accountID string, t time.Time) 
 	if err != nil {
 		return Money{}, mapErr(op, err)
 	}
-	return Precise(&h.Balance.Balance.Int, s.Precision(h.Balance.Currency), h.Balance.Currency), nil
+	return s.money(&h.Balance.Balance.Int, s.Precision(h.Balance.Currency), h.Balance.Currency), nil
 }
 
 // Statement is an account statement for [From, To): opening balance, every
@@ -44,10 +44,10 @@ type StatementLine struct {
 	Date        time.Time
 	Reference   string
 	Description string
-	Credit      Money // money in (zero for debits)
-	Debit       Money // money out (zero for credits)
-	Balance     Money // running balance after this line
-	Counterpart string
+	Credit      Money  // money in (zero for debits)
+	Debit       Money  // money out (zero for credits)
+	Balance     Money  // running balance after this line
+	Counterpart string // the other account: an id, or "@Name" for system accounts
 	Receipt     Receipt
 }
 
@@ -58,8 +58,8 @@ const maxStatementLines = 10000
 // from Blnk's historical balance; the running balance is computed here and
 // checked against the historical balance at To, so a statement that doesn't
 // add up is an error rather than a wrong document.
-func (s *Service) Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error) {
-	const op = "ledger.Statement"
+func (s accountsAPI) Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error) {
+	const op = "ledger.Accounts.Statement"
 	switch {
 	case accountID == "":
 		return nil, invalid(op, "account id is required")
@@ -71,9 +71,9 @@ func (s *Service) Statement(ctx context.Context, accountID string, from, to time
 		return nil, mapErr(op, err)
 	}
 	cur, prec := strings.ToUpper(b.Currency), s.Precision(b.Currency)
-	m := func(v *big.Int) Money { return Precise(v, prec, cur) }
+	m := func(v *big.Int) Money { return s.money(v, prec, cur) }
 
-	opening, err := s.BalanceAt(ctx, accountID, from.Add(-time.Nanosecond))
+	opening, err := s.Accounts().BalanceAt(ctx, accountID, from.Add(-time.Nanosecond))
 	if err != nil {
 		return nil, err
 	}
@@ -81,6 +81,7 @@ func (s *Service) Statement(ctx context.Context, accountID string, from, to time
 	run := new(big.Int).Set(opening.PreciseAmount)
 	in, out := new(big.Int), new(big.Int)
 	zero := m(new(big.Int))
+	names := map[string]string{} // balance id → "@Name" for system accounts
 
 	for offset := 0; ; offset += 100 {
 		txs, _, err := s.c.FilterTransactions(ctx, blnk.FilterRequest{
@@ -109,11 +110,11 @@ func (s *Service) Statement(ctx context.Context, accountID string, from, to time
 			case t.Destination:
 				run.Add(run, amt)
 				in.Add(in, amt)
-				line.Credit, line.Counterpart = m(amt), t.Source
+				line.Credit, line.Counterpart = m(amt), s.indicatorOf(ctx, t.Source, names)
 			case t.Source:
 				run.Sub(run, amt)
 				out.Add(out, amt)
-				line.Debit, line.Counterpart = m(amt), t.Destination
+				line.Debit, line.Counterpart = m(amt), s.indicatorOf(ctx, t.Destination, names)
 			default:
 				continue
 			}
@@ -129,7 +130,7 @@ func (s *Service) Statement(ctx context.Context, accountID string, from, to time
 	}
 	st.Closing, st.Credits, st.Debits = m(run), m(in), m(out)
 
-	closing, err := s.BalanceAt(ctx, accountID, to.Add(-time.Nanosecond))
+	closing, err := s.Accounts().BalanceAt(ctx, accountID, to.Add(-time.Nanosecond))
 	if err != nil {
 		return nil, err
 	}

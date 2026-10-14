@@ -14,7 +14,7 @@ import (
 // Each escrow is its own Blnk balance, so what is still held is simply that
 // balance, and Blnk itself refuses to release or refund more than is left.
 type Escrow struct {
-	ID          string // the escrow account id; pass it to ReleaseEscrow / RefundEscrow
+	ID          string // the escrow account id; pass it to Escrows().Release / Refund
 	Payer       string
 	Beneficiary string
 	Amount      Money  // amount originally put in escrow
@@ -41,9 +41,9 @@ type EscrowSettleInput struct {
 	MetaData    map[string]any
 }
 
-// OpenEscrow opens an escrow account and moves Amount into it from the payer.
-func (s *Service) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, error) {
-	const op = "ledger.OpenEscrow"
+// Open opens an escrow account and moves Amount into it from the payer.
+func (s escrowsAPI) Open(ctx context.Context, in EscrowInput) (*Escrow, error) {
+	const op = "ledger.Escrows.Open"
 	if err := s.validateMove(op, in.Payer, in.Reference); err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (s *Service) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, erro
 			return nil, &OpError{Op: op, Kind: ErrDuplicateReference,
 				Cause: fmt.Errorf("reference %q belongs to another transaction", in.Reference)}
 		}
-		return s.GetEscrow(ctx, t.Destination)
+		return s.Escrows().Get(ctx, t.Destination)
 	} else if !blnk.IsNotFound(err) {
 		return nil, mapErr(op, err)
 	}
@@ -91,12 +91,12 @@ func (s *Service) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, erro
 	}, "escrow_fund"); err != nil {
 		return nil, err
 	}
-	return s.GetEscrow(ctx, acct.BalanceID)
+	return s.Escrows().Get(ctx, acct.BalanceID)
 }
 
-// GetEscrow returns an escrow and how much of it is still held.
-func (s *Service) GetEscrow(ctx context.Context, escrowID string) (*Escrow, error) {
-	const op = "ledger.GetEscrow"
+// Get returns an escrow and how much of it is still held.
+func (s escrowsAPI) Get(ctx context.Context, escrowID string) (*Escrow, error) {
+	const op = "ledger.Escrows.Get"
 	b, err := s.escrowBalance(ctx, op, escrowID)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (s *Service) GetEscrow(ctx context.Context, escrowID string) (*Escrow, erro
 		Payer:     str(b.MetaData["escrow_payer"]), Beneficiary: str(b.MetaData["escrow_beneficiary"]),
 	}
 	if v, ok := new(big.Int).SetString(str(b.MetaData["escrow_amount"]), 10); ok {
-		e.Amount = Precise(v, a.Precision, a.Currency)
+		e.Amount = s.money(v, a.Precision, a.Currency)
 	}
 	if a.Balance.Sign() <= 0 {
 		e.Status = "settled"
@@ -116,14 +116,14 @@ func (s *Service) GetEscrow(ctx context.Context, escrowID string) (*Escrow, erro
 	return e, nil
 }
 
-// ReleaseEscrow pays escrowed money to the beneficiary.
-func (s *Service) ReleaseEscrow(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
-	return s.settleEscrow(ctx, "ledger.ReleaseEscrow", escrowID, in, "escrow_beneficiary", "escrow_release")
+// Release pays escrowed money to the beneficiary.
+func (s escrowsAPI) Release(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
+	return s.settleEscrow(ctx, "ledger.Escrows.Release", escrowID, in, "escrow_beneficiary", "escrow_release")
 }
 
-// RefundEscrow returns escrowed money to the payer.
-func (s *Service) RefundEscrow(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
-	return s.settleEscrow(ctx, "ledger.RefundEscrow", escrowID, in, "escrow_payer", "escrow_refund")
+// Refund returns escrowed money to the payer.
+func (s escrowsAPI) Refund(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
+	return s.settleEscrow(ctx, "ledger.Escrows.Refund", escrowID, in, "escrow_payer", "escrow_refund")
 }
 
 func (s *Service) settleEscrow(ctx context.Context, op, escrowID string, in EscrowSettleInput, toKey, kind string) (*Receipt, error) {
@@ -133,7 +133,7 @@ func (s *Service) settleEscrow(ctx context.Context, op, escrowID string, in Escr
 	}
 	amount := in.Amount
 	if !amount.isSet() {
-		amount = Precise(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
+		amount = s.money(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
 		if amount.Sign() <= 0 {
 			return nil, invalid(op, "escrow %s has nothing left", escrowID)
 		}

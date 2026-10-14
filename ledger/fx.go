@@ -23,7 +23,7 @@ type ExchangeInput struct {
 	// sell amount rounds up, so rounding never costs the house.
 	Rate string
 
-	Fee         Money  // optional, in the sell currency, charged on top to the fee income account
+	Fee         Money  // in the sell currency, charged on top to the fee income account; required unless Config.Fees is set (NoFee for free)
 	Reference   string // the two legs are recorded as Reference+"_sell" and Reference+"_buy"
 	Pool        string // default FXPoolAccount
 	Description string
@@ -44,8 +44,8 @@ type ExchangeReceipt struct {
 // Exchange debits From into the FX pool in the sell currency and credits To out
 // of the pool in the buy currency, as one atomic batch: both legs post or
 // neither does. Each currency's pool balance is the house's open position.
-func (s *Service) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeReceipt, error) {
-	const op = "ledger.Exchange"
+func (s paymentsAPI) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeReceipt, error) {
+	const op = "ledger.Payments.Exchange"
 	if err := s.validateMove(op, in.From, in.Reference); err != nil {
 		return nil, err
 	}
@@ -81,13 +81,13 @@ func (s *Service) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeRece
 			return nil, err
 		}
 		v := new(big.Rat).Mul(new(big.Rat).SetInt(sell.PreciseAmount), scale)
-		buy = Precise(roundRat(v, RoundDown), buyPrec, buyCur)
+		buy = s.money(roundRat(v, RoundDown), buyPrec, buyCur)
 	} else {
 		if buy, err = s.resolveIn(op, in.Buy, buyCur); err != nil {
 			return nil, err
 		}
 		v := new(big.Rat).Quo(new(big.Rat).SetInt(buy.PreciseAmount), scale)
-		sell = Precise(roundRat(v, RoundUp), sellPrec, sellCur)
+		sell = s.money(roundRat(v, RoundUp), sellPrec, sellCur)
 	}
 	if !sell.IsPositive() || !buy.IsPositive() {
 		return nil, invalid(op, "amount is too small to exchange at rate %s", in.Rate)
@@ -101,8 +101,12 @@ func (s *Service) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeRece
 	for k, v := range in.MetaData {
 		md[k] = v
 	}
+	fee, err := s.feeFor(ctx, op, in.Fee, FeeRequest{Kind: FeeExchange, Amount: sell, BuyCurrency: buyCur}, in.From, from)
+	if err != nil {
+		return nil, err
+	}
 	debit, err := s.moveReq(ctx, op, TransferInput{
-		From: in.From, To: pool, Amount: sell, Fee: in.Fee, Reference: in.Reference + "_sell",
+		From: in.From, To: pool, Amount: sell, Fee: fee, Reference: in.Reference + "_sell",
 		Description: firstNonEmpty(in.Description, "Exchange "+sellCur+" to "+buyCur), MetaData: md,
 	}, "exchange")
 	if err != nil {
@@ -119,9 +123,9 @@ func (s *Service) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeRece
 	if err != nil {
 		return nil, err
 	}
-	fee := Precise(new(big.Int).Sub(&debit.PreciseAmount.Int, sell.PreciseAmount), sellPrec, sellCur)
+	charged := s.money(new(big.Int).Sub(&debit.PreciseAmount.Int, sell.PreciseAmount), sellPrec, sellCur)
 	return &ExchangeReceipt{
-		Sold: sell, Bought: buy, Fee: fee, Rate: in.Rate,
+		Sold: sell, Bought: buy, Fee: charged, Rate: in.Rate,
 		Debit: legs[0], Credit: legs[1], Replayed: legs[0].Replayed,
 	}, nil
 }
@@ -163,7 +167,7 @@ func (s *Service) atomic(ctx context.Context, op string, reqs []blnk.CreateTrans
 			return nil, mapErr(op, err)
 		case lerr != nil:
 			return nil, mapErr(op, lerr)
-		case replay && !samePayload(t, r):
+		case replay && !s.samePayload(ctx, t, r):
 			return nil, mapErr(op, err)
 		}
 		out[i] = s.toReceipt(t)

@@ -41,8 +41,8 @@ type LimitUsage struct {
 
 // LimitUsage reports usage against the account's limit (for "you can send X
 // more today" in your app).
-func (s *Service) LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error) {
-	const op = "ledger.LimitUsage"
+func (s accountsAPI) LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error) {
+	const op = "ledger.Accounts.LimitUsage"
 	b, err := s.c.GetBalance(ctx, accountID)
 	if err != nil {
 		return nil, mapErr(op, err)
@@ -52,7 +52,7 @@ func (s *Service) LimitUsage(ctx context.Context, accountID string) (*LimitUsage
 
 func (s *Service) usage(ctx context.Context, op string, b *blnk.Balance) (*LimitUsage, error) {
 	prec, cur := s.Precision(b.Currency), strings.ToUpper(b.Currency)
-	zero := Precise(new(big.Int), prec, cur)
+	zero := s.money(new(big.Int), prec, cur)
 	u := &LimitUsage{Limit: s.limitFor(b), DailyUsed: zero, MonthlyUsed: zero}
 	if u.Limit == nil || (u.Limit.Daily == "" && u.Limit.Monthly == "") {
 		return u, nil
@@ -73,7 +73,7 @@ func (s *Service) usage(ctx context.Context, op string, b *blnk.Balance) (*Limit
 		return nil, mapErr(op, err)
 	}
 	daily, monthly := spent(txs, day), spent(txs, month)
-	u.DailyUsed, u.MonthlyUsed = Precise(daily, prec, cur), Precise(monthly, prec, cur)
+	u.DailyUsed, u.MonthlyUsed = s.money(daily, prec, cur), s.money(monthly, prec, cur)
 	left := func(capStr string, used *big.Int) (*Money, error) {
 		if capStr == "" {
 			return nil, nil
@@ -82,7 +82,7 @@ func (s *Service) usage(ctx context.Context, op string, b *blnk.Balance) (*Limit
 		if err != nil {
 			return nil, &OpError{Op: op, Kind: ErrInvalidInput, Cause: fmt.Errorf("limit: %w", err)}
 		}
-		m := Precise(c.Sub(c, used), prec, cur)
+		m := s.money(c.Sub(c, used), prec, cur)
 		return &m, nil
 	}
 	if u.DailyLeft, err = left(u.Limit.Daily, daily); err != nil {

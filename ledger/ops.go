@@ -19,12 +19,12 @@ type CloseInput struct {
 	Reason    string
 }
 
-// CloseAccount moves any remaining balance to SweepTo and marks the account
+// Close moves any remaining balance to SweepTo and marks the account
 // closed. It refuses while anything is pending (INFLIGHT) or the balance is
 // negative. Closed accounts are rejected by every movement when
 // Config.EnforceAccountStatus is on. Closing a frozen account is allowed.
-func (s *Service) CloseAccount(ctx context.Context, accountID string, in CloseInput) (*Account, error) {
-	const op = "ledger.CloseAccount"
+func (s accountsAPI) Close(ctx context.Context, accountID string, in CloseInput) (*Account, error) {
+	const op = "ledger.Accounts.Close"
 	if accountID == "" || strings.HasPrefix(accountID, "@") {
 		return nil, invalid(op, "a customer account id is required")
 	}
@@ -46,12 +46,12 @@ func (s *Service) CloseAccount(ctx context.Context, accountID string, in CloseIn
 		if in.SweepTo == "" || strings.TrimSpace(in.Reference) == "" {
 			return nil, invalid(op, "account has a balance: SweepTo and Reference are required")
 		}
-		amount := Precise(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
+		amount := s.money(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
 		// Built directly so a frozen account can still be swept on closure.
 		req, err := s.transferReq(TransferInput{
 			From: accountID, To: in.SweepTo, Amount: amount, Reference: in.Reference,
 			Description: "Account closure", MetaData: map[string]any{"close_reason": in.Reason},
-		}, amount, Precise(newInt(0), amount.Precision, amount.Currency), "account_closure")
+		}, amount, s.money(newInt(0), amount.Precision, amount.Currency), "account_closure")
 		if err != nil {
 			return nil, invalid(op, "%v", err)
 		}
@@ -65,7 +65,7 @@ func (s *Service) CloseAccount(ctx context.Context, accountID string, in CloseIn
 	}); err != nil {
 		return nil, mapErr(op, err)
 	}
-	return s.GetAccount(ctx, accountID)
+	return s.Accounts().Get(ctx, accountID)
 }
 
 // ----- Suspense ----------------------------------------------------------------
@@ -81,12 +81,12 @@ type SuspenseInput struct {
 }
 
 // ParkInSuspense records unidentified incoming money: clearing account → @Suspense.
-func (s *Service) ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error) {
+func (s operationsAPI) ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error) {
 	md := map[string]any{"suspense_note": in.Note}
 	for k, v := range in.MetaData {
 		md[k] = v
 	}
-	return s.move(ctx, "ledger.ParkInSuspense", TransferInput{
+	return s.move(ctx, "ledger.Operations.ParkInSuspense", TransferInput{
 		From: s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount), To: SuspenseAccount,
 		Amount: in.Amount, Reference: in.Reference, AllowOverdraft: true,
 		Description: firstNonEmpty(in.Note, "Unidentified funds"), MetaData: md,
@@ -105,8 +105,8 @@ type AllocateInput struct {
 
 // AllocateSuspense moves parked money to its owner: @Suspense → account. It
 // can't allocate more than suspense holds.
-func (s *Service) AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error) {
-	return s.move(ctx, "ledger.AllocateSuspense", TransferInput{
+func (s operationsAPI) AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error) {
+	return s.move(ctx, "ledger.Operations.AllocateSuspense", TransferInput{
 		From: SuspenseAccount, To: in.AccountID, Amount: in.Amount, Reference: in.Reference,
 		Description: firstNonEmpty(in.Note, "Suspense allocation"),
 		MetaData:    map[string]any{"suspense_reference": in.SuspenseReference},
@@ -140,8 +140,8 @@ type AdjustInput struct {
 
 // Adjust posts a correction between the account and @Adjustments, recording
 // reason, requester and approver in metadata so every correction is auditable.
-func (s *Service) Adjust(ctx context.Context, in AdjustInput) (*Receipt, error) {
-	const op = "ledger.Adjust"
+func (s operationsAPI) Adjust(ctx context.Context, in AdjustInput) (*Receipt, error) {
+	const op = "ledger.Operations.Adjust"
 	if strings.TrimSpace(in.Reason) == "" {
 		return nil, invalid(op, "reason is required")
 	}
@@ -212,8 +212,8 @@ type SettlementReceipt struct {
 //	Payout:     Dr Clearing (Amount), Dr ProviderFees (Fee) / Cr Bank (Amount+Fee)
 //
 // The entries post atomically.
-func (s *Service) RecordSettlement(ctx context.Context, in SettlementInput) (*SettlementReceipt, error) {
-	const op = "ledger.RecordSettlement"
+func (s operationsAPI) RecordSettlement(ctx context.Context, in SettlementInput) (*SettlementReceipt, error) {
+	const op = "ledger.Operations.RecordSettlement"
 	if in.Provider == "" && in.ClearingAccount == "" {
 		return nil, invalid(op, "provider or clearing account is required")
 	}
@@ -226,7 +226,7 @@ func (s *Service) RecordSettlement(ctx context.Context, in SettlementInput) (*Se
 	}
 	md := map[string]any{"settlement_reference": in.Reference, "provider": in.Provider}
 	desc := firstNonEmpty(in.Description, "Settlement "+strings.TrimPrefix(clearing, "@"))
-	zero := Precise(newInt(0), amount.Precision, amount.Currency)
+	zero := s.money(newInt(0), amount.Precision, amount.Currency)
 
 	var main, feeLeg TransferInput
 	switch in.Direction {

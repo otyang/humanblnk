@@ -26,85 +26,19 @@ import (
 	"github.com/otyang/humanblnk/blnk"
 )
 
-// Ledger is the interface your application depends on. Service implements it
-// on Blnk; Instrument wraps any Ledger with an Observer.
-type Ledger interface {
-	// Accounts
-	OpenAccount(ctx context.Context, in OpenAccountInput) (*Account, error)
-	GetAccount(ctx context.Context, accountID string) (*Account, error)
-	GetSystemAccount(ctx context.Context, indicator, currency string) (*Account, error)
-	FindAccounts(ctx context.Context, q AccountQuery) (*AccountPage, error)
-	FreezeAccount(ctx context.Context, accountID, reason string) error
-	UnfreezeAccount(ctx context.Context, accountID string) error
-	CloseAccount(ctx context.Context, accountID string, in CloseInput) (*Account, error)
-
-	// Customers and pots
-	OpenCustomer(ctx context.Context, in CustomerInput) (*Customer, error)
-	GetCustomer(ctx context.Context, identityID string) (*Customer, error)
-	OpenPot(ctx context.Context, in PotInput) (*Pot, error)
-	ListPots(ctx context.Context, parentID string) ([]*Pot, error)
-
-	// Money movement
-	Deposit(ctx context.Context, in DepositInput) (*Receipt, error)
-	Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, error)
-	Transfer(ctx context.Context, in TransferInput) (*Receipt, error)
-	Split(ctx context.Context, in SplitInput) (*Receipt, error)
-	Exchange(ctx context.Context, in ExchangeInput) (*ExchangeReceipt, error)
-	Hold(ctx context.Context, in HoldInput) (*Receipt, error)
-	BulkTransfer(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error)
-	ScheduleRecurring(ctx context.Context, in RecurringInput) ([]*Receipt, error)
-
-	// Finalising pending (INFLIGHT) transactions: confirm a withdrawal, capture a
-	// hold (optionally partially), approve a pending deposit — or cancel them.
-	Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error)
-	Cancel(ctx context.Context, txID string) (*Receipt, error)
-	ConfirmMany(ctx context.Context, items []ConfirmItem) ([]BatchResult, error)
-	CancelMany(ctx context.Context, txIDs []string) ([]BatchResult, error)
-
-	// Refunds, disputes and escrow
-	Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error)
-	RefundPartial(ctx context.Context, txID string, in PartialRefundInput) (*Receipt, error)
-	OpenDispute(ctx context.Context, in DisputeInput) (*Receipt, error)
-	ResolveDispute(ctx context.Context, disputeID string, outcome DisputeOutcome, partial *Money) (*Receipt, error)
-	OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, error)
-	GetEscrow(ctx context.Context, escrowID string) (*Escrow, error)
-	ReleaseEscrow(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error)
-	RefundEscrow(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error)
-
-	// Quotes and limits
-	QuoteDeposit(ctx context.Context, in DepositInput) (*Quote, error)
-	QuoteWithdraw(ctx context.Context, in WithdrawInput) (*Quote, error)
-	QuoteTransfer(ctx context.Context, in TransferInput) (*Quote, error)
-	LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error)
-
-	// Reads and statements
-	GetTransaction(ctx context.Context, txID string) (*Receipt, error)
-	GetTransactionByReference(ctx context.Context, reference string) (*Receipt, error)
-	History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error)
-	BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error)
-	Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error)
-
-	// Back office
-	RecordSettlement(ctx context.Context, in SettlementInput) (*SettlementReceipt, error)
-	ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error)
-	AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error)
-	Adjust(ctx context.Context, in AdjustInput) (*Receipt, error)
-	TrialBalance(ctx context.Context, currency string) (*TrialBalance, error)
-	WatchBalance(ctx context.Context, in WatchInput) (*Watch, error)
-	Unwatch(ctx context.Context, watchID string) error
-	CreateMatchingRule(ctx context.Context, r MatchingRule) (string, error)
-	Reconcile(ctx context.Context, in ReconcileInput) (*Reconciliation, error)
-	GetReconciliation(ctx context.Context, id string) (*Reconciliation, error)
-}
-
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 // Config controls how the Service maps domain operations onto Blnk.
 type Config struct {
-	// LedgerID that customer accounts are created in (required for OpenAccount).
+	// LedgerID that customer accounts are created in (required for Accounts().Open).
 	LedgerID string
+
+	// Display sets how amounts are shown to people per currency (Money.Display),
+	// e.g. {"ETH": {Decimals: 4, TrimZeros: true}}. Unlisted currencies use
+	// BuiltinDisplay, else every decimal place of their precision, padded.
+	Display map[string]DisplayRule
 
 	// Precisions maps currency → smallest-unit multiplier. Unlisted currencies use DefaultPrecision.
 	Precisions       map[string]int64
@@ -116,6 +50,12 @@ type Config struct {
 	FeeIncomeAccount       string // default "@FeeIncome"
 	DepositClearingAccount string // default "@DepositClearing" (used when DepositInput.Provider is empty)
 	PayoutClearingAccount  string // default "@PayoutClearing" (used when WithdrawInput.Provider is empty)
+
+	// Fees prices every chargeable transaction (Deposit, Withdraw, Transfer,
+	// Exchange, Schedule, each Bulk item and the quotes) that has no explicit
+	// Fee. It runs on every such call, so prices can change at runtime. Without
+	// it, those calls must set Fee (ledger.NoFee for a free transaction).
+	Fees FeeFunc
 
 	// UseQueue routes writes through Blnk's queue (status QUEUED, final result via
 	// webhook). Default false = skip_queue:true, so you get APPLIED/INFLIGHT or a
@@ -176,7 +116,7 @@ type OpenAccountInput struct {
 	LedgerID   string // optional: overrides Config.LedgerID
 
 	// ExternalID is your own id for this account (e.g. your user id). With it,
-	// OpenAccount is safe to retry: an account already opened with the same
+	// Accounts().Open is safe to retry: an account already opened with the same
 	// ExternalID and currency is returned instead of a second one being created.
 	ExternalID string
 	MetaData   map[string]any
@@ -207,7 +147,7 @@ type Account struct {
 type DepositInput struct {
 	AccountID string
 	Amount    Money  // gross amount received from the provider
-	Fee       Money  // optional: deducted from Amount, credited to the fee income account
+	Fee       Money  // deducted from Amount, credited to the fee income account; required unless Config.Fees is set (NoFee for free)
 	Reference string // REQUIRED idempotency key, e.g. the provider's payment id
 
 	// Provider that collected the money, e.g. "paystack" → debits @PaystackClearing.
@@ -224,7 +164,7 @@ type DepositInput struct {
 type WithdrawInput struct {
 	AccountID string
 	Amount    Money  // amount the customer receives
-	Fee       Money  // optional: charged on top of Amount
+	Fee       Money  // charged on top of Amount; required unless Config.Fees is set (NoFee for free)
 	Reference string // REQUIRED idempotency key
 	// Provider that pays out, e.g. "flutterwave" → credits @FlutterwaveClearing.
 	// Empty uses Config.PayoutClearingAccount. ClearingAccount overrides with an exact indicator.
@@ -243,7 +183,7 @@ type TransferInput struct {
 	From           string // account / balance id or indicator
 	To             string
 	Amount         Money // amount the recipient receives
-	Fee            Money // optional: charged to sender on top of Amount
+	Fee            Money // charged to sender on top of Amount; required unless Config.Fees is set (NoFee for free)
 	Reference      string
 	AllowOverdraft bool
 	Pending        bool // create INFLIGHT; Confirm/Cancel later
@@ -356,9 +296,9 @@ type Service struct {
 
 	ruleMu sync.Mutex
 	ruleID string // default reconciliation matching rule, created on first use
-}
 
-var _ Ledger = (*Service)(nil)
+	indicators sync.Map // "@Name|CUR" → balance id; indicator balances never move
+}
 
 // New builds a Service. The client is shared and safe for concurrent use.
 func New(c *blnk.Client, cfg Config) *Service {
@@ -410,6 +350,7 @@ func (s *Service) resolve(op string, m Money, currency string) (Money, error) {
 	if err != nil {
 		return Money{}, &OpError{Op: op, Kind: ErrInvalidInput, Cause: err}
 	}
+	r.Display = s.Display(r)
 	return r, nil
 }
 
@@ -428,7 +369,7 @@ func (s *Service) prepare(op, account string, amount, fee Money, ref string) (Mo
 	if !a.IsPositive() {
 		return Money{}, Money{}, invalid(op, "amount must be positive")
 	}
-	f := Precise(new(big.Int), a.Precision, a.Currency)
+	f := s.money(new(big.Int), a.Precision, a.Currency)
 	if fee.isSet() {
 		if fee.Currency != "" && !strings.EqualFold(fee.Currency, a.Currency) {
 			return Money{}, Money{}, invalid(op, "fee currency %s differs from amount currency %s", fee.Currency, a.Currency)
@@ -446,8 +387,10 @@ func (s *Service) prepare(op, account string, amount, fee Money, ref string) (Mo
 
 // ----- Accounts --------------------------------------------------------------
 
-func (s *Service) OpenAccount(ctx context.Context, in OpenAccountInput) (*Account, error) {
-	const op = "ledger.OpenAccount"
+// Open creates a customer account (a Blnk balance) in Config.LedgerID or
+// in.LedgerID, marked active. With ExternalID it is safe to retry.
+func (s accountsAPI) Open(ctx context.Context, in OpenAccountInput) (*Account, error) {
+	const op = "ledger.Accounts.Open"
 	ledgerID := in.LedgerID
 	if ledgerID == "" {
 		ledgerID = s.cfg.LedgerID
@@ -489,8 +432,10 @@ func (s *Service) OpenAccount(ctx context.Context, in OpenAccountInput) (*Accoun
 	return s.toAccount(b), nil
 }
 
-func (s *Service) GetAccount(ctx context.Context, accountID string) (*Account, error) {
-	const op = "ledger.GetAccount"
+// Get returns an account with its balance, available balance (balance minus
+// pending debits) and pending amounts.
+func (s accountsAPI) Get(ctx context.Context, accountID string) (*Account, error) {
+	const op = "ledger.Accounts.Get"
 	if accountID == "" {
 		return nil, invalid(op, "account id is required")
 	}
@@ -501,9 +446,9 @@ func (s *Service) GetAccount(ctx context.Context, accountID string) (*Account, e
 	return s.toAccount(b), nil
 }
 
-// GetSystemAccount returns a system account such as "@FeeIncome" or "@PaystackClearing".
-func (s *Service) GetSystemAccount(ctx context.Context, indicator, currency string) (*Account, error) {
-	const op = "ledger.GetSystemAccount"
+// GetSystem returns a system account such as "@FeeIncome" or "@PaystackClearing".
+func (s accountsAPI) GetSystem(ctx context.Context, indicator, currency string) (*Account, error) {
+	const op = "ledger.Accounts.GetSystem"
 	if !strings.HasPrefix(indicator, "@") {
 		return nil, invalid(op, "indicator must start with @")
 	}
@@ -514,28 +459,33 @@ func (s *Service) GetSystemAccount(ctx context.Context, indicator, currency stri
 	return s.toAccount(b), nil
 }
 
-// FreezeAccount marks the account frozen in metadata. Enforced by this layer when
+// Freeze marks the account frozen in metadata. Enforced by this layer when
 // Config.EnforceAccountStatus is true (Blnk itself does not block on metadata).
-func (s *Service) FreezeAccount(ctx context.Context, accountID, reason string) error {
+func (s accountsAPI) Freeze(ctx context.Context, accountID, reason string) error {
 	_, err := s.c.UpdateMetadata(ctx, accountID, blnk.MetaData{
 		"status": "frozen", "status_reason": reason,
 		"status_changed_at": s.cfg.Now().UTC().Format(time.RFC3339),
 	})
-	return mapErr("ledger.FreezeAccount", err)
+	return mapErr("ledger.Accounts.Freeze", err)
 }
 
-func (s *Service) UnfreezeAccount(ctx context.Context, accountID string) error {
+// Unfreeze marks a frozen account active again.
+func (s accountsAPI) Unfreeze(ctx context.Context, accountID string) error {
 	_, err := s.c.UpdateMetadata(ctx, accountID, blnk.MetaData{
 		"status": "active", "status_reason": "",
 		"status_changed_at": s.cfg.Now().UTC().Format(time.RFC3339),
 	})
-	return mapErr("ledger.UnfreezeAccount", err)
+	return mapErr("ledger.Accounts.Unfreeze", err)
 }
 
 // ----- Money movement -------------------------------------------------------
 
-func (s *Service) Deposit(ctx context.Context, in DepositInput) (*Receipt, error) {
-	const op = "ledger.Deposit"
+// Deposit records money received from outside: the provider's clearing
+// account (e.g. @PaystackClearing) is debited and the account credited, less
+// the fee, which goes to the fee income account. Pending holds it INFLIGHT
+// until Pending().Confirm.
+func (s paymentsAPI) Deposit(ctx context.Context, in DepositInput) (*Receipt, error) {
+	const op = "ledger.Payments.Deposit"
 	req, err := s.depositReq(ctx, op, in)
 	if err != nil {
 		return nil, err
@@ -545,7 +495,11 @@ func (s *Service) Deposit(ctx context.Context, in DepositInput) (*Receipt, error
 
 func (s *Service) depositReq(ctx context.Context, op string, in DepositInput) (blnk.CreateTransactionRequest, error) {
 	var none blnk.CreateTransactionRequest
-	amount, fee, err := s.prepare(op, in.AccountID, in.Amount, in.Fee, in.Reference)
+	fee, err := s.feeFor(ctx, op, in.Fee, FeeRequest{Kind: FeeDeposit, Amount: in.Amount, Provider: in.Provider}, in.AccountID, nil)
+	if err != nil {
+		return none, err
+	}
+	amount, fee, err := s.prepare(op, in.AccountID, in.Amount, fee, in.Reference)
 	if err != nil {
 		return none, err
 	}
@@ -573,8 +527,12 @@ func (s *Service) depositReq(ctx context.Context, op string, in DepositInput) (b
 	return req, nil
 }
 
-func (s *Service) Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, error) {
-	const op = "ledger.Withdraw"
+// Withdraw sends money out: the account is debited Amount + Fee, the
+// provider's clearing account credited Amount. It is held INFLIGHT until
+// Pending().Confirm (provider success) or Cancel (failure), and auto-cancels
+// after Config.WithdrawalHoldTTL; Immediate posts it at once.
+func (s paymentsAPI) Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, error) {
+	const op = "ledger.Payments.Withdraw"
 	req, err := s.withdrawReq(ctx, op, in)
 	if err != nil {
 		return nil, err
@@ -584,7 +542,11 @@ func (s *Service) Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, err
 
 func (s *Service) withdrawReq(ctx context.Context, op string, in WithdrawInput) (blnk.CreateTransactionRequest, error) {
 	var none blnk.CreateTransactionRequest
-	amount, fee, err := s.prepare(op, in.AccountID, in.Amount, in.Fee, in.Reference)
+	fee, err := s.feeFor(ctx, op, in.Fee, FeeRequest{Kind: FeeWithdrawal, Amount: in.Amount, Provider: in.Provider}, in.AccountID, nil)
+	if err != nil {
+		return none, err
+	}
+	amount, fee, err := s.prepare(op, in.AccountID, in.Amount, fee, in.Reference)
 	if err != nil {
 		return none, err
 	}
@@ -620,8 +582,23 @@ func (s *Service) withdrawReq(ctx context.Context, op string, in WithdrawInput) 
 	return req, nil
 }
 
-func (s *Service) Transfer(ctx context.Context, in TransferInput) (*Receipt, error) {
-	return s.move(ctx, "ledger.Transfer", in, "transfer")
+// Transfer moves money between accounts. The sender pays Amount + Fee; the
+// recipient gets Amount. Pending holds it INFLIGHT; ScheduledFor posts it later.
+func (s paymentsAPI) Transfer(ctx context.Context, in TransferInput) (*Receipt, error) {
+	const op = "ledger.Payments.Transfer"
+	in, err := s.withTransferFee(ctx, op, in, nil)
+	if err != nil {
+		return nil, err
+	}
+	return s.move(ctx, op, in, "transfer")
+}
+
+// withTransferFee fills in a customer transfer's fee (see feeFor). Internal
+// flows build transfers without it: they never charge a fee.
+func (s *Service) withTransferFee(ctx context.Context, op string, in TransferInput, from *blnk.Balance) (TransferInput, error) {
+	fee, err := s.feeFor(ctx, op, in.Fee, FeeRequest{Kind: FeeTransfer, Amount: in.Amount}, in.From, from)
+	in.Fee = fee
+	return in, err
 }
 
 // move is Transfer with an explicit operation name and txn_type, used by the
@@ -662,8 +639,11 @@ func (s *Service) moveReq(ctx context.Context, op string, in TransferInput, kind
 	return req, nil
 }
 
-func (s *Service) Hold(ctx context.Context, in HoldInput) (*Receipt, error) {
-	return s.hold(ctx, "ledger.Hold", in, "hold")
+// Hold reserves money on an account without moving it, like a card
+// authorisation. Pending().Confirm captures all or part of it; Cancel releases
+// it. ExpiresAt releases it automatically, CaptureAt captures it.
+func (s pendingAPI) Hold(ctx context.Context, in HoldInput) (*Receipt, error) {
+	return s.hold(ctx, "ledger.Pending.Hold", in, "hold")
 }
 
 func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string) (*Receipt, error) {
@@ -700,8 +680,8 @@ func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string
 
 // Confirm settles an INFLIGHT transaction. With partial set, only that amount is
 // settled and the rest stays held (call Confirm again or Cancel the remainder).
-func (s *Service) Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error) {
-	const op = "ledger.Confirm"
+func (s pendingAPI) Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error) {
+	const op = "ledger.Pending.Confirm"
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
@@ -721,8 +701,8 @@ func (s *Service) Confirm(ctx context.Context, txID string, partial *Money) (*Re
 }
 
 // Cancel releases whatever is still held on an INFLIGHT transaction.
-func (s *Service) Cancel(ctx context.Context, txID string) (*Receipt, error) {
-	const op = "ledger.Cancel"
+func (s pendingAPI) Cancel(ctx context.Context, txID string) (*Receipt, error) {
+	const op = "ledger.Pending.Cancel"
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
@@ -737,8 +717,8 @@ func (s *Service) Cancel(ctx context.Context, txID string) (*Receipt, error) {
 
 // Refund reverses a settled (or confirmed/cancelled pending) transaction once.
 // For split transactions created through the queue, pass the queued parent id.
-func (s *Service) Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error) {
-	const op = "ledger.Refund"
+func (s transactionsAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error) {
+	const op = "ledger.Transactions.Refund"
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
@@ -760,8 +740,11 @@ func (s *Service) Refund(ctx context.Context, txID string, in RefundInput) (*Rec
 	return s.toReceipt(t), nil
 }
 
-func (s *Service) BulkTransfer(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error) {
-	const op = "ledger.BulkTransfer"
+// Bulk posts up to 10,000 transfers as one Blnk batch, e.g. payroll.
+// Atomic makes them all-or-nothing; Pending holds them all INFLIGHT; Async
+// processes them in the background with the outcome sent by webhook.
+func (s paymentsAPI) Bulk(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error) {
+	const op = "ledger.Payments.Bulk"
 	if len(in.Items) == 0 {
 		return nil, invalid(op, "at least one transfer is required")
 	}
@@ -771,7 +754,19 @@ func (s *Service) BulkTransfer(ctx context.Context, in BulkTransferInput) (*Bulk
 	seen := make(map[string]struct{}, len(in.Items))
 	reqs := make([]blnk.CreateTransactionRequest, 0, len(in.Items))
 	ids := make([]string, 0, 2*len(in.Items))
+	senders := map[string]*blnk.Balance{} // one lookup per sender when Config.Fees prices items
 	for i, it := range in.Items {
+		if !it.Fee.isSet() && s.cfg.Fees != nil && it.From != "" && !strings.HasPrefix(it.From, "@") && senders[it.From] == nil {
+			b, err := s.c.GetBalance(ctx, it.From)
+			if err != nil {
+				return nil, mapErr(op, err)
+			}
+			senders[it.From] = b
+		}
+		var err error
+		if it, err = s.withTransferFee(ctx, op, it, senders[it.From]); err != nil {
+			return nil, fmt.Errorf("item %d: %w", i, err)
+		}
 		amount, fee, err := s.prepare(op, it.From, it.Amount, it.Fee, it.Reference)
 		if err != nil {
 			return nil, invalid(op, "item %d: %v", i, err)
@@ -806,18 +801,19 @@ func (s *Service) BulkTransfer(ctx context.Context, in BulkTransferInput) (*Bulk
 
 // ----- Reads ----------------------------------------------------------------
 
-func (s *Service) GetTransaction(ctx context.Context, txID string) (*Receipt, error) {
-	t, err := s.c.GetTransaction(ctx, txID)
+// Get returns a transaction by its Blnk id.
+func (s transactionsAPI) Get(ctx context.Context, txID string) (*Receipt, error) {
+	t, err := s.byID(ctx, txID)
 	if err != nil {
-		return nil, mapErr("ledger.GetTransaction", err)
+		return nil, mapErr("ledger.Transactions.Get", err)
 	}
 	return s.toReceipt(t), nil
 }
 
-// GetTransactionByReference tries the reference as given, then with Blnk's "_q"
+// GetByReference tries the reference as given, then with Blnk's "_q"
 // suffix used for records produced by the queue.
-func (s *Service) GetTransactionByReference(ctx context.Context, reference string) (*Receipt, error) {
-	const op = "ledger.GetTransactionByReference"
+func (s transactionsAPI) GetByReference(ctx context.Context, reference string) (*Receipt, error) {
+	const op = "ledger.Transactions.GetByReference"
 	t, err := s.byReference(ctx, reference)
 	if err != nil {
 		return nil, mapErr(op, err)
@@ -826,8 +822,8 @@ func (s *Service) GetTransactionByReference(ctx context.Context, reference strin
 }
 
 // History lists an account's transactions, newest first.
-func (s *Service) History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error) {
-	const op = "ledger.History"
+func (s accountsAPI) History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error) {
+	const op = "ledger.Accounts.History"
 	if accountID == "" {
 		return nil, invalid(op, "account id is required")
 	}
@@ -887,10 +883,21 @@ func (s *Service) baseReq(amount Money, ref, desc string, md map[string]any, kin
 		Precision:     amount.Precision,
 		Reference:     ref,
 		Currency:      amount.Currency,
-		Description:   desc,
+		Description:   firstNonEmpty(desc, defaultDescription(kind)),
 		SkipQueue:     !s.cfg.UseQueue,
 		MetaData:      meta,
 	}
+}
+
+// defaultDescription names a movement when the caller gave no description;
+// Blnk rejects a transaction with a blank description.
+func defaultDescription(kind string) string {
+	if kind == "" {
+		return "Transaction"
+	}
+	words := strings.Split(kind, "_")
+	words[0] = strings.ToUpper(words[0][:1]) + words[0][1:]
+	return strings.Join(words, " ") // "escrow_release" → "Escrow release"
 }
 
 // feeMeta records the fee and the net leg in both forms for reporting.
@@ -942,50 +949,12 @@ func (s *Service) post(ctx context.Context, op string, req blnk.CreateTransactio
 	if lookupErr != nil {
 		return nil, mapErr(op, err)
 	}
-	if !samePayload(existing, req) {
+	if !s.samePayload(ctx, existing, req) {
 		return nil, mapErr(op, err) // same reference, different payload: a real conflict
 	}
 	r := s.toReceipt(existing)
 	r.Replayed = true
 	return r, nil
-}
-
-// byReference looks a reference up as given, then with Blnk's "_q" suffix used
-// for records produced by the queue.
-func (s *Service) byReference(ctx context.Context, ref string) (*blnk.Transaction, error) {
-	t, err := s.c.GetTransactionByReference(ctx, ref)
-	if blnk.IsNotFound(err) && !strings.HasSuffix(ref, "_q") {
-		t, err = s.c.GetTransactionByReference(ctx, ref+"_q")
-	}
-	return t, err
-}
-
-// samePayload reports whether a stored transaction is the one req describes:
-// same amount, currency, source, destination(s) and kind of movement.
-func samePayload(t *blnk.Transaction, req blnk.CreateTransactionRequest) bool {
-	if t.PreciseAmount.Cmp(&req.PreciseAmount.Int) != 0 ||
-		!strings.EqualFold(t.Currency, req.Currency) || t.Source != req.Source {
-		return false
-	}
-	if req.Destination != "" && t.Destination != "" && t.Destination != req.Destination {
-		return false
-	}
-	if len(req.Destinations) > 0 && len(t.Destinations) > 0 {
-		if len(t.Destinations) != len(req.Destinations) {
-			return false
-		}
-		for i := range req.Destinations {
-			if t.Destinations[i].Identifier != req.Destinations[i].Identifier {
-				return false
-			}
-		}
-	}
-	if want, _ := req.MetaData["txn_type"].(string); want != "" {
-		if got, _ := t.MetaData["txn_type"].(string); got != "" && got != want {
-			return false
-		}
-	}
-	return true
 }
 
 func (s *Service) checkActive(ctx context.Context, op string, ids ...string) error {
@@ -1061,7 +1030,7 @@ func (s *Service) txPrecision(t *blnk.Transaction) int64 {
 
 // txMoney builds the amount in both forms from what Blnk stored.
 func (s *Service) txMoney(t *blnk.Transaction) Money {
-	return Precise(&t.PreciseAmount.Int, s.txPrecision(t), t.Currency)
+	return s.money(&t.PreciseAmount.Int, s.txPrecision(t), t.Currency)
 }
 
 func (s *Service) toReceipt(t *blnk.Transaction) *Receipt {
@@ -1086,7 +1055,7 @@ func (s *Service) toReceipt(t *blnk.Transaction) *Receipt {
 			leg := Leg{Account: d.Identifier, Distribution: d.Distribution, TransactionID: d.TransactionID, Narration: d.Narration}
 			if d.PreciseDistribution != "" {
 				if v, ok := new(big.Int).SetString(d.PreciseDistribution, 10); ok {
-					leg.Amount = Precise(v, precision, t.Currency)
+					leg.Amount = s.money(v, precision, t.Currency)
 				}
 				if leg.Distribution == "" {
 					leg.Distribution = d.PreciseDistribution
@@ -1101,7 +1070,7 @@ func (s *Service) toReceipt(t *blnk.Transaction) *Receipt {
 func (s *Service) toAccount(b *blnk.Balance) *Account {
 	cur := b.Currency
 	precision := s.Precision(cur)
-	m := func(v *big.Int) Money { return Precise(v, precision, cur) }
+	m := func(v *big.Int) Money { return s.money(v, precision, cur) }
 	w := &Account{
 		ID: b.BalanceID, LedgerID: b.LedgerID, IdentityID: b.IdentityID,
 		Indicator: b.Indicator, Currency: cur, Precision: precision,

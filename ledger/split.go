@@ -38,8 +38,8 @@ type SplitPart struct {
 // precise_distribution, so what each recipient gets is decided by this code,
 // not by rounding on the server: percentage parts round down, and the dust
 // goes to the Rest part (or, without one, to the first percentage part).
-func (s *Service) Split(ctx context.Context, in SplitInput) (*Receipt, error) {
-	const op = "ledger.Split"
+func (s paymentsAPI) Split(ctx context.Context, in SplitInput) (*Receipt, error) {
+	const op = "ledger.Payments.Split"
 	total, _, err := s.prepare(op, in.From, in.Amount, Money{}, in.Reference)
 	if err != nil {
 		return nil, err

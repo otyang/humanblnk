@@ -27,8 +27,8 @@ const maxInflightBatch = 100
 
 // ConfirmMany confirms up to 100 independent pending transactions in one call.
 // Each succeeds or fails on its own; check every BatchResult.
-func (s *Service) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]BatchResult, error) {
-	const op = "ledger.ConfirmMany"
+func (s pendingAPI) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]BatchResult, error) {
+	const op = "ledger.Pending.ConfirmMany"
 	if len(items) == 0 || len(items) > maxInflightBatch {
 		return nil, invalid(op, "between 1 and %d transactions per call", maxInflightBatch)
 	}
@@ -55,8 +55,8 @@ func (s *Service) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]Batch
 }
 
 // CancelMany cancels up to 100 independent pending transactions in one call.
-func (s *Service) CancelMany(ctx context.Context, txIDs []string) ([]BatchResult, error) {
-	const op = "ledger.CancelMany"
+func (s pendingAPI) CancelMany(ctx context.Context, txIDs []string) ([]BatchResult, error) {
+	const op = "ledger.Pending.CancelMany"
 	if len(txIDs) == 0 || len(txIDs) > maxInflightBatch {
 		return nil, invalid(op, "between 1 and %d transactions per call", maxInflightBatch)
 	}
@@ -84,7 +84,7 @@ func batchResults(op string, resp *blnk.BulkInflightResponse) []BatchResult {
 // precision and currency, so a typed "0.1" means what it meant when the
 // transaction was created, and rejects more than was held.
 func (s *Service) partialAmount(ctx context.Context, op, txID string, partial Money) (Money, error) {
-	held, err := s.c.GetTransaction(ctx, txID)
+	held, err := s.byID(ctx, txID)
 	if err != nil {
 		return Money{}, mapErr(op, err)
 	}

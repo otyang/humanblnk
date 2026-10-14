@@ -28,8 +28,8 @@ type TrialBalance struct {
 }
 
 // TrialBalance reads every balance in currency (100 per request).
-func (s *Service) TrialBalance(ctx context.Context, currency string) (*TrialBalance, error) {
-	const op = "ledger.TrialBalance"
+func (s operationsAPI) TrialBalance(ctx context.Context, currency string) (*TrialBalance, error) {
+	const op = "ledger.Operations.TrialBalance"
 	cur := strings.ToUpper(strings.TrimSpace(currency))
 	if cur == "" {
 		return nil, invalid(op, "currency is required")
@@ -59,8 +59,8 @@ func (s *Service) TrialBalance(ctx context.Context, currency string) (*TrialBala
 			break
 		}
 	}
-	tb.CustomerFunds = Precise(customers, prec, cur)
-	tb.Net = Precise(net, prec, cur)
+	tb.CustomerFunds = s.money(customers, prec, cur)
+	tb.Net = s.money(net, prec, cur)
 	tb.Balanced = net.Sign() == 0
 	return tb, nil
 }

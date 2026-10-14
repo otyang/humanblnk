@@ -26,7 +26,7 @@ type RecurringInput struct {
 	Count    int // 1–120
 }
 
-// ScheduleRecurring creates every occurrence up front as a Blnk scheduled
+// Schedule creates every occurrence up front as a Blnk scheduled
 // transaction (scheduled_for), e.g. a monthly savings plan or subscription.
 // Blnk has no native recurrence, so a plan is a set of scheduled transfers
 // sharing meta_data.recurring_reference. Calling it again with the same input
@@ -34,8 +34,8 @@ type RecurringInput struct {
 //
 // Monthly dates follow time.AddDate, so a plan starting on the 31st lands on
 // the 1st of shorter months; start on the 28th or earlier to avoid that.
-func (s *Service) ScheduleRecurring(ctx context.Context, in RecurringInput) ([]*Receipt, error) {
-	const op = "ledger.ScheduleRecurring"
+func (s paymentsAPI) Schedule(ctx context.Context, in RecurringInput) ([]*Receipt, error) {
+	const op = "ledger.Payments.Schedule"
 	switch {
 	case in.Count < 1 || in.Count > 120:
 		return nil, invalid(op, "count must be between 1 and 120")
@@ -46,6 +46,12 @@ func (s *Service) ScheduleRecurring(ctx context.Context, in RecurringInput) ([]*
 	case in.Transfer.Pending:
 		return nil, invalid(op, "a scheduled transfer cannot also be pending")
 	}
+	// The fee is decided once, now, and charged on every occurrence.
+	tmpl, err := s.withTransferFee(ctx, op, in.Transfer, nil)
+	if err != nil {
+		return nil, err
+	}
+	in.Transfer = tmpl
 	base := in.Transfer.Reference
 	out := make([]*Receipt, 0, in.Count)
 	for i := 0; i < in.Count; i++ {

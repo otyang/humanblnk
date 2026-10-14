@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"net/http"
 	"strings"
 	"time"
@@ -18,7 +19,7 @@ import (
 // WatchInput sets up an alert on an account's balance, e.g. "tell me when
 // @PayoutClearing's float drops below 1,000,000".
 type WatchInput struct {
-	AccountID string // balance id (for a system account, use GetSystemAccount(...).ID)
+	AccountID string // balance id (for a system account, use Accounts().GetSystem(...).ID)
 	Field     string // balance (default), credit_balance, debit_balance, inflight_balance, inflight_debit_balance, inflight_credit_balance
 	Operator  string // <, <=, >, >=, ==, !=  ("=" is accepted and sent as "==")
 	Threshold Money
@@ -37,9 +38,9 @@ type Watch struct {
 }
 
 // WatchBalance creates a Blnk balance monitor. Alerts arrive through your
-// global webhook as EventBalanceAlert (see ParseWebhook).
-func (s *Service) WatchBalance(ctx context.Context, in WatchInput) (*Watch, error) {
-	const op = "ledger.WatchBalance"
+// global webhook as EventBalanceAlert (see Service.ParseWebhook).
+func (s operationsAPI) WatchBalance(ctx context.Context, in WatchInput) (*Watch, error) {
+	const op = "ledger.Operations.WatchBalance"
 	if in.AccountID == "" {
 		return nil, invalid(op, "account id is required")
 	}
@@ -84,11 +85,11 @@ func (s *Service) WatchBalance(ctx context.Context, in WatchInput) (*Watch, erro
 }
 
 // Unwatch deletes a balance monitor.
-func (s *Service) Unwatch(ctx context.Context, watchID string) error {
+func (s operationsAPI) Unwatch(ctx context.Context, watchID string) error {
 	if watchID == "" {
-		return invalid("ledger.Unwatch", "watch id is required")
+		return invalid("ledger.Operations.Unwatch", "watch id is required")
 	}
-	return mapErr("ledger.Unwatch", s.c.DeleteBalanceMonitor(ctx, watchID))
+	return mapErr("ledger.Operations.Unwatch", s.c.DeleteBalanceMonitor(ctx, watchID))
 }
 
 // ----- Webhooks ------------------------------------------------------------------
@@ -167,7 +168,19 @@ func (s *Service) ParseWebhook(r *http.Request, cfg WebhookConfig) (*Event, erro
 			return nil, &OpError{Op: op, Kind: ErrSignature, Cause: err}
 		}
 	}
-	return s.DecodeEvent(body)
+	e, err := s.DecodeEvent(body)
+	if err != nil {
+		return nil, err
+	}
+	if e.Alert != nil && e.Alert.Threshold.PreciseAmount != nil && e.Alert.Threshold.Currency == "" {
+		// Blnk's monitor payload has no currency; read it from the account.
+		b, err := s.c.GetBalance(r.Context(), e.Alert.AccountID)
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		e.Alert.Threshold = s.money(e.Alert.Threshold.PreciseAmount, s.Precision(b.Currency), b.Currency)
+	}
+	return e, nil
 }
 
 // DecodeEvent decodes a webhook body that has already been verified.
@@ -200,8 +213,9 @@ func (s *Service) DecodeEvent(body []byte) (*Event, error) {
 		}
 		w := &Watch{ID: m.MonitorID, AccountID: m.BalanceID, Field: m.Condition.Field, Operator: m.Condition.Operator}
 		if m.Condition.PreciseValue != nil {
-			// Currency isn't in the payload; the threshold is in the smallest unit.
-			w.Threshold = Money{PreciseAmount: &m.Condition.PreciseValue.Int, Value: m.Condition.PreciseValue.String()}
+			// The payload has no currency: the threshold is the raw smallest-unit
+			// number. ParseWebhook (and WebhookHandler) fill in currency and value.
+			w.Threshold = Money{PreciseAmount: new(big.Int).Set(&m.Condition.PreciseValue.Int)}
 		}
 		e.Alert = w
 	case env.Event == EventBalanceCreated:

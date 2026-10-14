@@ -33,7 +33,7 @@ type ReconcileInput struct {
 	File     io.Reader
 	Filename string
 
-	// RuleIDs are matching rules created with CreateMatchingRule. Empty uses
+	// RuleIDs are matching rules created with Reconciliations().CreateRule. Empty uses
 	// one rule matching reference + currency + exact amount (created once
 	// per Service).
 	RuleIDs  []string
@@ -62,9 +62,9 @@ type MatchingRule = blnk.MatchingRule
 // MatchingCriterion is one condition of a MatchingRule.
 type MatchingCriterion = blnk.MatchingCriterion
 
-// CreateMatchingRule stores a rule in Blnk and returns its id.
-func (s *Service) CreateMatchingRule(ctx context.Context, r MatchingRule) (string, error) {
-	const op = "ledger.CreateMatchingRule"
+// CreateRule stores a rule in Blnk and returns its id.
+func (s reconciliationsAPI) CreateRule(ctx context.Context, r MatchingRule) (string, error) {
+	const op = "ledger.Reconciliations.CreateRule"
 	if r.Name == "" || len(r.Criteria) == 0 {
 		return "", invalid(op, "name and at least one criterion are required")
 	}
@@ -75,9 +75,9 @@ func (s *Service) CreateMatchingRule(ctx context.Context, r MatchingRule) (strin
 	return out.RuleID, nil
 }
 
-// Reconcile starts a reconciliation. Poll GetReconciliation until Done.
-func (s *Service) Reconcile(ctx context.Context, in ReconcileInput) (*Reconciliation, error) {
-	const op = "ledger.Reconcile"
+// Start starts a reconciliation. Poll Reconciliations().Get until Done.
+func (s reconciliationsAPI) Start(ctx context.Context, in ReconcileInput) (*Reconciliation, error) {
+	const op = "ledger.Reconciliations.Start"
 	if strings.TrimSpace(in.Source) == "" {
 		return nil, invalid(op, "source is required")
 	}
@@ -127,14 +127,14 @@ func (s *Service) Reconcile(ctx context.Context, in ReconcileInput) (*Reconcilia
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
-	return s.GetReconciliation(ctx, id)
+	return s.Reconciliations().Get(ctx, id)
 }
 
-// GetReconciliation returns a run's status and counts.
-func (s *Service) GetReconciliation(ctx context.Context, id string) (*Reconciliation, error) {
+// Get returns a run's status and counts.
+func (s reconciliationsAPI) Get(ctx context.Context, id string) (*Reconciliation, error) {
 	r, err := s.c.GetReconciliation(ctx, id)
 	if err != nil {
-		return nil, mapErr("ledger.GetReconciliation", err)
+		return nil, mapErr("ledger.Reconciliations.Get", err)
 	}
 	return &Reconciliation{
 		ID: firstNonEmpty(r.ReconciliationID, id), Status: r.Status, Matched: r.MatchedTransactions,
@@ -149,7 +149,7 @@ func (s *Service) defaultRule(ctx context.Context, op string) (string, error) {
 	if s.ruleID != "" {
 		return s.ruleID, nil
 	}
-	id, err := s.CreateMatchingRule(ctx, MatchingRule{
+	id, err := s.Reconciliations().CreateRule(ctx, MatchingRule{
 		Name: "reference+currency+amount", Description: "created by humanblnk",
 		Criteria: []MatchingCriterion{
 			{Field: "reference", Operator: "equals"},

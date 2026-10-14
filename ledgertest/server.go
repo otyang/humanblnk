@@ -2,8 +2,8 @@
 // test code that uses ledger.Service without a real Blnk instance:
 //
 //	svc, core := ledgertest.New(t, ledger.Config{})
-//	acct, _ := svc.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
-//	svc.Deposit(ctx, ledger.DepositInput{AccountID: acct.ID, Amount: ledger.Amount("100", "NGN"), Reference: "r1"})
+//	acct, _ := svc.Accounts().Open(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+//	svc.Payments().Deposit(ctx, ledger.DepositInput{AccountID: acct.ID, Amount: ledger.Amount("100", "NGN"), Reference: "r1"})
 //	core.Advance(25 * time.Hour) // expire holds, run scheduled transfers
 //
 // The real Service code runs unchanged against the emulator, so tests exercise
@@ -47,6 +47,8 @@ type Server struct {
 	identities map[string]*blnk.Identity
 	monitors   map[string]*blnk.BalanceMonitor
 	batches    map[string][]string // batch id → transaction ids
+	splits     map[string][]string // split parent id → leg ids (parents aren't stored)
+	splitRefs  map[string]bool     // references taken by split parents
 	rules      map[string]*blnk.MatchingRule
 	recons     map[string]*blnk.Reconciliation
 
@@ -74,6 +76,8 @@ func NewServer() *Server {
 		identities: map[string]*blnk.Identity{},
 		monitors:   map[string]*blnk.BalanceMonitor{},
 		batches:    map[string][]string{},
+		splits:     map[string][]string{},
+		splitRefs:  map[string]bool{},
 		rules:      map[string]*blnk.MatchingRule{},
 		recons:     map[string]*blnk.Reconciliation{},
 	}
@@ -383,13 +387,13 @@ func (s *Server) route(method, path string, q map[string][]string, body []byte) 
 		if !ok {
 			return nil, 0, fail(404, blnk.CodeTxnNotFound, "transaction with reference %s not found", seg(2))
 		}
-		return s.txns[id].view(), 200, nil
+		return s.txns[id].stored(), 200, nil
 	case method == "GET" && seg(0) == "transactions" && n == 2:
 		t, ok := s.txns[seg(1)]
 		if !ok {
 			return nil, 0, fail(404, blnk.CodeTxnNotFound, "transaction %s not found", seg(1))
 		}
-		return t.view(), 200, nil
+		return t.stored(), 200, nil
 	case method == "POST" && seg(0) == "refund-transaction" && n == 2:
 		var in blnk.RefundRequest
 		if err := decode(&in); err != nil {
@@ -495,7 +499,7 @@ func (s *Server) filterTxns(body []byte) (any, int, error) {
 	}
 	rows := make([]any, 0, len(s.order))
 	for _, id := range s.order {
-		rows = append(rows, s.txns[id].view())
+		rows = append(rows, s.txns[id].stored())
 	}
 	return applyFilter(in, rows)
 }

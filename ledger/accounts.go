@@ -52,10 +52,10 @@ const (
 type AccountKind string
 
 const (
-	CustomerAccount AccountKind = "customer" // opened with OpenAccount
+	CustomerAccount AccountKind = "customer" // opened with Accounts().Open
 	SystemAccount   AccountKind = "system"   // "@" indicator, e.g. @FeeIncome, @PaystackClearing
 	PotAccount      AccountKind = "pot"      // savings pot under a customer account (OpenPot)
-	EscrowAccount   AccountKind = "escrow"   // one per escrow agreement (OpenEscrow)
+	EscrowAccount   AccountKind = "escrow"   // one per escrow agreement (Escrows().Open)
 )
 
 // metaKind is the meta_data key that marks pots and escrow accounts.

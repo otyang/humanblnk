@@ -14,7 +14,7 @@ type txn struct {
 	precise   big.Int   // amount, smallest unit
 	committed big.Int   // inflight: amount already committed
 	voided    bool      // inflight: remainder released
-	children  []string  // split legs (one transaction per destination)
+	legs      []string  // split parent (never stored): its leg transactions
 	expiresAt time.Time // inflight auto-void
 	commitAt  time.Time // inflight auto-commit
 	runAt     time.Time // scheduled
@@ -34,6 +34,22 @@ func (t *txn) view() blnk.Transaction {
 	}
 	v.Destinations = append([]blnk.Distribution(nil), t.Destinations...)
 	return v
+}
+
+// stored is how Blnk 0.15 returns a stored row on reads: precision and
+// amount_string come back empty.
+func (t *txn) stored() blnk.Transaction {
+	v := t.view()
+	v.Precision, v.AmountString = "0", ""
+	return v
+}
+
+// ids are the stored transactions behind t: its legs, or itself.
+func (t *txn) ids() []string {
+	if len(t.legs) > 0 {
+		return t.legs
+	}
+	return []string{t.TransactionID}
 }
 
 func (t *txn) remaining() *big.Int { return new(big.Int).Sub(&t.precise, &t.committed) }
@@ -62,7 +78,7 @@ func (s *Server) plan(in blnk.CreateTransactionRequest) (*txn, []leg, error) {
 	if strings.TrimSpace(in.Reference) == "" {
 		return nil, nil, fail(400, blnk.CodeTxnValidation, "reference is required")
 	}
-	if _, dup := s.refs[in.Reference]; dup {
+	if _, dup := s.refs[in.Reference]; dup || s.splitRefs[in.Reference] {
 		return nil, nil, fail(409, blnk.CodeDuplicateReference, "reference %s has already been used", in.Reference)
 	}
 	if in.PreciseAmount == nil || in.PreciseAmount.Sign() <= 0 {
@@ -70,6 +86,9 @@ func (s *Server) plan(in blnk.CreateTransactionRequest) (*txn, []leg, error) {
 	}
 	if in.Currency == "" {
 		return nil, nil, fail(400, blnk.CodeTxnValidation, "currency is required")
+	}
+	if strings.TrimSpace(in.Description) == "" {
+		return nil, nil, fail(400, blnk.CodeTxnValidation, "description: cannot be blank.") // as Blnk 0.15
 	}
 	if len(in.Sources) > 0 {
 		return nil, nil, fail(400, blnk.CodeTxnValidation, "emulator: multiple sources are not supported")
@@ -146,39 +165,45 @@ func (s *Server) plan(in blnk.CreateTransactionRequest) (*txn, []leg, error) {
 	return t, legs, nil
 }
 
-// commitPlan stores a planned transaction and moves the money.
+// commitPlan stores a planned transaction and moves the money. Like Blnk
+// 0.15, a transaction with several destinations is stored only as its legs
+// ("<ref>-1", "<ref>-2", …, each with parent_transaction = the parent id);
+// the parent is returned to the caller but never stored. "@Name" accounts
+// are stored by balance id.
 func (s *Server) commitPlan(t *txn, legs []leg, batch string) {
-	t.batch = batch
-	s.store(t)
-	if len(legs) > 1 || t.Destination == "" {
-		// Split: the parent records the destinations; each leg is a child
-		// transaction carrying parent_transaction, as Blnk does.
-		for i, l := range legs {
-			c := &txn{Transaction: t.Transaction}
-			c.TransactionID = s.id("txn")
-			c.Reference = fmt.Sprintf("%s_%d", t.Reference, i+1)
-			c.Destination = l.dist.Identifier
-			c.ParentTransaction = t.TransactionID
-			c.MetaData = blnk.MetaData{"QUEUED_PARENT_TRANSACTION": t.TransactionID}
-			for k, v := range t.MetaData {
-				c.MetaData[k] = v
-			}
-			c.Destinations = nil
-			c.precise.Set(l.amt)
-			c.AmountString = decimal(l.amt, precisionOf(t))
-			c.Amount = jsonNumber(c.AmountString)
-			c.batch = batch
-			s.store(c)
-			t.children = append(t.children, c.TransactionID)
-			d := l.dist
-			d.TransactionID = c.TransactionID
-			t.Destinations = append(t.Destinations, d)
+	if t.Destination != "" {
+		t.Source, t.Destination, t.batch = legs[0].src.BalanceID, legs[0].dst.BalanceID, batch
+		s.store(t)
+		if t.Status != blnk.StatusScheduled {
+			s.apply(t, legs, t.Status == blnk.StatusInflight)
 		}
-	}
-	if t.Status == blnk.StatusScheduled {
 		return
 	}
-	s.apply(t, legs, t.Status == blnk.StatusInflight)
+	s.splitRefs[t.Reference] = true
+	for i, l := range legs {
+		c := &txn{Transaction: t.Transaction, expiresAt: t.expiresAt, commitAt: t.commitAt, runAt: t.runAt, batch: batch}
+		c.TransactionID = s.id("txn")
+		c.Reference = fmt.Sprintf("%s-%d", t.Reference, i+1)
+		c.Source, c.Destination = l.src.BalanceID, l.dst.BalanceID
+		c.ParentTransaction = t.TransactionID
+		c.Destinations = nil
+		c.MetaData = blnk.MetaData{}
+		for k, v := range t.MetaData {
+			c.MetaData[k] = v
+		}
+		c.precise.Set(l.amt)
+		c.AmountString = decimal(l.amt, precisionOf(t))
+		c.Amount = jsonNumber(c.AmountString)
+		s.store(c)
+		if c.Status != blnk.StatusScheduled {
+			s.apply(c, []leg{l}, c.Status == blnk.StatusInflight)
+		}
+		t.legs = append(t.legs, c.TransactionID)
+		d := l.dist
+		d.TransactionID = c.TransactionID
+		t.Destinations = append(t.Destinations, d)
+	}
+	s.splits[t.TransactionID] = t.legs
 }
 
 func (s *Server) apply(t *txn, legs []leg, inflight bool) {
@@ -202,20 +227,11 @@ func (s *Server) store(t *txn) {
 	s.order = append(s.order, t.TransactionID)
 }
 
-// legsOf rebuilds the legs of a stored transaction (for commit, void, refund).
+// legsOf returns the movement of a stored (single-destination) transaction.
 func (s *Server) legsOf(t *txn) []leg {
 	src, _ := s.resolve(t.Source, t.Currency)
-	if len(t.children) == 0 {
-		dst, _ := s.resolve(t.Destination, t.Currency)
-		return []leg{{src, dst, new(big.Int).Set(&t.precise), blnk.Distribution{Identifier: t.Destination}}}
-	}
-	var out []leg
-	for _, id := range t.children {
-		c := s.txns[id]
-		dst, _ := s.resolve(c.Destination, c.Currency)
-		out = append(out, leg{src, dst, new(big.Int).Set(&c.precise), blnk.Distribution{Identifier: c.Destination}})
-	}
-	return out
+	dst, _ := s.resolve(t.Destination, t.Currency)
+	return []leg{{src, dst, new(big.Int).Set(&t.precise), blnk.Distribution{Identifier: t.Destination}}}
 }
 
 // distribute turns destinations into exact amounts: precise_distribution
@@ -289,6 +305,22 @@ func (s *Server) updateInflight(id string, in blnk.UpdateInflightRequest) (*txn,
 // inflightAction commits (optionally partially) or voids an inflight
 // transaction, recording the outcome as a child transaction.
 func (s *Server) inflightAction(id, action string, partial *big.Int) (*txn, error) {
+	if legIDs, isSplit := s.splits[id]; isSplit {
+		if partial != nil {
+			return nil, fail(400, blnk.CodeTxnValidation, "emulator: partial commit of a split transaction is not supported")
+		}
+		var first *txn
+		for _, lid := range legIDs {
+			c, err := s.inflightAction(lid, action, nil)
+			if err != nil {
+				return nil, err
+			}
+			if first == nil {
+				first = c // Blnk answers with the first leg's outcome
+			}
+		}
+		return first, nil
+	}
 	t, ok := s.txns[id]
 	if !ok {
 		return nil, fail(404, blnk.CodeTxnNotFound, "transaction %s not found", id)
@@ -309,9 +341,6 @@ func (s *Server) inflightAction(id, action string, partial *big.Int) (*txn, erro
 	case blnk.ActionCommit:
 		amt := rem
 		if partial != nil {
-			if len(legs) > 1 {
-				return nil, fail(400, blnk.CodeTxnValidation, "emulator: partial commit of a split transaction is not supported")
-			}
 			if partial.Sign() <= 0 {
 				return nil, fail(400, blnk.CodeInvalidAmount, "amount must be positive")
 			}
@@ -320,9 +349,7 @@ func (s *Server) inflightAction(id, action string, partial *big.Int) (*txn, erro
 			}
 			amt = new(big.Int).Set(partial)
 		}
-		if len(legs) == 1 {
-			legs[0].amt = amt
-		}
+		legs[0].amt = amt
 		for _, l := range legs {
 			reserve(l.src, l.dst, l.amt, -1)
 			post(l.src, l.dst, l.amt)
@@ -330,9 +357,7 @@ func (s *Server) inflightAction(id, action string, partial *big.Int) (*txn, erro
 		t.committed.Add(&t.committed, amt)
 		return s.child(t, blnk.StatusApplied, amt, legs), nil
 	case blnk.ActionVoid:
-		if len(legs) == 1 {
-			legs[0].amt = rem
-		}
+		legs[0].amt = rem
 		for _, l := range legs {
 			reserve(l.src, l.dst, l.amt, -1)
 		}
@@ -345,7 +370,7 @@ func (s *Server) inflightAction(id, action string, partial *big.Int) (*txn, erro
 func (s *Server) child(parent *txn, status string, amt *big.Int, legs []leg) *txn {
 	c := &txn{Transaction: parent.Transaction}
 	c.TransactionID = s.id("txn")
-	c.Reference = fmt.Sprintf("%s_%s_%s", parent.Reference, strings.ToLower(status), c.TransactionID)
+	c.Reference = "ref_" + c.TransactionID
 	c.ParentTransaction = parent.TransactionID
 	c.Status = status
 	c.Inflight = false
@@ -481,13 +506,13 @@ func (s *Server) bulk(in blnk.BulkTransactionRequest) (any, int, error) {
 				s.restore(saved)
 				return nil, 0, err
 			}
-			ids = append(ids, t.TransactionID)
+			ids = append(ids, t.ids()...)
 		}
 	} else {
 		for _, r := range in.Transactions {
 			r.Inflight = in.Inflight
 			if t, err := s.createTxn(r, batch); err == nil {
-				ids = append(ids, t.TransactionID)
+				ids = append(ids, t.ids()...)
 			}
 		}
 	}
@@ -561,7 +586,7 @@ func firstNonEmpty(v ...string) string {
 // preview answers a dry_run request (Core 0.15.3+): would it apply, and what
 // would the balances become. Nothing is stored.
 func (s *Server) preview(in blnk.CreateTransactionRequest) (any, int, error) {
-	if _, dup := s.refs[in.Reference]; dup {
+	if _, dup := s.refs[in.Reference]; dup || s.splitRefs[in.Reference] {
 		return nil, 0, fail(409, blnk.CodeDuplicateReference, "reference %s has already been used", in.Reference)
 	}
 	in.ScheduledFor = "" // ignored by dry run

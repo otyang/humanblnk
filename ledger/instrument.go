@@ -1,4 +1,4 @@
-// Instrument mirrors every Ledger method; "var _ Ledger" below makes the compiler keep it complete.
+// Instrument mirrors every Ledger namespace; the "var _" checks below make the compiler keep it complete.
 
 package ledger
 
@@ -43,7 +43,8 @@ func LogObserver(log *slog.Logger) Observer {
 	})
 }
 
-// Instrument wraps l so o observes every call.
+// Instrument wraps l so o observes every call. Calls are named
+// "Namespace.Method", e.g. "Payments.Transfer".
 func Instrument(l Ledger, o Observer) Ledger { return &instrumented{l: l, o: o} }
 
 type instrumented struct {
@@ -53,352 +54,427 @@ type instrumented struct {
 
 var _ Ledger = (*instrumented)(nil)
 
-func (i *instrumented) OpenAccount(ctx context.Context, in OpenAccountInput) (*Account, error) {
-	ctx, done := i.o.Start(ctx, "OpenAccount")
-	res, err := i.l.OpenAccount(ctx, in)
+func (i *instrumented) Accounts() Accounts         { return obsAccounts{i.l.Accounts(), i.o} }
+func (i *instrumented) Customers() Customers       { return obsCustomers{i.l.Customers(), i.o} }
+func (i *instrumented) Payments() Payments         { return obsPayments{i.l.Payments(), i.o} }
+func (i *instrumented) Pending() Pending           { return obsPending{i.l.Pending(), i.o} }
+func (i *instrumented) Transactions() Transactions { return obsTransactions{i.l.Transactions(), i.o} }
+func (i *instrumented) Disputes() Disputes         { return obsDisputes{i.l.Disputes(), i.o} }
+func (i *instrumented) Escrows() Escrows           { return obsEscrows{i.l.Escrows(), i.o} }
+func (i *instrumented) Operations() Operations     { return obsOperations{i.l.Operations(), i.o} }
+func (i *instrumented) Reconciliations() Reconciliations {
+	return obsReconciliations{i.l.Reconciliations(), i.o}
+}
+
+type obsAccounts struct {
+	n Accounts
+	o Observer
+}
+
+var _ Accounts = obsAccounts{}
+
+func (i obsAccounts) Open(ctx context.Context, in OpenAccountInput) (*Account, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.Open")
+	res, err := i.n.Open(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetAccount(ctx context.Context, accountID string) (*Account, error) {
-	ctx, done := i.o.Start(ctx, "GetAccount")
-	res, err := i.l.GetAccount(ctx, accountID)
+func (i obsAccounts) Get(ctx context.Context, accountID string) (*Account, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.Get")
+	res, err := i.n.Get(ctx, accountID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetSystemAccount(ctx context.Context, indicator, currency string) (*Account, error) {
-	ctx, done := i.o.Start(ctx, "GetSystemAccount")
-	res, err := i.l.GetSystemAccount(ctx, indicator, currency)
+func (i obsAccounts) GetSystem(ctx context.Context, indicator, currency string) (*Account, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.GetSystem")
+	res, err := i.n.GetSystem(ctx, indicator, currency)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) FindAccounts(ctx context.Context, q AccountQuery) (*AccountPage, error) {
-	ctx, done := i.o.Start(ctx, "FindAccounts")
-	res, err := i.l.FindAccounts(ctx, q)
+func (i obsAccounts) Find(ctx context.Context, q AccountQuery) (*AccountPage, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.Find")
+	res, err := i.n.Find(ctx, q)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) FreezeAccount(ctx context.Context, accountID, reason string) error {
-	ctx, done := i.o.Start(ctx, "FreezeAccount")
-	err := i.l.FreezeAccount(ctx, accountID, reason)
+func (i obsAccounts) Freeze(ctx context.Context, accountID, reason string) error {
+	ctx, done := i.o.Start(ctx, "Accounts.Freeze")
+	err := i.n.Freeze(ctx, accountID, reason)
 	done(err)
 	return err
 }
 
-func (i *instrumented) UnfreezeAccount(ctx context.Context, accountID string) error {
-	ctx, done := i.o.Start(ctx, "UnfreezeAccount")
-	err := i.l.UnfreezeAccount(ctx, accountID)
+func (i obsAccounts) Unfreeze(ctx context.Context, accountID string) error {
+	ctx, done := i.o.Start(ctx, "Accounts.Unfreeze")
+	err := i.n.Unfreeze(ctx, accountID)
 	done(err)
 	return err
 }
 
-func (i *instrumented) CloseAccount(ctx context.Context, accountID string, in CloseInput) (*Account, error) {
-	ctx, done := i.o.Start(ctx, "CloseAccount")
-	res, err := i.l.CloseAccount(ctx, accountID, in)
+func (i obsAccounts) Close(ctx context.Context, accountID string, in CloseInput) (*Account, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.Close")
+	res, err := i.n.Close(ctx, accountID, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) OpenCustomer(ctx context.Context, in CustomerInput) (*Customer, error) {
-	ctx, done := i.o.Start(ctx, "OpenCustomer")
-	res, err := i.l.OpenCustomer(ctx, in)
+func (i obsAccounts) History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.History")
+	res, err := i.n.History(ctx, accountID, q)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetCustomer(ctx context.Context, identityID string) (*Customer, error) {
-	ctx, done := i.o.Start(ctx, "GetCustomer")
-	res, err := i.l.GetCustomer(ctx, identityID)
+func (i obsAccounts) BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.BalanceAt")
+	res, err := i.n.BalanceAt(ctx, accountID, t)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
-	ctx, done := i.o.Start(ctx, "OpenPot")
-	res, err := i.l.OpenPot(ctx, in)
+func (i obsAccounts) Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.Statement")
+	res, err := i.n.Statement(ctx, accountID, from, to)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) ListPots(ctx context.Context, parentID string) ([]*Pot, error) {
-	ctx, done := i.o.Start(ctx, "ListPots")
-	res, err := i.l.ListPots(ctx, parentID)
+func (i obsAccounts) LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error) {
+	ctx, done := i.o.Start(ctx, "Accounts.LimitUsage")
+	res, err := i.n.LimitUsage(ctx, accountID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Deposit(ctx context.Context, in DepositInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Deposit")
-	res, err := i.l.Deposit(ctx, in)
+type obsCustomers struct {
+	n Customers
+	o Observer
+}
+
+var _ Customers = obsCustomers{}
+
+func (i obsCustomers) Open(ctx context.Context, in CustomerInput) (*Customer, error) {
+	ctx, done := i.o.Start(ctx, "Customers.Open")
+	res, err := i.n.Open(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Withdraw")
-	res, err := i.l.Withdraw(ctx, in)
+func (i obsCustomers) Get(ctx context.Context, identityID string) (*Customer, error) {
+	ctx, done := i.o.Start(ctx, "Customers.Get")
+	res, err := i.n.Get(ctx, identityID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Transfer(ctx context.Context, in TransferInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Transfer")
-	res, err := i.l.Transfer(ctx, in)
+func (i obsCustomers) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
+	ctx, done := i.o.Start(ctx, "Customers.OpenPot")
+	res, err := i.n.OpenPot(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Split(ctx context.Context, in SplitInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Split")
-	res, err := i.l.Split(ctx, in)
+func (i obsCustomers) ListPots(ctx context.Context, parentID string) ([]*Pot, error) {
+	ctx, done := i.o.Start(ctx, "Customers.ListPots")
+	res, err := i.n.ListPots(ctx, parentID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeReceipt, error) {
-	ctx, done := i.o.Start(ctx, "Exchange")
-	res, err := i.l.Exchange(ctx, in)
+type obsPayments struct {
+	n Payments
+	o Observer
+}
+
+var _ Payments = obsPayments{}
+
+func (i obsPayments) Deposit(ctx context.Context, in DepositInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Deposit")
+	res, err := i.n.Deposit(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Hold(ctx context.Context, in HoldInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Hold")
-	res, err := i.l.Hold(ctx, in)
+func (i obsPayments) Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Withdraw")
+	res, err := i.n.Withdraw(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) BulkTransfer(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error) {
-	ctx, done := i.o.Start(ctx, "BulkTransfer")
-	res, err := i.l.BulkTransfer(ctx, in)
+func (i obsPayments) Transfer(ctx context.Context, in TransferInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Transfer")
+	res, err := i.n.Transfer(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) ScheduleRecurring(ctx context.Context, in RecurringInput) ([]*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "ScheduleRecurring")
-	res, err := i.l.ScheduleRecurring(ctx, in)
+func (i obsPayments) Split(ctx context.Context, in SplitInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Split")
+	res, err := i.n.Split(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Confirm")
-	res, err := i.l.Confirm(ctx, txID, partial)
+func (i obsPayments) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeReceipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Exchange")
+	res, err := i.n.Exchange(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Cancel(ctx context.Context, txID string) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Cancel")
-	res, err := i.l.Cancel(ctx, txID)
+func (i obsPayments) Bulk(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Bulk")
+	res, err := i.n.Bulk(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]BatchResult, error) {
-	ctx, done := i.o.Start(ctx, "ConfirmMany")
-	res, err := i.l.ConfirmMany(ctx, items)
+func (i obsPayments) Schedule(ctx context.Context, in RecurringInput) ([]*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Payments.Schedule")
+	res, err := i.n.Schedule(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) CancelMany(ctx context.Context, txIDs []string) ([]BatchResult, error) {
-	ctx, done := i.o.Start(ctx, "CancelMany")
-	res, err := i.l.CancelMany(ctx, txIDs)
+func (i obsPayments) QuoteDeposit(ctx context.Context, in DepositInput) (*Quote, error) {
+	ctx, done := i.o.Start(ctx, "Payments.QuoteDeposit")
+	res, err := i.n.QuoteDeposit(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Refund")
-	res, err := i.l.Refund(ctx, txID, in)
+func (i obsPayments) QuoteWithdraw(ctx context.Context, in WithdrawInput) (*Quote, error) {
+	ctx, done := i.o.Start(ctx, "Payments.QuoteWithdraw")
+	res, err := i.n.QuoteWithdraw(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) RefundPartial(ctx context.Context, txID string, in PartialRefundInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "RefundPartial")
-	res, err := i.l.RefundPartial(ctx, txID, in)
+func (i obsPayments) QuoteTransfer(ctx context.Context, in TransferInput) (*Quote, error) {
+	ctx, done := i.o.Start(ctx, "Payments.QuoteTransfer")
+	res, err := i.n.QuoteTransfer(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) OpenDispute(ctx context.Context, in DisputeInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "OpenDispute")
-	res, err := i.l.OpenDispute(ctx, in)
+type obsPending struct {
+	n Pending
+	o Observer
+}
+
+var _ Pending = obsPending{}
+
+func (i obsPending) Hold(ctx context.Context, in HoldInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Pending.Hold")
+	res, err := i.n.Hold(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) ResolveDispute(ctx context.Context, disputeID string, outcome DisputeOutcome, partial *Money) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "ResolveDispute")
-	res, err := i.l.ResolveDispute(ctx, disputeID, outcome, partial)
+func (i obsPending) Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Pending.Confirm")
+	res, err := i.n.Confirm(ctx, txID, partial)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, error) {
-	ctx, done := i.o.Start(ctx, "OpenEscrow")
-	res, err := i.l.OpenEscrow(ctx, in)
+func (i obsPending) Cancel(ctx context.Context, txID string) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Pending.Cancel")
+	res, err := i.n.Cancel(ctx, txID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetEscrow(ctx context.Context, escrowID string) (*Escrow, error) {
-	ctx, done := i.o.Start(ctx, "GetEscrow")
-	res, err := i.l.GetEscrow(ctx, escrowID)
+func (i obsPending) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]BatchResult, error) {
+	ctx, done := i.o.Start(ctx, "Pending.ConfirmMany")
+	res, err := i.n.ConfirmMany(ctx, items)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) ReleaseEscrow(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "ReleaseEscrow")
-	res, err := i.l.ReleaseEscrow(ctx, escrowID, in)
+func (i obsPending) CancelMany(ctx context.Context, txIDs []string) ([]BatchResult, error) {
+	ctx, done := i.o.Start(ctx, "Pending.CancelMany")
+	res, err := i.n.CancelMany(ctx, txIDs)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) RefundEscrow(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "RefundEscrow")
-	res, err := i.l.RefundEscrow(ctx, escrowID, in)
+type obsTransactions struct {
+	n Transactions
+	o Observer
+}
+
+var _ Transactions = obsTransactions{}
+
+func (i obsTransactions) Get(ctx context.Context, txID string) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Transactions.Get")
+	res, err := i.n.Get(ctx, txID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) QuoteDeposit(ctx context.Context, in DepositInput) (*Quote, error) {
-	ctx, done := i.o.Start(ctx, "QuoteDeposit")
-	res, err := i.l.QuoteDeposit(ctx, in)
+func (i obsTransactions) GetByReference(ctx context.Context, reference string) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Transactions.GetByReference")
+	res, err := i.n.GetByReference(ctx, reference)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) QuoteWithdraw(ctx context.Context, in WithdrawInput) (*Quote, error) {
-	ctx, done := i.o.Start(ctx, "QuoteWithdraw")
-	res, err := i.l.QuoteWithdraw(ctx, in)
+func (i obsTransactions) Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Transactions.Refund")
+	res, err := i.n.Refund(ctx, txID, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) QuoteTransfer(ctx context.Context, in TransferInput) (*Quote, error) {
-	ctx, done := i.o.Start(ctx, "QuoteTransfer")
-	res, err := i.l.QuoteTransfer(ctx, in)
+func (i obsTransactions) RefundPartial(ctx context.Context, txID string, in PartialRefundInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Transactions.RefundPartial")
+	res, err := i.n.RefundPartial(ctx, txID, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error) {
-	ctx, done := i.o.Start(ctx, "LimitUsage")
-	res, err := i.l.LimitUsage(ctx, accountID)
+type obsDisputes struct {
+	n Disputes
+	o Observer
+}
+
+var _ Disputes = obsDisputes{}
+
+func (i obsDisputes) Open(ctx context.Context, in DisputeInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Disputes.Open")
+	res, err := i.n.Open(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetTransaction(ctx context.Context, txID string) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "GetTransaction")
-	res, err := i.l.GetTransaction(ctx, txID)
+func (i obsDisputes) Resolve(ctx context.Context, disputeID string, outcome DisputeOutcome, partial *Money) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Disputes.Resolve")
+	res, err := i.n.Resolve(ctx, disputeID, outcome, partial)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetTransactionByReference(ctx context.Context, reference string) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "GetTransactionByReference")
-	res, err := i.l.GetTransactionByReference(ctx, reference)
+type obsEscrows struct {
+	n Escrows
+	o Observer
+}
+
+var _ Escrows = obsEscrows{}
+
+func (i obsEscrows) Open(ctx context.Context, in EscrowInput) (*Escrow, error) {
+	ctx, done := i.o.Start(ctx, "Escrows.Open")
+	res, err := i.n.Open(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error) {
-	ctx, done := i.o.Start(ctx, "History")
-	res, err := i.l.History(ctx, accountID, q)
+func (i obsEscrows) Get(ctx context.Context, escrowID string) (*Escrow, error) {
+	ctx, done := i.o.Start(ctx, "Escrows.Get")
+	res, err := i.n.Get(ctx, escrowID)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error) {
-	ctx, done := i.o.Start(ctx, "BalanceAt")
-	res, err := i.l.BalanceAt(ctx, accountID, t)
+func (i obsEscrows) Release(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Escrows.Release")
+	res, err := i.n.Release(ctx, escrowID, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error) {
-	ctx, done := i.o.Start(ctx, "Statement")
-	res, err := i.l.Statement(ctx, accountID, from, to)
+func (i obsEscrows) Refund(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Escrows.Refund")
+	res, err := i.n.Refund(ctx, escrowID, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) RecordSettlement(ctx context.Context, in SettlementInput) (*SettlementReceipt, error) {
-	ctx, done := i.o.Start(ctx, "RecordSettlement")
-	res, err := i.l.RecordSettlement(ctx, in)
+type obsOperations struct {
+	n Operations
+	o Observer
+}
+
+var _ Operations = obsOperations{}
+
+func (i obsOperations) RecordSettlement(ctx context.Context, in SettlementInput) (*SettlementReceipt, error) {
+	ctx, done := i.o.Start(ctx, "Operations.RecordSettlement")
+	res, err := i.n.RecordSettlement(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "ParkInSuspense")
-	res, err := i.l.ParkInSuspense(ctx, in)
+func (i obsOperations) ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Operations.ParkInSuspense")
+	res, err := i.n.ParkInSuspense(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "AllocateSuspense")
-	res, err := i.l.AllocateSuspense(ctx, in)
+func (i obsOperations) AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Operations.AllocateSuspense")
+	res, err := i.n.AllocateSuspense(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Adjust(ctx context.Context, in AdjustInput) (*Receipt, error) {
-	ctx, done := i.o.Start(ctx, "Adjust")
-	res, err := i.l.Adjust(ctx, in)
+func (i obsOperations) Adjust(ctx context.Context, in AdjustInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Operations.Adjust")
+	res, err := i.n.Adjust(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) TrialBalance(ctx context.Context, currency string) (*TrialBalance, error) {
-	ctx, done := i.o.Start(ctx, "TrialBalance")
-	res, err := i.l.TrialBalance(ctx, currency)
+func (i obsOperations) TrialBalance(ctx context.Context, currency string) (*TrialBalance, error) {
+	ctx, done := i.o.Start(ctx, "Operations.TrialBalance")
+	res, err := i.n.TrialBalance(ctx, currency)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) WatchBalance(ctx context.Context, in WatchInput) (*Watch, error) {
-	ctx, done := i.o.Start(ctx, "WatchBalance")
-	res, err := i.l.WatchBalance(ctx, in)
+func (i obsOperations) WatchBalance(ctx context.Context, in WatchInput) (*Watch, error) {
+	ctx, done := i.o.Start(ctx, "Operations.WatchBalance")
+	res, err := i.n.WatchBalance(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Unwatch(ctx context.Context, watchID string) error {
-	ctx, done := i.o.Start(ctx, "Unwatch")
-	err := i.l.Unwatch(ctx, watchID)
+func (i obsOperations) Unwatch(ctx context.Context, watchID string) error {
+	ctx, done := i.o.Start(ctx, "Operations.Unwatch")
+	err := i.n.Unwatch(ctx, watchID)
 	done(err)
 	return err
 }
 
-func (i *instrumented) CreateMatchingRule(ctx context.Context, r MatchingRule) (string, error) {
-	ctx, done := i.o.Start(ctx, "CreateMatchingRule")
-	res, err := i.l.CreateMatchingRule(ctx, r)
+type obsReconciliations struct {
+	n Reconciliations
+	o Observer
+}
+
+var _ Reconciliations = obsReconciliations{}
+
+func (i obsReconciliations) CreateRule(ctx context.Context, r MatchingRule) (string, error) {
+	ctx, done := i.o.Start(ctx, "Reconciliations.CreateRule")
+	res, err := i.n.CreateRule(ctx, r)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) Reconcile(ctx context.Context, in ReconcileInput) (*Reconciliation, error) {
-	ctx, done := i.o.Start(ctx, "Reconcile")
-	res, err := i.l.Reconcile(ctx, in)
+func (i obsReconciliations) Start(ctx context.Context, in ReconcileInput) (*Reconciliation, error) {
+	ctx, done := i.o.Start(ctx, "Reconciliations.Start")
+	res, err := i.n.Start(ctx, in)
 	done(err)
 	return res, err
 }
 
-func (i *instrumented) GetReconciliation(ctx context.Context, id string) (*Reconciliation, error) {
-	ctx, done := i.o.Start(ctx, "GetReconciliation")
-	res, err := i.l.GetReconciliation(ctx, id)
+func (i obsReconciliations) Get(ctx context.Context, id string) (*Reconciliation, error) {
+	ctx, done := i.o.Start(ctx, "Reconciliations.Get")
+	res, err := i.n.Get(ctx, id)
 	done(err)
 	return res, err
 }

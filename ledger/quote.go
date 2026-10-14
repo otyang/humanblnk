@@ -26,22 +26,26 @@ type Quote struct {
 }
 
 // QuoteTransfer previews Transfer.
-func (s *Service) QuoteTransfer(ctx context.Context, in TransferInput) (*Quote, error) {
-	const op = "ledger.QuoteTransfer"
+func (s paymentsAPI) QuoteTransfer(ctx context.Context, in TransferInput) (*Quote, error) {
+	const op = "ledger.Payments.QuoteTransfer"
+	in, err := s.withTransferFee(ctx, op, in, nil)
+	if err != nil {
+		return s.quote(ctx, op, in.From, in.From, blnk.CreateTransactionRequest{}, err)
+	}
 	req, err := s.moveReq(ctx, op, in, "transfer")
 	return s.quote(ctx, op, in.From, in.From, req, err)
 }
 
 // QuoteWithdraw previews Withdraw.
-func (s *Service) QuoteWithdraw(ctx context.Context, in WithdrawInput) (*Quote, error) {
-	const op = "ledger.QuoteWithdraw"
+func (s paymentsAPI) QuoteWithdraw(ctx context.Context, in WithdrawInput) (*Quote, error) {
+	const op = "ledger.Payments.QuoteWithdraw"
 	req, err := s.withdrawReq(ctx, op, in)
 	return s.quote(ctx, op, in.AccountID, in.AccountID, req, err)
 }
 
 // QuoteDeposit previews Deposit (fee and net credited).
-func (s *Service) QuoteDeposit(ctx context.Context, in DepositInput) (*Quote, error) {
-	const op = "ledger.QuoteDeposit"
+func (s paymentsAPI) QuoteDeposit(ctx context.Context, in DepositInput) (*Quote, error) {
+	const op = "ledger.Payments.QuoteDeposit"
 	req, err := s.depositReq(ctx, op, in)
 	return s.quote(ctx, op, in.AccountID, "", req, err)
 }
@@ -57,7 +61,7 @@ func (s *Service) quote(ctx context.Context, op, account, payer string, req blnk
 		return &Quote{Account: account, Allowed: false, Reason: buildErr}, nil
 	}
 	cur, prec := req.Currency, req.Precision
-	m := func(v *big.Int) Money { return Precise(v, prec, cur) }
+	m := func(v *big.Int) Money { return s.money(v, prec, cur) }
 	total := &req.PreciseAmount.Int
 
 	// Fee legs are the ones paying the fee income account.

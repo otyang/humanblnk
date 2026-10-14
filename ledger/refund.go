@@ -29,12 +29,12 @@ const metaRefunded = "refunded_precise"
 // Two partial refunds of the same transaction racing each other can both pass
 // the remaining-amount check; serialise refunds per transaction in your app
 // (e.g. one worker or a row lock) if they can happen concurrently.
-func (s *Service) RefundPartial(ctx context.Context, txID string, in PartialRefundInput) (*Receipt, error) {
-	const op = "ledger.RefundPartial"
+func (s transactionsAPI) RefundPartial(ctx context.Context, txID string, in PartialRefundInput) (*Receipt, error) {
+	const op = "ledger.Transactions.RefundPartial"
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
-	orig, err := s.c.GetTransaction(ctx, txID)
+	orig, err := s.byID(ctx, txID)
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
@@ -59,7 +59,7 @@ func (s *Service) RefundPartial(ctx context.Context, txID string, in PartialRefu
 	left := new(big.Int).Sub(&orig.PreciseAmount.Int, refunded)
 	if amt.PreciseAmount.Cmp(left) > 0 {
 		return nil, &OpError{Op: op, Kind: ErrAmountExceeded,
-			Cause: fmt.Errorf("%s exceeds the %s not yet refunded", amt, Precise(left, amt.Precision, amt.Currency))}
+			Cause: fmt.Errorf("%s exceeds the %s not yet refunded", amt, s.money(left, amt.Precision, amt.Currency))}
 	}
 
 	md := map[string]any{"refund_of": txID, "refund_reason": in.Reason}

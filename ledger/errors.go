@@ -24,6 +24,7 @@ var (
 	ErrLimitExceeded      = errors.New("ledger: transaction limit exceeded")
 	ErrApprovalRequired   = errors.New("ledger: approval required")
 	ErrSignature          = errors.New("ledger: invalid webhook signature")
+	ErrFeePricing         = errors.New("ledger: fee could not be priced")
 	ErrConflict           = errors.New("ledger: conflicting operation in progress")
 	ErrUnavailable        = errors.New("ledger: ledger temporarily unavailable")
 	ErrUnauthorized       = errors.New("ledger: unauthorized")

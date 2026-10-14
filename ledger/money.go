@@ -22,6 +22,11 @@ type Money struct {
 	Currency      string
 	PreciseAmount *big.Int
 	Precision     int64
+
+	// Display is the amount for people to read, set on every Money the
+	// Service returns: fiat padded to its decimals ("100.00"), crypto trimmed
+	// and rounded down ("0.456789"). See DisplayRule. Never compute with it.
+	Display string
 }
 
 // Amount builds Money from a decimal string as the user typed it:
@@ -182,18 +187,19 @@ func (m Money) String() string {
 
 // ----- JSON -----------------------------------------------------------------
 
-// MarshalJSON emits both forms. precise_amount is a string so JavaScript clients
-// don't lose digits on 18-decimal assets:
+// MarshalJSON emits both forms, plus display when set. precise_amount is a
+// string so JavaScript clients don't lose digits on 18-decimal assets:
 //
-//	{"amount":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}
+//	{"amount":"0.456","display":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}
 func (m Money) MarshalJSON() ([]byte, error) {
 	type wire struct {
 		Amount        string `json:"amount"`
+		Display       string `json:"display,omitempty"`
 		Currency      string `json:"currency"`
 		PreciseAmount string `json:"precise_amount,omitempty"`
 		Precision     int64  `json:"precision,omitempty"`
 	}
-	w := wire{Amount: m.Value, Currency: m.Currency, Precision: m.Precision}
+	w := wire{Amount: m.Value, Display: m.Display, Currency: m.Currency, Precision: m.Precision}
 	if m.PreciseAmount != nil {
 		w.PreciseAmount = m.PreciseAmount.String()
 	}

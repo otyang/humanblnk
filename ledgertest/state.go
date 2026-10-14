@@ -16,6 +16,8 @@ type state struct {
 	txns       map[string]*txn
 	order      []string
 	refs       map[string]string
+	splitRefs  map[string]bool
+	splits     map[string][]string
 	events     []Event
 }
 
@@ -24,6 +26,13 @@ func (s *Server) save() state {
 		seq: s.seq, balances: map[string]*balance{}, indicators: map[string]string{},
 		txns: map[string]*txn{}, order: append([]string(nil), s.order...),
 		refs: map[string]string{}, events: append([]Event(nil), s.events...),
+		splitRefs: map[string]bool{}, splits: map[string][]string{},
+	}
+	for k, v := range s.splitRefs {
+		st.splitRefs[k] = v
+	}
+	for k, v := range s.splits {
+		st.splits[k] = v
 	}
 	for k, b := range s.balances {
 		c := &balance{Balance: b.view(), history: append([]snapshot(nil), b.history...)}
@@ -48,7 +57,6 @@ func (s *Server) save() state {
 		c.precise.Set(&t.precise)
 		c.committed = big.Int{}
 		c.committed.Set(&t.committed)
-		c.children = append([]string(nil), t.children...)
 		st.txns[k] = &c
 	}
 	for k, v := range s.refs {
@@ -60,6 +68,7 @@ func (s *Server) save() state {
 func (s *Server) restore(st state) {
 	s.seq, s.balances, s.indicators = st.seq, st.balances, st.indicators
 	s.txns, s.order, s.refs, s.events = st.txns, st.order, st.refs, st.events
+	s.splitRefs, s.splits = st.splitRefs, st.splits
 }
 
 // checkMonitors emits balance.monitor for every monitor on b whose condition

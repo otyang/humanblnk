@@ -16,7 +16,7 @@ import (
 type AccountQuery struct {
 	IdentityID string
 	Currency   string
-	Kind       AccountKind       // CustomerAccount, PotAccount, EscrowAccount (system accounts: use GetSystemAccount)
+	Kind       AccountKind       // CustomerAccount, PotAccount, EscrowAccount (system accounts: use Accounts().GetSystem)
 	Status     string            // "active", "frozen", "closed", ...
 	MetaData   map[string]string // exact matches on meta_data keys, e.g. {"owner": "alice"}
 	Limit      int               // default 20, max 100
@@ -36,9 +36,9 @@ var metaKey = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 // metaField is the filter field name for a meta_data key.
 func metaField(key string) string { return "meta_data." + key }
 
-// FindAccounts lists accounts matching q, oldest first.
-func (s *Service) FindAccounts(ctx context.Context, q AccountQuery) (*AccountPage, error) {
-	const op = "ledger.FindAccounts"
+// Find lists accounts matching q, oldest first.
+func (s accountsAPI) Find(ctx context.Context, q AccountQuery) (*AccountPage, error) {
+	const op = "ledger.Accounts.Find"
 	if q.Limit <= 0 {
 		q.Limit = 20
 	}
@@ -93,7 +93,7 @@ func (s *Service) FindAccounts(ctx context.Context, q AccountQuery) (*AccountPag
 // findOne returns the first account matching q, or nil.
 func (s *Service) findOne(ctx context.Context, q AccountQuery) (*Account, error) {
 	q.Limit = 1
-	p, err := s.FindAccounts(ctx, q)
+	p, err := s.Accounts().Find(ctx, q)
 	if err != nil || len(p.Items) == 0 {
 		return nil, err
 	}
@@ -114,7 +114,7 @@ type CustomerInput struct {
 	Country          string
 	Currencies       []string // e.g. ["NGN", "USD", "USDT"]; at least one
 
-	// ExternalID is your own user id. It makes OpenCustomer safe to retry:
+	// ExternalID is your own user id. It makes Customers().Open safe to retry:
 	// accounts already opened for it are reused, missing ones are opened.
 	ExternalID string
 	MetaData   map[string]any
@@ -126,9 +126,9 @@ type Customer struct {
 	Accounts map[string]*Account // by currency
 }
 
-// OpenCustomer creates the identity and opens its accounts.
-func (s *Service) OpenCustomer(ctx context.Context, in CustomerInput) (*Customer, error) {
-	const op = "ledger.OpenCustomer"
+// Open creates the identity and opens its accounts.
+func (s customersAPI) Open(ctx context.Context, in CustomerInput) (*Customer, error) {
+	const op = "ledger.Customers.Open"
 	if len(in.Currencies) == 0 {
 		return nil, invalid(op, "at least one currency is required")
 	}
@@ -172,19 +172,19 @@ func (s *Service) OpenCustomer(ctx context.Context, in CustomerInput) (*Customer
 		identityID = id.IdentityID
 	}
 	for _, cur := range in.Currencies {
-		if _, err := s.OpenAccount(ctx, OpenAccountInput{
+		if _, err := s.Accounts().Open(ctx, OpenAccountInput{
 			Currency: cur, IdentityID: identityID, ExternalID: in.ExternalID, MetaData: in.MetaData,
 		}); err != nil {
 			return nil, fmt.Errorf("%s account: %w", strings.ToUpper(cur), err)
 		}
 	}
-	return s.GetCustomer(ctx, identityID)
+	return s.Customers().Get(ctx, identityID)
 }
 
-// GetCustomer returns an identity and its customer accounts, by currency.
-// Pots and escrows are left out; list them with ListPots / FindAccounts.
-func (s *Service) GetCustomer(ctx context.Context, identityID string) (*Customer, error) {
-	const op = "ledger.GetCustomer"
+// Get returns an identity and its customer accounts, by currency.
+// Pots and escrows are left out; list them with Customers().ListPots / Accounts().Find.
+func (s customersAPI) Get(ctx context.Context, identityID string) (*Customer, error) {
+	const op = "ledger.Customers.Get"
 	if identityID == "" {
 		return nil, invalid(op, "identity id is required")
 	}
@@ -194,7 +194,7 @@ func (s *Service) GetCustomer(ctx context.Context, identityID string) (*Customer
 	}
 	c := &Customer{ID: identityID, Identity: id, Accounts: map[string]*Account{}}
 	for offset := 0; ; offset += 100 {
-		p, err := s.FindAccounts(ctx, AccountQuery{IdentityID: identityID, Limit: 100, Offset: offset})
+		p, err := s.Accounts().Find(ctx, AccountQuery{IdentityID: identityID, Limit: 100, Offset: offset})
 		if err != nil {
 			return nil, err
 		}
@@ -228,8 +228,8 @@ type Pot struct {
 
 // OpenPot opens a pot in the parent's currency, linked to the parent and its
 // identity. Opening the same name twice returns the existing pot.
-func (s *Service) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
-	const op = "ledger.OpenPot"
+func (s customersAPI) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
+	const op = "ledger.Customers.OpenPot"
 	if in.ParentID == "" || strings.TrimSpace(in.Name) == "" {
 		return nil, invalid(op, "parent account and name are required")
 	}
@@ -245,7 +245,7 @@ func (s *Service) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
 		}
 		md["pot_goal"] = goal.Value
 	}
-	a, err := s.OpenAccount(ctx, OpenAccountInput{
+	a, err := s.Accounts().Open(ctx, OpenAccountInput{
 		Currency: parent.Currency, IdentityID: parent.IdentityID, LedgerID: parent.LedgerID,
 		ExternalID: "pot:" + in.ParentID + ":" + in.Name, MetaData: md,
 	})
@@ -256,11 +256,11 @@ func (s *Service) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
 }
 
 // ListPots lists the pots under a parent account.
-func (s *Service) ListPots(ctx context.Context, parentID string) ([]*Pot, error) {
+func (s customersAPI) ListPots(ctx context.Context, parentID string) ([]*Pot, error) {
 	if parentID == "" {
-		return nil, invalid("ledger.ListPots", "parent account is required")
+		return nil, invalid("ledger.Customers.ListPots", "parent account is required")
 	}
-	p, err := s.FindAccounts(ctx, AccountQuery{Kind: PotAccount, MetaData: map[string]string{"parent_account": parentID}, Limit: 100})
+	p, err := s.Accounts().Find(ctx, AccountQuery{Kind: PotAccount, MetaData: map[string]string{"parent_account": parentID}, Limit: 100})
 	if err != nil {
 		return nil, err
 	}

@@ -25,15 +25,15 @@ const (
 	DisputeRejected
 )
 
-// OpenDispute puts the disputed amount on hold in the recipient's account,
+// Open puts the disputed amount on hold in the recipient's account,
 // pointed back at the original payer, so it can't be spent while the dispute
-// is open. The hold has no expiry. Close it with ResolveDispute.
-func (s *Service) OpenDispute(ctx context.Context, in DisputeInput) (*Receipt, error) {
-	const op = "ledger.OpenDispute"
+// is open. The hold has no expiry. Close it with Disputes().Resolve.
+func (s disputesAPI) Open(ctx context.Context, in DisputeInput) (*Receipt, error) {
+	const op = "ledger.Disputes.Open"
 	if in.TransactionID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
-	orig, err := s.c.GetTransaction(ctx, in.TransactionID)
+	orig, err := s.byID(ctx, in.TransactionID)
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
@@ -63,18 +63,18 @@ func (s *Service) OpenDispute(ctx context.Context, in DisputeInput) (*Receipt, e
 	}, "dispute")
 }
 
-// ResolveDispute closes a dispute opened with OpenDispute. With DisputeUpheld,
+// Resolve closes a dispute opened with Disputes().Open. With DisputeUpheld,
 // partial refunds only part of the held amount; the rest stays held until you
 // resolve again or reject.
-func (s *Service) ResolveDispute(ctx context.Context, disputeID string, outcome DisputeOutcome, partial *Money) (*Receipt, error) {
+func (s disputesAPI) Resolve(ctx context.Context, disputeID string, outcome DisputeOutcome, partial *Money) (*Receipt, error) {
 	switch outcome {
 	case DisputeUpheld:
-		return s.Confirm(ctx, disputeID, partial)
+		return s.Pending().Confirm(ctx, disputeID, partial)
 	case DisputeRejected:
 		if partial != nil && partial.isSet() {
-			return nil, invalid("ledger.ResolveDispute", "a rejected dispute releases everything still held")
+			return nil, invalid("ledger.Disputes.Resolve", "a rejected dispute releases everything still held")
 		}
-		return s.Cancel(ctx, disputeID)
+		return s.Pending().Cancel(ctx, disputeID)
 	}
-	return nil, invalid("ledger.ResolveDispute", "unknown outcome %d", outcome)
+	return nil, invalid("ledger.Disputes.Resolve", "unknown outcome %d", outcome)
 }

@@ -86,6 +86,9 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 
 // doRaw sends payload as-is with the given content type and decodes a JSON response.
 func (c *Client) doRaw(ctx context.Context, method, path, contentType string, payload []byte, out any) error {
+	if !strings.HasPrefix(c.baseURL, "http://") && !strings.HasPrefix(c.baseURL, "https://") {
+		return fmt.Errorf("blnk: base URL %q must start with http:// or https:// (is BLNK_URL set?)", c.baseURL)
+	}
 	var lastErr error
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {

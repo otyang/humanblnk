@@ -1,15 +1,10 @@
 package main
 
-import (
-	"testing"
+import "testing"
 
-	"github.com/otyang/humanblnk/ledgertest"
-)
-
-func TestExampleRunsAgainstEmulator(t *testing.T) {
-	core := ledgertest.NewServer()
-	defer core.Close()
-	t.Setenv("BLNK_URL", core.URL())
+// With BLNK_URL unset the example runs against the in-memory emulator.
+func TestExampleRunsWithoutSetup(t *testing.T) {
+	t.Setenv("BLNK_URL", "")
 	t.Setenv("BLNK_LEDGER_ID", "")
 	main()
 }

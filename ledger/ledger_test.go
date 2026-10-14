@@ -80,7 +80,7 @@ func TestDepositWithFeeSplitsToFeeAccount(t *testing.T) {
 	f, svc, _ := newFake(t)
 	f.on("POST /transactions", 201, appliedTxn)
 
-	r, err := svc.Deposit(context.Background(), ledger.DepositInput{
+	r, err := svc.Payments().Deposit(context.Background(), ledger.DepositInput{
 		AccountID: "bln_w", Amount: ledger.Minor(100000, "ngn"), Fee: ledger.Minor(1500, "NGN"),
 		Reference: "paystack_abc", Provider: "paystack",
 	})
@@ -119,7 +119,7 @@ func TestWithdrawIsHeldWithExpiryAndFeeOnTop(t *testing.T) {
 	f, svc, _ := newFake(t)
 	f.on("POST /transactions", 201, `{"transaction_id":"txn_w","status":"INFLIGHT","precise_amount":51000,"currency":"NGN"}`)
 
-	r, err := svc.Withdraw(context.Background(), ledger.WithdrawInput{
+	r, err := svc.Payments().Withdraw(context.Background(), ledger.WithdrawInput{
 		AccountID: "bln_w", Amount: ledger.Minor(50000, "NGN"), Fee: ledger.Minor(1000, "NGN"), Reference: "wd-1",
 	})
 	if err != nil {
@@ -148,7 +148,8 @@ func TestTransferInsufficientFundsMapsToSentinel(t *testing.T) {
 	f, svc, _ := newFake(t)
 	f.on("POST /transactions", 400, `{"error":"insufficient funds","error_detail":{"code":"TXN_INSUFFICIENT_FUNDS","message":"insufficient funds"}}`)
 
-	_, err := svc.Transfer(context.Background(), ledger.TransferInput{
+	_, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "bln_a", To: "bln_b", Amount: ledger.Minor(10, "NGN"), Reference: "t-1",
 	})
 	if !errors.Is(err, ledger.ErrInsufficientFunds) {
@@ -170,14 +171,16 @@ func TestDuplicateReferenceReplaysWhenPayloadMatches(t *testing.T) {
 	f.on("GET /transactions/reference/t-9", 200,
 		`{"transaction_id":"txn_9","reference":"t-9","precise_amount":500,"currency":"NGN","source":"bln_a","status":"APPLIED"}`)
 
-	r, err := svc.Transfer(context.Background(), ledger.TransferInput{
+	r, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "bln_a", To: "bln_b", Amount: ledger.Minor(500, "NGN"), Reference: "t-9",
 	})
 	if err != nil || !r.Replayed || r.TransactionID != "txn_9" {
 		t.Fatalf("expected replay of txn_9, got %+v err=%v", r, err)
 	}
 
-	_, err = svc.Transfer(context.Background(), ledger.TransferInput{
+	_, err = svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "bln_a", To: "bln_b", Amount: ledger.Minor(999, "NGN"), Reference: "t-9",
 	})
 	if !errors.Is(err, ledger.ErrDuplicateReference) {
@@ -190,7 +193,7 @@ func TestPartialConfirmAndCancel(t *testing.T) {
 	f.on("GET /transactions/txn_h", 200, `{"transaction_id":"txn_h","status":"INFLIGHT","precise_amount":10000,"precision":100,"currency":"NGN"}`)
 	f.on("PUT /transactions/inflight/txn_h", 200, `{"transaction_id":"txn_c","status":"APPLIED","precise_amount":4000,"precision":100,"currency":"NGN","parent_transaction":"txn_h"}`)
 	part := ledger.Minor(4000, "NGN")
-	r, err := svc.Confirm(context.Background(), "txn_h", &part)
+	r, err := svc.Pending().Confirm(context.Background(), "txn_h", &part)
 	if err != nil || r.Status != "APPLIED" {
 		t.Fatalf("confirm: %+v %v", r, err)
 	}
@@ -201,7 +204,7 @@ func TestPartialConfirmAndCancel(t *testing.T) {
 
 	f.handlers = map[string][]reply{}
 	f.on("PUT /transactions/inflight/txn_h", 400, `{"error":"x","error_detail":{"code":"TXN_ALREADY_COMMITTED","message":"x"}}`)
-	_, err = svc.Cancel(context.Background(), "txn_h")
+	_, err = svc.Pending().Cancel(context.Background(), "txn_h")
 	if !errors.Is(err, ledger.ErrAlreadyFinalized) {
 		t.Fatalf("want ErrAlreadyFinalized, got %v", err)
 	}
@@ -215,7 +218,8 @@ func TestRetriesOnLockContention(t *testing.T) {
 	f.on("POST /transactions", 423, `{"error":"locked","error_detail":{"code":"GEN_RESOURCE_LOCKED","message":"locked"}}`)
 	f.on("POST /transactions", 201, appliedTxn)
 
-	if _, err := svc.Transfer(context.Background(), ledger.TransferInput{
+	if _, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "bln_a", To: "bln_b", Amount: ledger.Minor(1, "NGN"), Reference: "r"}); err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +231,7 @@ func TestRetriesOnLockContention(t *testing.T) {
 func TestHistoryUsesBalanceIDFilter(t *testing.T) {
 	f, svc, _ := newFake(t)
 	f.on("POST /transactions/filter", 200, `{"data":[`+appliedTxn+`],"total_count":7}`)
-	p, err := svc.History(context.Background(), "bln_w", ledger.HistoryQuery{Statuses: []string{"posted"}, Limit: 5})
+	p, err := svc.Accounts().History(context.Background(), "bln_w", ledger.HistoryQuery{Statuses: []string{"posted"}, Limit: 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +247,7 @@ func TestHistoryUsesBalanceIDFilter(t *testing.T) {
 	}
 
 	f.reqs = nil
-	_, _ = svc.History(context.Background(), "bln_w", ledger.HistoryQuery{Direction: ledger.Outgoing})
+	_, _ = svc.Accounts().History(context.Background(), "bln_w", ledger.HistoryQuery{Direction: ledger.Outgoing})
 	if fs := f.last().Body["filters"].([]any); fs[0].(map[string]any)["field"] != "source" {
 		t.Errorf("outgoing must filter on source: %v", fs)
 	}
@@ -256,7 +260,8 @@ func TestFrozenAccountIsRejected(t *testing.T) {
 	svc := ledger.New(blnk.New(srv.URL), ledger.Config{EnforceAccountStatus: true})
 	f.on("GET /balances/bln_a", 200, `{"balance_id":"bln_a","currency":"NGN","meta_data":{"status":"frozen"}}`)
 
-	_, err := svc.Transfer(context.Background(), ledger.TransferInput{
+	_, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "bln_a", To: "bln_b", Amount: ledger.Minor(1, "NGN"), Reference: "r"})
 	if !errors.Is(err, ledger.ErrAccountFrozen) {
 		t.Fatalf("want ErrAccountFrozen, got %v", err)
@@ -271,7 +276,7 @@ func TestFrozenAccountIsRejected(t *testing.T) {
 func TestGetAccountComputesAvailable(t *testing.T) {
 	f, svc, _ := newFake(t)
 	f.on("GET /balances/bln_w", 200, `{"balance_id":"bln_w","currency":"NGN","balance":100000,"inflight_debit_balance":30000,"inflight_balance":-30000}`)
-	w, err := svc.GetAccount(context.Background(), "bln_w")
+	w, err := svc.Accounts().Get(context.Background(), "bln_w")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +291,7 @@ func TestGetAccountComputesAvailable(t *testing.T) {
 	}
 
 	f.on("GET /balances/indicator/@FeeIncome/currency/NGN", 200, `{"balance_id":"bln_fee","indicator":"@FeeIncome","currency":"NGN"}`)
-	fee, err := svc.GetSystemAccount(context.Background(), "@FeeIncome", "ngn")
+	fee, err := svc.Accounts().GetSystem(context.Background(), "@FeeIncome", "ngn")
 	if err != nil || fee.Kind != ledger.SystemAccount {
 		t.Fatalf("system account: %+v %v", fee, err)
 	}
@@ -297,20 +302,20 @@ func TestValidation(t *testing.T) {
 	ctx := context.Background()
 	cases := map[string]error{
 		"no ref": func() error {
-			_, err := svc.Deposit(ctx, ledger.DepositInput{AccountID: "w", Amount: ledger.Minor(1, "NGN")})
+			_, err := svc.Payments().Deposit(ctx, ledger.DepositInput{Fee: ledger.NoFee, AccountID: "w", Amount: ledger.Minor(1, "NGN")})
 			return err
 		}(),
 		"fee >= amount": func() error {
-			_, err := svc.Deposit(ctx, ledger.DepositInput{AccountID: "w", Amount: ledger.Minor(1, "NGN"), Fee: ledger.Minor(1, "NGN"), Reference: "r"})
+			_, err := svc.Payments().Deposit(ctx, ledger.DepositInput{AccountID: "w", Amount: ledger.Minor(1, "NGN"), Fee: ledger.Minor(1, "NGN"), Reference: "r"})
 			return err
 		}(),
 		"self transfer": func() error {
-			_, err := svc.Transfer(ctx, ledger.TransferInput{From: "w", To: "w", Amount: ledger.Minor(1, "NGN"), Reference: "r"})
+			_, err := svc.Payments().Transfer(ctx, ledger.TransferInput{Fee: ledger.NoFee, From: "w", To: "w", Amount: ledger.Minor(1, "NGN"), Reference: "r"})
 			return err
 		}(),
 		"dup ref in batch": func() error {
-			it := ledger.TransferInput{From: "a", To: "b", Amount: ledger.Minor(1, "NGN"), Reference: "same"}
-			_, err := svc.BulkTransfer(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{it, it}})
+			it := ledger.TransferInput{Fee: ledger.NoFee, From: "a", To: "b", Amount: ledger.Minor(1, "NGN"), Reference: "same"}
+			_, err := svc.Payments().Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{it, it}})
 			return err
 		}(),
 	}
@@ -345,7 +350,8 @@ func TestDebitTypedBTCAmount(t *testing.T) {
 	f.on("POST /transactions", 201, `{"transaction_id":"txn_b","status":"INFLIGHT","precise_amount":45600000,
 	  "precision":100000000,"amount":0.456,"amount_string":"0.456","currency":"BTC","source":"bln_w"}`)
 
-	r, err := svc.Withdraw(context.Background(), ledger.WithdrawInput{
+	r, err := svc.Payments().Withdraw(context.Background(), ledger.WithdrawInput{
+		Fee:       ledger.NoFee,
 		AccountID: "bln_w", Amount: ledger.Amount("0.456", "btc"), Reference: "btc-out-1",
 	})
 	if err != nil {
@@ -372,7 +378,7 @@ func TestCreditTypedUSDAmountWithFeeAsString(t *testing.T) {
 	f.on("POST /transactions", 201, `{"transaction_id":"txn_u","status":"APPLIED","precise_amount":10056,"precision":100,"currency":"USD",
 	  "destinations":[{"identifier":"@FeeIncome","precise_distribution":"56"},{"identifier":"bln_w","distribution":"left"}]}`)
 
-	r, err := svc.Deposit(context.Background(), ledger.DepositInput{
+	r, err := svc.Payments().Deposit(context.Background(), ledger.DepositInput{
 		AccountID: "bln_w", Amount: ledger.Amount("100.56", "USD"), Fee: ledger.Amount("0.56", ""), Reference: "usd-in-1",
 	})
 	if err != nil {
@@ -404,7 +410,8 @@ func TestEighteenDecimalAsset(t *testing.T) {
 
 func TestTooManyDecimalsForCurrencyRejectedBeforeCallingBlnk(t *testing.T) {
 	f, svc, _ := newFake(t)
-	_, err := svc.Transfer(context.Background(), ledger.TransferInput{
+	_, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "a", To: "b", Amount: ledger.Amount("100.567", "USD"), Reference: "r",
 	})
 	if !errors.Is(err, ledger.ErrInvalidInput) || len(f.reqs) != 0 {
@@ -418,7 +425,7 @@ func TestPartialConfirmWithTypedAmountUsesHeldPrecision(t *testing.T) {
 	f.on("PUT /transactions/inflight/txn_h", 200, `{"transaction_id":"txn_c","status":"APPLIED","precise_amount":10000000,"precision":100000000,"currency":"BTC"}`)
 
 	part := ledger.Amount("0.1", "")
-	r, err := svc.Confirm(context.Background(), "txn_h", &part)
+	r, err := svc.Pending().Confirm(context.Background(), "txn_h", &part)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,7 +433,7 @@ func TestPartialConfirmWithTypedAmountUsesHeldPrecision(t *testing.T) {
 		t.Fatalf("partial wrong: %v %+v", f.last().Body, r.Amount)
 	}
 	tooMuch := ledger.Amount("0.5", "BTC")
-	if _, err := svc.Confirm(context.Background(), "txn_h", &tooMuch); !errors.Is(err, ledger.ErrAmountExceeded) {
+	if _, err := svc.Pending().Confirm(context.Background(), "txn_h", &tooMuch); !errors.Is(err, ledger.ErrAmountExceeded) {
 		t.Fatalf("want ErrAmountExceeded, got %v", err)
 	}
 }
@@ -455,7 +462,8 @@ func TestMoneyJSONRoundTrip(t *testing.T) {
 func TestMinorStillSupported(t *testing.T) {
 	f, svc, _ := newFake(t)
 	f.on("POST /transactions", 201, `{"transaction_id":"x","status":"APPLIED","precise_amount":10056,"precision":100,"currency":"USD"}`)
-	r, err := svc.Transfer(context.Background(), ledger.TransferInput{
+	r, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
+		Fee:  ledger.NoFee,
 		From: "a", To: "b", Amount: ledger.Minor(10056, "USD"), Reference: "r"})
 	if err != nil || r.Amount.Value != "100.56" {
 		t.Fatalf("%+v %v", r, err)
@@ -488,11 +496,11 @@ func TestWithdrawToProviderClearingAndOverrides(t *testing.T) {
 	f.on("POST /transactions", 201, `{"transaction_id":"x","status":"INFLIGHT","precise_amount":100,"precision":100,"currency":"NGN"}`)
 	ctx := context.Background()
 
-	r, err := svc.Withdraw(ctx, ledger.WithdrawInput{AccountID: "w", Amount: ledger.Amount("1", "NGN"), Reference: "a", Provider: "flutterwave"})
+	r, err := svc.Payments().Withdraw(ctx, ledger.WithdrawInput{Fee: ledger.NoFee, AccountID: "w", Amount: ledger.Amount("1", "NGN"), Reference: "a", Provider: "flutterwave"})
 	if err != nil || f.last().Body["destination"] != "@FlutterwaveClearing" || r.EntryStatus != ledger.EntryPending {
 		t.Fatalf("provider clearing: %v %v %+v", err, f.last().Body["destination"], r)
 	}
-	if _, err := svc.Withdraw(ctx, ledger.WithdrawInput{AccountID: "w", Amount: ledger.Amount("1", "NGN"), Reference: "b", Provider: "x", ClearingAccount: "@Legacy"}); err != nil ||
+	if _, err := svc.Payments().Withdraw(ctx, ledger.WithdrawInput{Fee: ledger.NoFee, AccountID: "w", Amount: ledger.Amount("1", "NGN"), Reference: "b", Provider: "x", ClearingAccount: "@Legacy"}); err != nil ||
 		f.last().Body["destination"] != "@Legacy" {
 		t.Fatalf("explicit account must win: %v", f.last().Body["destination"])
 	}
@@ -501,7 +509,7 @@ func TestWithdrawToProviderClearingAndOverrides(t *testing.T) {
 	f2, _, srv := newFake(t)
 	f2.on("POST /transactions", 201, `{"transaction_id":"y","status":"APPLIED"}`)
 	legacy := ledger.New(blnk.New(srv.URL), ledger.Config{FeeIncomeAccount: "@Fees", DepositClearingAccount: "@World"})
-	if _, err := legacy.Deposit(ctx, ledger.DepositInput{AccountID: "w", Amount: ledger.Amount("10", "NGN"), Fee: ledger.Amount("1", ""), Reference: "c"}); err != nil {
+	if _, err := legacy.Payments().Deposit(ctx, ledger.DepositInput{AccountID: "w", Amount: ledger.Amount("10", "NGN"), Fee: ledger.Amount("1", ""), Reference: "c"}); err != nil {
 		t.Fatal(err)
 	}
 	b := f2.last().Body
@@ -515,7 +523,7 @@ func TestWatchBalanceSendsExactThreshold(t *testing.T) {
 	f.on("GET /balances/bln_w", 200, `{"balance_id":"bln_w","currency":"USD"}`)
 	f.on("POST /balance-monitors", 201, `{"monitor_id":"mon_1","balance_id":"bln_w","condition":{"field":"balance","operator":"==","value":29,"precision":1,"precise_value":29}}`)
 	// 0.29 × 100 in float64 is 28.999…; sending 29 with precision 1 avoids that.
-	w, err := svc.WatchBalance(context.Background(), ledger.WatchInput{AccountID: "bln_w", Operator: "=", Threshold: ledger.Amount("0.29", "")})
+	w, err := svc.Operations().WatchBalance(context.Background(), ledger.WatchInput{AccountID: "bln_w", Operator: "=", Threshold: ledger.Amount("0.29", "")})
 	if err != nil || w.ID != "mon_1" || w.Operator != "==" {
 		t.Fatalf("%+v %v", w, err)
 	}
@@ -530,7 +538,7 @@ func TestInstantReconciliationBody(t *testing.T) {
 	f.on("POST /reconciliation/matching-rules", 201, `{"rule_id":"rule_1"}`)
 	f.on("POST /reconciliation/start-instant", 200, `{"reconciliation_id":"rec_1"}`)
 	f.on("GET /reconciliation/rec_1", 200, `{"reconciliation_id":"rec_1","status":"in_progress"}`)
-	r, err := svc.Reconcile(context.Background(), ledger.ReconcileInput{Source: "paystack", Records: []ledger.ExternalRecord{
+	r, err := svc.Reconciliations().Start(context.Background(), ledger.ReconcileInput{Source: "paystack", Records: []ledger.ExternalRecord{
 		{ID: "x1", Amount: ledger.Amount("0.456", "BTC"), Reference: "r1", Date: time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)},
 	}})
 	if err != nil || r.ID != "rec_1" || r.Done() {
@@ -546,5 +554,59 @@ func TestInstantReconciliationBody(t *testing.T) {
 	if ext["amount"].(float64) != 0.456 || ext["currency"] != "BTC" || ext["date"] != "2026-06-01T00:00:00Z" ||
 		start.Body["strategy"] != "one_to_one" || start.Body["matching_rule_ids"].([]any)[0] != "rule_1" {
 		t.Fatalf("start body: %v", start.Body)
+	}
+}
+
+func TestMissingFeeSendsNothing(t *testing.T) {
+	f, svc, _ := newFake(t)
+	for name, call := range map[string]func() error{
+		"deposit": func() error {
+			_, err := svc.Payments().Deposit(context.Background(), ledger.DepositInput{AccountID: "w", Amount: ledger.Minor(1, "NGN"), Reference: "r"})
+			return err
+		},
+		"withdraw": func() error {
+			_, err := svc.Payments().Withdraw(context.Background(), ledger.WithdrawInput{AccountID: "w", Amount: ledger.Minor(1, "NGN"), Reference: "r"})
+			return err
+		},
+		"bulk item": func() error {
+			_, err := svc.Payments().Bulk(context.Background(), ledger.BulkTransferInput{Items: []ledger.TransferInput{{From: "a", To: "b", Amount: ledger.Minor(1, "NGN"), Reference: "r"}}})
+			return err
+		},
+	} {
+		if err := call(); !errors.Is(err, ledger.ErrInvalidInput) {
+			t.Errorf("%s: want ErrInvalidInput, got %v", name, err)
+		}
+	}
+	if len(f.reqs) != 0 {
+		t.Fatalf("nothing may reach Blnk, got %d requests", len(f.reqs))
+	}
+}
+
+func TestBulkPricesWithOneLookupPerSender(t *testing.T) {
+	f := &fakeBlnk{t: t, handlers: map[string][]reply{}}
+	srv := httptest.NewServer(f)
+	defer srv.Close()
+	svc := ledger.New(blnk.New(srv.URL), ledger.Config{Fees: func(_ context.Context, r ledger.FeeRequest) (ledger.Money, error) {
+		return ledger.Amount("1", ""), nil
+	}})
+	f.on("GET /balances/bln_a", 200, `{"balance_id":"bln_a","currency":"NGN"}`)
+	f.on("POST /transactions/bulk", 201, `{"batch_id":"b1","status":"applied","transaction_count":3}`)
+	items := []ledger.TransferInput{
+		{From: "bln_a", To: "bln_b", Amount: ledger.Amount("10", "NGN"), Reference: "p1"},
+		{From: "bln_a", To: "bln_c", Amount: ledger.Amount("10", "NGN"), Reference: "p2"},
+		{From: "bln_a", To: "bln_d", Amount: ledger.Amount("10", "NGN"), Reference: "p3"},
+	}
+	if _, err := svc.Payments().Bulk(context.Background(), ledger.BulkTransferInput{Items: items}); err != nil {
+		t.Fatal(err)
+	}
+	gets := 0
+	for _, r := range f.reqs {
+		if r.Method == "GET" {
+			gets++
+		}
+	}
+	tx := f.last().Body["transactions"].([]any)[0].(map[string]any)
+	if gets != 1 || tx["precise_amount"].(float64) != 1100 {
+		t.Fatalf("gets=%d first item=%v", gets, tx)
 	}
 }
