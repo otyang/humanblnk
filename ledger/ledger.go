@@ -1,18 +1,34 @@
-// Package ledger is a domain-level interface over the Blnk ledger: open accounts,
-// deposit, withdraw, transfer, hold/capture/release, refund, bulk payouts and
-// history. Application code depends on the Ledger interface; Service is the
-// Blnk-backed implementation.
+// Package ledger runs wallet operations on Blnk, the open-source double-entry
+// ledger: accounts and customers, deposits, withdrawals, transfers, card holds,
+// marketplace splits, currency exchange, escrow, disputes, refunds, standing
+// orders, payroll, fees, limits, statements, settlement and reconciliation.
 //
-// Money-flow conventions (all configurable in Config):
+// Application code depends on the Ledger interface, grouped into namespaces:
+//
+//	l.Accounts()        Open, Get, GetSystem, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+//	l.Customers()       Open, Get, OpenPot, ListPots
+//	l.Payments()        Deposit, Withdraw, Transfer, Split, Exchange, Bulk, Schedule, QuoteDeposit, QuoteWithdraw, QuoteTransfer
+//	l.Pending()         Hold, Confirm, Cancel, ConfirmMany, CancelMany
+//	l.Transactions()    Get, GetByReference, Refund, RefundPartial
+//	l.Disputes()        Open, Resolve
+//	l.Escrows()         Open, Get, Release, Refund
+//	l.Operations()      RecordSettlement, ParkInSuspense, AllocateSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
+//	l.Reconciliations() CreateRule, Start, Get
+//
+// Service implements it on a Blnk Core instance; package ledgertest provides an
+// in-memory Blnk for tests. Amounts are exact decimals (see Money): never
+// floats. Every movement takes a Reference, which makes retries safe. Every
+// chargeable movement states its fee, either explicitly (NoFee for free) or
+// through Config.Fees.
+//
+// Money flows (all accounts configurable in Config):
 //
 //	Deposit     @PaystackClearing ──► account            (+ fee leg to @FeeIncome)
-//	Withdraw    account ──► @FlutterwaveClearing         (+ fee leg to @FeeIncome, held INFLIGHT until confirmed)
+//	Withdraw    account ──► @FlutterwaveClearing         (+ fee leg to @FeeIncome, pending until confirmed)
 //	Transfer    account ──► account                       (+ fee leg to @FeeIncome)
-//	Hold        account ──► destination, INFLIGHT        (Confirm = capture, Cancel = release)
+//	Hold        account ──► destination, pending         (Confirm = capture, Cancel = release)
 //
-// Provider clearing accounts (see accounts.go) are allowed to go
-// negative so their balance mirrors what the outside world owes you; customer
-// accounts never overdraft unless you ask for it explicitly.
+// A full guide with real-world examples is at https://otyang.github.io/humanblnk/.
 package ledger
 
 import (

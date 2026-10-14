@@ -274,9 +274,11 @@ auth, err := l.<span class="t">Pending</span>().<span class="t">Hold</span>(ctx,
 	<span class="k">return</span> <span class="c">// declined: insufficient funds, limit, frozen card…</span>
 }
 <span class="c">// The merchant captures less than authorised (e.g. a partial order).</span>
-captured := ledger.<span class="t">Amount</span>(<span class="s">&quot;17250.50&quot;</span>, <span class="s">&quot;&quot;</span>)                        <span class="c">// currency taken from the hold</span>
-_, err = l.<span class="t">Pending</span>().<span class="t">Confirm</span>(ctx, auth.<span class="t">TransactionID</span>, &amp;captured) <span class="c">// posts ₦17,250.50</span>
-_, err = l.<span class="t">Pending</span>().<span class="t">Cancel</span>(ctx, auth.<span class="t">TransactionID</span>)             <span class="c">// releases the other ₦1,249.50</span></code></pre></figure>
+captured := ledger.<span class="t">Amount</span>(<span class="s">&quot;17250.50&quot;</span>, <span class="s">&quot;&quot;</span>) <span class="c">// currency taken from the hold</span>
+<span class="k">if</span> _, err = l.<span class="t">Pending</span>().<span class="t">Confirm</span>(ctx, auth.<span class="t">TransactionID</span>, &amp;captured); err != <span class="b">nil</span> {
+	<span class="k">return</span> <span class="c">// posts ₦17,250.50</span>
+}
+_, err = l.<span class="t">Pending</span>().<span class="t">Cancel</span>(ctx, auth.<span class="t">TransactionID</span>) <span class="c">// releases the other ₦1,249.50</span></code></pre></figure>
 <div class="entries"><table><thead><tr><th>Account</th><th class="num">Debit</th><th class="num">Credit</th></tr></thead><tbody><tr><td><code>Ada · NGN</code></td><td class="num">17,250.50</td><td class="num"></td></tr><tr><td><code>@MerchantPayable</code></td><td class="num"></td><td class="num">17,250.50</td></tr></tbody></table><p class="tnote">Only the captured amount posts. The rest is released back to Available.</p></div>
 </section><section id="fx"><h2><a href="#fx">Exchange currency</a></h2><p class="lede">Ada converts dollars to naira at the rate you quoted.</p>
 <figure class="code"><pre><code><span class="c">// Ada converts $100 to naira at the rate you quoted (₦1,532.40 per $1).</span>
@@ -300,17 +302,23 @@ _, err = l.<span class="t">Payments</span>().<span class="t">Deposit</span>(ctx,
 	<span class="t">Provider</span>:  <span class="s">&quot;custody&quot;</span>,
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>, <span class="c">// incoming crypto is free</span>
 })
-out, err := l.<span class="t">Payments</span>().<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+<span class="k">if</span> err != <span class="b">nil</span> {
+	<span class="k">return</span>
+}
+_, err = l.<span class="t">Payments</span>().<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>: adaBTC.<span class="t">ID</span>,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.004567896&quot;</span>, <span class="s">&quot;BTC&quot;</span>), <span class="c">// too precise for BTC: rejected</span>
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.004567896&quot;</span>, <span class="s">&quot;BTC&quot;</span>), <span class="c">// 9 decimals: more than BTC has</span>
 	<span class="t">Reference</span>: <span class="s">&quot;btc_out_77&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;onchain&quot;</span>,
 })
-<span class="c">// err: ledger: invalid input: amount &quot;0.004567896&quot; has more than 8 decimal places</span>
-out, err = l.<span class="t">Payments</span>().<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>)) <span class="c">// true: rejected before reaching Blnk</span>
+out, err := l.<span class="t">Payments</span>().<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>: adaBTC.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0.00456789&quot;</span>, <span class="s">&quot;BTC&quot;</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;btc_out_77&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;onchain&quot;</span>, <span class="t">Immediate</span>: <span class="b">true</span>,
 })
+<span class="k">if</span> err != <span class="b">nil</span> {
+	<span class="k">return</span>
+}
 fmt.<span class="t">Println</span>(out.<span class="t">Amount</span>.<span class="t">Value</span>, out.<span class="t">Amount</span>.<span class="t">Display</span>) <span class="c">// 0.00458789 0.00458789 (incl. 0.00002 fee)</span></code></pre></figure>
 <p>Crypto uses each chain’s smallest unit (satoshi, wei), so ledger balances match the chain exactly. For stablecoins on several chains, note that decimals differ by chain (USDT is 6 on Tron and Ethereum, 18 on BNB Chain): keep one precision per ledger currency and convert at the edge, or give each chain its own currency code.</p>
 </section><section id="marketplace"><h2><a href="#marketplace">Marketplace orders</a></h2><p class="lede">One payment, several recipients, exact to the kobo.</p>
@@ -497,6 +505,9 @@ _, err = l.<span class="t">Operations</span>().<span class="t">ParkInSuspense</s
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>, <span class="t">Note</span>: <span class="s">&quot;sender: OKAFOR J., narration blank&quot;</span>,
 })
+<span class="k">if</span> err != <span class="b">nil</span> {
+	<span class="k">return</span>
+}
 <span class="c">// Support identifies it as Tunde&#x27;s:</span>
 _, err = l.<span class="t">Operations</span>().<span class="t">AllocateSuspense</span>(ctx, ledger.<span class="t">AllocateInput</span>{
 	<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),

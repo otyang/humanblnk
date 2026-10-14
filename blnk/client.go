@@ -56,7 +56,7 @@ func New(baseURL string, opts ...Option) *Client {
 		http:       &http.Client{Timeout: 30 * time.Second},
 		maxRetries: 3,
 		backoff:    200 * time.Millisecond,
-		userAgent:  "humanblnk-go/1.0",
+		userAgent:  "humanblnk-go/" + Version,
 	}
 	for _, o := range opts {
 		o(c)

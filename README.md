@@ -1,18 +1,32 @@
 # humanblnk
 
+[![CI](https://github.com/otyang/humanblnk/actions/workflows/ci.yml/badge.svg)](https://github.com/otyang/humanblnk/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/otyang/humanblnk.svg)](https://pkg.go.dev/github.com/otyang/humanblnk)
+[![Go Report Card](https://goreportcard.com/badge/github.com/otyang/humanblnk)](https://goreportcard.com/report/github.com/otyang/humanblnk)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 Unofficial Go library that makes [Blnk](https://docs.blnkfinance.com), the open-source double-entry ledger, simple to use: accounts, deposits, withdrawals, transfers, fees, holds, refunds, escrow, FX, statements and webhooks. Exact decimal money for fiat and crypto, plus an in-memory Blnk emulator for tests.
 
 **Author:** [Otyang](https://github.com/otyang) · Not affiliated with Blnk Finance.
 
-```
-blnk/     thin typed HTTP client — one method per Blnk Core endpoint, structured errors, retries
-ledger/   domain layer — the `Ledger` interface your app depends on, implemented by `Service`
-cmd/example/  end-to-end walkthrough against a real Core instance
+**Guide:** [otyang.github.io/humanblnk](https://otyang.github.io/humanblnk/), a full walkthrough built around a real wallet app (onboarding, top-ups, transfers, withdrawals, cards, FX, crypto, marketplace, escrow, disputes, savings, payroll, limits, statements, settlement, webhooks, testing). Every sample in it is a tested program.
+
+| Package | What it is |
+|---|---|
+| [`ledger`](https://pkg.go.dev/github.com/otyang/humanblnk/ledger) | the `Ledger` interface your app depends on, and `Service`, its Blnk implementation |
+| [`blnk`](https://pkg.go.dev/github.com/otyang/humanblnk/blnk) | typed HTTP client for Blnk Core: one method per endpoint, retries, structured errors |
+| [`ledgertest`](https://pkg.go.dev/github.com/otyang/humanblnk/ledgertest) | in-memory Blnk Core for your tests |
+| `cmd/example` | end-to-end walkthrough (`make example`) |
+
+## Install
+
+```bash
+go get github.com/otyang/humanblnk/ledger@latest
 ```
 
-No third-party dependencies. Go 1.22+.
+Go 1.22 or later; no third-party dependencies. Needs a [Blnk Core](https://docs.blnkfinance.com) to talk to (tested against 0.15), or use `ledgertest` in tests.
 
-**Guide:** open [docs.html](docs.html) for a full walkthrough built around a real wallet app (onboarding, top-ups, transfers, withdrawals, cards, FX, crypto, marketplace, escrow, disputes, savings, payroll, limits, statements, settlement, webhooks, testing). Every sample in it is a test in `ledger/docs_examples_test.go`; regenerate with `scripts/gendocs.sh`.
+**Stability:** humanblnk is pre-1.0. Minor versions may change the API, and every such change is listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
@@ -274,5 +288,7 @@ Blnk quirks this module works around: balance monitors only match `==` (not `=`)
 Created and maintained by **[Otyang](https://github.com/otyang)**.
 
 Released under the [MIT License](LICENSE). Copyright (c) 2026 Otyang.
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). To report a security issue, see [SECURITY.md](SECURITY.md).
 
 humanblnk is an independent project and is not affiliated with or endorsed by Blnk Finance. Blnk is a trademark of its owners.

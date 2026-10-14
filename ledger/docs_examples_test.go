@@ -22,6 +22,8 @@ import (
 )
 
 // Compiled, not run: the production setup shown in the docs.
+var _ = docSetup
+
 func docSetup() (*ledger.Service, error) {
 	// doc:setup
 	client := blnk.New(os.Getenv("BLNK_URL"), // e.g. http://localhost:5001
@@ -214,9 +216,11 @@ func TestDocsSamples(t *testing.T) {
 		return // declined: insufficient funds, limit, frozen card…
 	}
 	// The merchant captures less than authorised (e.g. a partial order).
-	captured := ledger.Amount("17250.50", "")                        // currency taken from the hold
-	_, err = l.Pending().Confirm(ctx, auth.TransactionID, &captured) // posts ₦17,250.50
-	_, err = l.Pending().Cancel(ctx, auth.TransactionID)             // releases the other ₦1,249.50
+	captured := ledger.Amount("17250.50", "") // currency taken from the hold
+	if _, err = l.Pending().Confirm(ctx, auth.TransactionID, &captured); err != nil {
+		return // posts ₦17,250.50
+	}
+	_, err = l.Pending().Cancel(ctx, auth.TransactionID) // releases the other ₦1,249.50
 	// enddoc
 	check(err)
 	acct, _ = l.Accounts().Get(ctx, adaNGN.ID)
@@ -246,17 +250,23 @@ func TestDocsSamples(t *testing.T) {
 		Provider:  "custody",
 		Fee:       ledger.NoFee, // incoming crypto is free
 	})
-	out, err := l.Payments().Withdraw(ctx, ledger.WithdrawInput{
+	if err != nil {
+		return
+	}
+	_, err = l.Payments().Withdraw(ctx, ledger.WithdrawInput{
 		AccountID: adaBTC.ID,
-		Amount:    ledger.Amount("0.004567896", "BTC"), // too precise for BTC: rejected
+		Amount:    ledger.Amount("0.004567896", "BTC"), // 9 decimals: more than BTC has
 		Reference: "btc_out_77",
 		Provider:  "onchain",
 	})
-	// err: ledger: invalid input: amount "0.004567896" has more than 8 decimal places
-	out, err = l.Payments().Withdraw(ctx, ledger.WithdrawInput{
+	fmt.Println(errors.Is(err, ledger.ErrInvalidInput)) // true: rejected before reaching Blnk
+	out, err := l.Payments().Withdraw(ctx, ledger.WithdrawInput{
 		AccountID: adaBTC.ID, Amount: ledger.Amount("0.00456789", "BTC"),
 		Reference: "btc_out_77", Provider: "onchain", Immediate: true,
 	})
+	if err != nil {
+		return
+	}
 	fmt.Println(out.Amount.Value, out.Amount.Display) // 0.00458789 0.00458789 (incl. 0.00002 fee)
 	// enddoc
 	check(err)
@@ -449,6 +459,9 @@ func TestDocsSamples(t *testing.T) {
 		Amount: ledger.Amount("15000", "NGN"), Provider: "paystack",
 		Reference: "paystack_T7700011", Note: "sender: OKAFOR J., narration blank",
 	})
+	if err != nil {
+		return
+	}
 	// Support identifies it as Tunde's:
 	_, err = l.Operations().AllocateSuspense(ctx, ledger.AllocateInput{
 		AccountID: tundeNGN.ID, Amount: ledger.Amount("15000", "NGN"),
