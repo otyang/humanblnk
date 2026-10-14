@@ -40,8 +40,8 @@ func (s disputesAPI) Open(ctx context.Context, in DisputeInput) (*Receipt, error
 	if orig.Status != blnk.StatusApplied {
 		return nil, invalid(op, "only posted transactions can be disputed (status %s)", orig.Status)
 	}
-	if orig.Destination == "" {
-		return nil, invalid(op, "transaction %s has several destinations; dispute the leg's transaction id", in.TransactionID)
+	if orig, err = s.payeeLeg(ctx, op, orig); err != nil {
+		return nil, err
 	}
 	amount := s.txMoney(orig)
 	if in.Amount.isSet() {
@@ -53,7 +53,7 @@ func (s disputesAPI) Open(ctx context.Context, in DisputeInput) (*Receipt, error
 			return nil, err
 		}
 	}
-	md := map[string]any{"dispute_of": in.TransactionID, "dispute_reason": in.Reason}
+	md := map[string]any{"dispute_of": orig.GetID(), "dispute_reason": in.Reason}
 	for k, v := range in.MetaData {
 		md[k] = v
 	}

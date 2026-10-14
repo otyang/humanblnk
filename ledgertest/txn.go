@@ -135,7 +135,7 @@ func (s *Server) plan(in blnk.CreateTransactionRequest) (*txn, []leg, error) {
 		TransactionID: s.id("txn"), Reference: in.Reference, Currency: strings.ToUpper(in.Currency),
 		Precision: jsonNum(in.Precision), Source: in.Source, Destination: in.Destination,
 		Description: in.Description, AllowOverdraft: in.AllowOverdraft, Inflight: in.Inflight,
-		SkipQueue: in.SkipQueue, CreatedAt: blnk.Time{Time: s.now}, MetaData: in.MetaData,
+		SkipQueue: in.SkipQueue, CreatedAt: blnk.Time{Time: s.now}, EffectiveDate: blnk.Time{Time: s.now}, MetaData: in.MetaData,
 		AmountString: decimal(total, in.Precision),
 	}}
 	t.Amount = jsonNumber(t.AmountString)
@@ -180,10 +180,18 @@ func (s *Server) commitPlan(t *txn, legs []leg, batch string) {
 		return
 	}
 	s.splitRefs[t.Reference] = true
-	for i, l := range legs {
+	// Blnk doesn't keep legs in request order; storing them reversed makes
+	// code that assumes the order fail in tests rather than in production.
+	dests := make([]blnk.Distribution, len(legs))
+	order := make([]int, len(legs))
+	for i := range legs {
+		order[i] = len(legs) - 1 - i
+	}
+	for n, i := range order {
+		l := legs[i]
 		c := &txn{Transaction: t.Transaction, expiresAt: t.expiresAt, commitAt: t.commitAt, runAt: t.runAt, batch: batch}
 		c.TransactionID = s.id("txn")
-		c.Reference = fmt.Sprintf("%s-%d", t.Reference, i+1)
+		c.Reference = fmt.Sprintf("%s-%d", t.Reference, n+1)
 		c.Source, c.Destination = l.src.BalanceID, l.dst.BalanceID
 		c.ParentTransaction = t.TransactionID
 		c.Destinations = nil
@@ -199,10 +207,10 @@ func (s *Server) commitPlan(t *txn, legs []leg, batch string) {
 			s.apply(c, []leg{l}, c.Status == blnk.StatusInflight)
 		}
 		t.legs = append(t.legs, c.TransactionID)
-		d := l.dist
-		d.TransactionID = c.TransactionID
-		t.Destinations = append(t.Destinations, d)
+		dests[i] = l.dist
+		dests[i].TransactionID = c.TransactionID
 	}
+	t.Destinations = dests
 	s.splits[t.TransactionID] = t.legs
 }
 
@@ -376,6 +384,7 @@ func (s *Server) child(parent *txn, status string, amt *big.Int, legs []leg) *tx
 	c.Inflight = false
 	c.Destinations = nil
 	c.CreatedAt = blnk.Time{Time: s.now}
+	c.EffectiveDate = c.CreatedAt
 	c.precise.Set(amt)
 	c.AmountString = decimal(amt, precisionOf(parent))
 	c.Amount = jsonNumber(c.AmountString)
@@ -423,6 +432,7 @@ func (s *Server) runDue() {
 				continue
 			}
 			t.Status = blnk.StatusApplied
+			t.EffectiveDate = blnk.Time{Time: s.now} // counts from when it posted
 			s.apply(t, legs, false)
 		case t.Status == blnk.StatusInflight && !t.voided && t.remaining().Sign() > 0:
 			if !t.commitAt.IsZero() && !t.commitAt.After(s.now) {
@@ -459,6 +469,7 @@ func (s *Server) refund(id string, in blnk.RefundRequest) (*txn, error) {
 	r.ParentTransaction = t.TransactionID
 	r.Status = blnk.StatusApplied
 	r.CreatedAt = blnk.Time{Time: s.now}
+	r.EffectiveDate = r.CreatedAt
 	r.Description = firstNonEmpty(in.Description, "Refund of "+t.Reference)
 	r.MetaData = blnk.MetaData{}
 	for k, v := range t.MetaData {

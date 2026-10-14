@@ -10,6 +10,8 @@ cmd/example/  end-to-end walkthrough against a real Core instance
 
 No third-party dependencies. Go 1.22+.
 
+**Guide:** open [docs.html](docs.html) for a full walkthrough built around a real wallet app (onboarding, top-ups, transfers, withdrawals, cards, FX, crypto, marketplace, escrow, disputes, savings, payroll, limits, statements, settlement, webhooks, testing). Every sample in it is a test in `ledger/docs_examples_test.go`; regenerate with `scripts/gendocs.sh`.
+
 ## Quick start
 
 ```go

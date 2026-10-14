@@ -125,17 +125,26 @@ func (s *Service) samePayload(ctx context.Context, t *blnk.Transaction, req blnk
 		return false
 	}
 	if len(req.Destinations) > 0 {
+		// Blnk doesn't keep legs in request order, so match them as a set:
+		// each requested leg pairs with one stored leg, same account and amount.
 		if len(t.Destinations) != len(req.Destinations) {
 			return false
 		}
-		for i := range req.Destinations {
-			if !s.sameAccount(ctx, t.Destinations[i].Identifier, req.Destinations[i].Identifier, req.Currency) {
-				return false
-			}
-			if want := req.Destinations[i].PreciseDistribution; want != "" && want != "left" {
-				if got := t.Destinations[i].PreciseDistribution; got != "" && got != want {
-					return false
+		used := make([]bool, len(t.Destinations))
+		for _, want := range req.Destinations {
+			found := false
+			for i, got := range t.Destinations {
+				if used[i] || !s.sameAccount(ctx, got.Identifier, want.Identifier, req.Currency) {
+					continue
 				}
+				if w := want.PreciseDistribution; w != "" && w != "left" && got.PreciseDistribution != "" && got.PreciseDistribution != w {
+					continue
+				}
+				used[i], found = true, true
+				break
+			}
+			if !found {
+				return false
 			}
 		}
 	}
@@ -189,4 +198,30 @@ func (s *Service) indicatorOf(ctx context.Context, id string, names map[string]s
 	}
 	names[id] = n
 	return n
+}
+
+// payeeLeg returns the part of a transaction that paid its recipient. A
+// movement with a fee is stored as two legs (recipient and fee income);
+// disputes and partial refunds are about the recipient's leg, so that one is
+// picked automatically. A split paying several recipients must name the leg.
+func (s *Service) payeeLeg(ctx context.Context, op string, t *blnk.Transaction) (*blnk.Transaction, error) {
+	if t.Destination != "" {
+		return t, nil
+	}
+	feeID, _ := s.indicatorID(ctx, s.cfg.FeeIncomeAccount, t.Currency)
+	pick, n := "", 0
+	for _, d := range t.Destinations {
+		if d.Identifier == feeID || d.Identifier == s.cfg.FeeIncomeAccount {
+			continue
+		}
+		pick, n = d.TransactionID, n+1
+	}
+	if n != 1 || pick == "" {
+		return nil, invalid(op, "transaction %s pays several recipients; use the transaction id of the leg you mean", t.GetID())
+	}
+	leg, err := s.c.GetTransaction(ctx, pick)
+	if err != nil {
+		return nil, mapErr(op, err)
+	}
+	return leg, nil
 }

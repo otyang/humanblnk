@@ -41,9 +41,10 @@ func (s transactionsAPI) RefundPartial(ctx context.Context, txID string, in Part
 	if orig.Status != blnk.StatusApplied {
 		return nil, invalid(op, "only posted transactions can be refunded (status %s)", orig.Status)
 	}
-	if orig.Destination == "" {
-		return nil, invalid(op, "transaction %s has several destinations; refund the leg's transaction id", txID)
+	if orig, err = s.payeeLeg(ctx, op, orig); err != nil {
+		return nil, err
 	}
+	txID = orig.GetID() // the leg, when the original had a fee
 	amount := in.Amount
 	if amount.Precision == 0 {
 		amount.Precision = s.txPrecision(orig)
@@ -66,9 +67,11 @@ func (s transactionsAPI) RefundPartial(ctx context.Context, txID string, in Part
 	for k, v := range in.MetaData {
 		md[k] = v
 	}
+	names := map[string]string{}
+	from := s.indicatorOf(ctx, orig.Destination, names) // "@Name" for system accounts
 	r, err := s.move(ctx, op, TransferInput{
-		From: orig.Destination, To: orig.Source, Amount: amt, Reference: in.Reference,
-		AllowOverdraft: strings.HasPrefix(orig.Destination, "@"), // reversing out of a system account
+		From: from, To: s.indicatorOf(ctx, orig.Source, names), Amount: amt, Reference: in.Reference,
+		AllowOverdraft: strings.HasPrefix(from, "@"), // reversing out of a system account
 		Description:    firstNonEmpty(in.Description, "Refund of "+orig.Reference), MetaData: md,
 	}, "refund")
 	if err != nil {

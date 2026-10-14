@@ -38,7 +38,11 @@ type ReconcileInput struct {
 	// per Service).
 	RuleIDs  []string
 	Strategy string // one_to_one (default), one_to_many, many_to_one
-	DryRun   bool   // match without recording the result
+	// GroupingCriteria groups ledger entries for one_to_many / many_to_one,
+	// e.g. "parent_transaction" to match one provider line against the legs
+	// of a transaction that carried a fee.
+	GroupingCriteria string
+	DryRun           bool // match without recording the result
 }
 
 // Reconciliation is a reconciliation run. Blnk reports counts only; it has no
@@ -96,7 +100,8 @@ func (s reconciliationsAPI) Start(ctx context.Context, in ReconcileInput) (*Reco
 		rules = []string{id}
 	}
 	req := blnk.StartReconciliationRequest{
-		Strategy: firstNonEmpty(in.Strategy, "one_to_one"), DryRun: in.DryRun, MatchingRuleIDs: rules,
+		Strategy: firstNonEmpty(in.Strategy, "one_to_one"), GroupingCriteria: in.GroupingCriteria,
+		DryRun: in.DryRun, MatchingRuleIDs: rules,
 	}
 
 	var id string

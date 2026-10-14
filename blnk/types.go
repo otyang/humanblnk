@@ -206,6 +206,7 @@ type Transaction struct {
 	SkipQueue          bool           `json:"skip_queue"`
 	Hash               string         `json:"hash,omitempty"`
 	CreatedAt          Time           `json:"created_at"`
+	EffectiveDate      Time           `json:"effective_date"` // when it counts in balances; defaults to created_at
 	ScheduledFor       Time           `json:"scheduled_for"`
 	InflightExpiryDate Time           `json:"inflight_expiry_date"`
 	InflightCommitDate Time           `json:"inflight_commit_date"`

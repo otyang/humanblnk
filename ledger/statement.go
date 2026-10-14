@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"sort"
 	"strings"
 	"time"
 
@@ -88,10 +89,12 @@ func (s accountsAPI) Statement(ctx context.Context, accountID string, from, to t
 			Filters: []blnk.Filter{
 				{Field: "balance_id", Operator: "eq", Value: accountID},
 				{Field: "status", Operator: "eq", Value: blnk.StatusApplied},
-				{Field: "created_at", Operator: "gte", Value: from.UTC().Format(time.RFC3339Nano)},
-				{Field: "created_at", Operator: "lt", Value: to.UTC().Format(time.RFC3339Nano)},
+				// effective_date is what Blnk's historical balances count by,
+				// so a scheduled transfer appears on the day it posted.
+				{Field: "effective_date", Operator: "gte", Value: from.UTC().Format(time.RFC3339Nano)},
+				{Field: "effective_date", Operator: "lt", Value: to.UTC().Format(time.RFC3339Nano)},
 			},
-			SortBy: "created_at", SortOrder: "asc", Limit: 100, Offset: offset,
+			SortBy: "effective_date", SortOrder: "asc", Limit: 100, Offset: offset,
 		})
 		if err != nil {
 			return nil, mapErr(op, err)
@@ -102,23 +105,20 @@ func (s accountsAPI) Statement(ctx context.Context, accountID string, from, to t
 				continue // its legs are listed individually
 			}
 			line := StatementLine{
-				Date: t.CreatedAt.Time, Reference: t.Reference, Description: t.Description,
+				Date: effective(t), Reference: t.Reference, Description: t.Description,
 				Credit: zero, Debit: zero, Receipt: *s.toReceipt(t),
 			}
 			amt := &t.PreciseAmount.Int
 			switch accountID {
 			case t.Destination:
-				run.Add(run, amt)
 				in.Add(in, amt)
 				line.Credit, line.Counterpart = m(amt), s.indicatorOf(ctx, t.Source, names)
 			case t.Source:
-				run.Sub(run, amt)
 				out.Add(out, amt)
 				line.Debit, line.Counterpart = m(amt), s.indicatorOf(ctx, t.Destination, names)
 			default:
 				continue
 			}
-			line.Balance = m(run)
 			st.Lines = append(st.Lines, line)
 			if len(st.Lines) > maxStatementLines {
 				return nil, invalid(op, "more than %d entries; request a shorter period", maxStatementLines)
@@ -127,6 +127,43 @@ func (s accountsAPI) Statement(ctx context.Context, accountID string, from, to t
 		if len(txs) < 100 {
 			break
 		}
+	}
+	// Blnk doesn't store a payment's legs in order; keep each payment's legs
+	// together with its fee last, then work out the running balance.
+	// A payment's legs (and the records of confirming them) share their
+	// moment and description, so that is what groups them.
+	group := make(map[string]int, len(st.Lines)) // group → first position
+	key := make([]int, len(st.Lines))
+	for i, l := range st.Lines {
+		k := l.Date.Format(time.RFC3339Nano) + "|" + l.Description
+		if _, ok := group[k]; !ok {
+			group[k] = i
+		}
+		key[i] = group[k]
+	}
+	idx := make([]int, len(st.Lines))
+	for i := range idx {
+		idx[i] = i
+	}
+	sort.SliceStable(idx, func(a, b int) bool {
+		la, lb := st.Lines[idx[a]], st.Lines[idx[b]]
+		if !la.Date.Equal(lb.Date) {
+			return la.Date.Before(lb.Date)
+		}
+		if key[idx[a]] != key[idx[b]] {
+			return key[idx[a]] < key[idx[b]]
+		}
+		return !s.isFeeLine(la) && s.isFeeLine(lb)
+	})
+	sorted := make([]StatementLine, len(st.Lines))
+	for i, j := range idx {
+		sorted[i] = st.Lines[j]
+	}
+	st.Lines = sorted
+	for i := range st.Lines {
+		run.Add(run, st.Lines[i].Credit.PreciseAmount)
+		run.Sub(run, st.Lines[i].Debit.PreciseAmount)
+		st.Lines[i].Balance = m(run)
 	}
 	st.Closing, st.Credits, st.Debits = m(run), m(in), m(out)
 
@@ -169,3 +206,14 @@ func (st *Statement) WriteCSV(w io.Writer) error {
 	}
 	return cw.Error()
 }
+
+// effective is when a transaction counts in balances: effective_date, else created_at.
+func effective(t *blnk.Transaction) time.Time {
+	if !t.EffectiveDate.IsZero() {
+		return t.EffectiveDate.Time
+	}
+	return t.CreatedAt.Time
+}
+
+// isFeeLine reports whether a statement line is a fee leg.
+func (s *Service) isFeeLine(l StatementLine) bool { return l.Counterpart == s.cfg.FeeIncomeAccount }
