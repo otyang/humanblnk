@@ -264,3 +264,4 @@ BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -v
 | 0.15.3 | `Config.CoreDryRun`; refund descriptions. **Older Core ignores `dry_run` and posts the transaction**, so leave `CoreDryRun` off there |
 
 Blnk quirks this module works around: balance monitors only match `==` (not `=`), and their threshold goes through float math, so `Operations().WatchBalance` sends it in the smallest unit with precision 1. Filters reset a `limit` over 100 to 20, so this module never asks for more than 100.
+# humanblnk
