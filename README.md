@@ -13,6 +13,7 @@ Unofficial Go library that makes [Blnk](https://docs.blnkfinance.com), the open-
 
 | Package | What it is |
 |---|---|
+| [`humanblnk`](https://pkg.go.dev/github.com/otyang/humanblnk) | the front door: `humanblnk.New(url, cfg)` and everything from `ledger`, re-exported |
 | [`ledger`](https://pkg.go.dev/github.com/otyang/humanblnk/ledger) | the `Ledger` interface your app depends on, and `Service`, its Blnk implementation |
 | [`blnk`](https://pkg.go.dev/github.com/otyang/humanblnk/blnk) | typed HTTP client for Blnk Core: one method per endpoint, retries, structured errors |
 | [`ledgertest`](https://pkg.go.dev/github.com/otyang/humanblnk/ledgertest) | in-memory Blnk Core for your tests |
@@ -21,7 +22,7 @@ Unofficial Go library that makes [Blnk](https://docs.blnkfinance.com), the open-
 ## Install
 
 ```bash
-go get github.com/otyang/humanblnk/ledger@latest
+go get github.com/otyang/humanblnk@latest
 ```
 
 Go 1.22 or later; no third-party dependencies. Needs a [Blnk Core](https://docs.blnkfinance.com) to talk to (tested against 0.15), or use `ledgertest` in tests.
@@ -31,17 +32,29 @@ Go 1.22 or later; no third-party dependencies. Needs a [Blnk Core](https://docs.
 ## Quick start
 
 ```go
-client := blnk.New("https://your-core.example.com", blnk.WithAPIKey(os.Getenv("BLNK_API_KEY")))
-var l ledger.Ledger = ledger.New(client, ledger.Config{LedgerID: "ldg_..."})
+import "github.com/otyang/humanblnk"
 
-w, _ := l.Accounts().Open(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+l := humanblnk.New("http://localhost:5001", humanblnk.Config{LedgerID: "ldg_..."},
+	humanblnk.WithAPIKey(os.Getenv("BLNK_API_KEY")))
 
-l.Payments().Deposit(ctx, ledger.DepositInput{
-    AccountID: w.ID, Amount: ledger.Amount("100.56", "USD"), Fee: ledger.Amount("0.56", ""),
-    Reference: "paystack_" + paymentRef, Provider: "paystack",
+ada, err := l.Accounts().Open(ctx, humanblnk.OpenAccountInput{Currency: "NGN"})
+
+// Paystack confirmed ₦50,000; their reference makes a repeated webhook harmless.
+_, err = l.Payments().Deposit(ctx, humanblnk.DepositInput{
+	AccountID: ada.ID, Amount: humanblnk.Amount("50000", "NGN"), Fee: humanblnk.Amount("750", ""),
+	Reference: "paystack_T629384756", Provider: "paystack",
 })
-l.Payments().Withdraw(ctx, ledger.WithdrawInput{AccountID: btcAccount, Amount: ledger.Amount("0.456", "BTC"), Fee: ledger.NoFee, Reference: "out-1"})
+
+_, err = l.Payments().Transfer(ctx, humanblnk.TransferInput{
+	From: ada.ID, To: tunde.ID, Amount: humanblnk.Amount("12500", "NGN"),
+	Fee: humanblnk.NoFee, Reference: "p2p_01J8ZK2M4Q",
+})
+if errors.Is(err, humanblnk.ErrInsufficientFunds) {
+	// tell Ada she doesn't have enough
+}
 ```
+
+The root package re-exports package `ledger`, so `humanblnk.Money` and `ledger.Money` are the same type; import whichever reads better. The examples below use `ledger`.
 
 ## Amounts: type decimals, get both forms back
 

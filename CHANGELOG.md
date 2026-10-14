@@ -7,6 +7,11 @@ change the API; such changes are listed under **Changed**.
 
 ## [Unreleased]
 
+### Added
+- Import the module root: `import "github.com/otyang/humanblnk"`. Package
+  `humanblnk` re-exports package `ledger` (types are aliases) and adds
+  `humanblnk.New(blnkURL, cfg, opts...)`; a test keeps the re-exports complete.
+
 ## [0.1.0] - 2026-10-14
 
 First release.

@@ -108,7 +108,13 @@ l.Reconciliations() // CreateRule, Start, Get""", 'go')}
 ''')
 
 section('install', 'Install and run Blnk', f'''
-{raw("go get github.com/otyang/humanblnk", caption="Add the module (Go 1.22+, no third-party dependencies)")}
+{raw("go get github.com/otyang/humanblnk@latest", caption="Add the module (Go 1.22+, no third-party dependencies)")}
+<p>Import the module root for everything in one place, or the packages directly. They are the same types, so mix them freely; this guide uses <code>ledger</code>.</p>
+{raw("""import "github.com/otyang/humanblnk"
+
+l := humanblnk.New("http://localhost:5001", humanblnk.Config{LedgerID: "ldg_..."})
+_, err := l.Payments().Transfer(ctx, humanblnk.TransferInput{ /* … */ })
+if errors.Is(err, humanblnk.ErrInsufficientFunds) { /* … */ }""", 'go', caption="One import")}
 <p>You need a Blnk Core to talk to. Locally, Blnk runs in Docker (server, worker, Postgres, Redis) and listens on <code>http://localhost:5001</code>; see Blnk's install guide. To try the library first with no setup at all, run the bundled walkthrough against the in-memory emulator:</p>
 {raw("""go run ./cmd/example                                          # in-memory emulator
 BLNK_URL=http://localhost:5001 go run ./cmd/example           # your local Blnk Core""")}

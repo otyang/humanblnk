@@ -128,7 +128,13 @@ l.<span class="t">Escrows</span>()         <span class="c">// Open, Get, Release
 l.<span class="t">Operations</span>()      <span class="c">// RecordSettlement, ParkInSuspense, AllocateSuspense, Adjust, TrialBalance, WatchBalance, Unwatch</span>
 l.<span class="t">Reconciliations</span>() <span class="c">// CreateRule, Start, Get</span></code></pre></figure>
 </section><section id="install"><h2><a href="#install">Install and run Blnk</a></h2>
-<figure class="code"><figcaption>Add the module (Go 1.22+, no third-party dependencies)</figcaption><pre><code>go get github.com/otyang/humanblnk</code></pre></figure>
+<figure class="code"><figcaption>Add the module (Go 1.22+, no third-party dependencies)</figcaption><pre><code>go get github.com/otyang/humanblnk@latest</code></pre></figure>
+<p>Import the module root for everything in one place, or the packages directly. They are the same types, so mix them freely; this guide uses <code>ledger</code>.</p>
+<figure class="code"><figcaption>One import</figcaption><pre><code><span class="k">import</span> <span class="s">&quot;github.com/otyang/humanblnk&quot;</span>
+
+l := humanblnk.<span class="t">New</span>(<span class="s">&quot;http://localhost:5001&quot;</span>, humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: <span class="s">&quot;ldg_...&quot;</span>})
+_, err := l.<span class="t">Payments</span>().<span class="t">Transfer</span>(ctx, humanblnk.<span class="t">TransferInput</span>{ /* … */ })
+<span class="k">if</span> errors.<span class="t">Is</span>(err, humanblnk.<span class="t">ErrInsufficientFunds</span>) { /* … */ }</code></pre></figure>
 <p>You need a Blnk Core to talk to. Locally, Blnk runs in Docker (server, worker, Postgres, Redis) and listens on <code>http://localhost:5001</code>; see Blnk's install guide. To try the library first with no setup at all, run the bundled walkthrough against the in-memory emulator:</p>
 <figure class="code"><pre><code>go run ./cmd/example                                          # in-memory emulator
 BLNK_URL=http://localhost:5001 go run ./cmd/example           # your local Blnk Core</code></pre></figure>
