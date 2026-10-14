@@ -273,4 +273,6 @@ Blnk quirks this module works around: balance monitors only match `==` (not `=`)
 
 Created and maintained by **[Otyang](https://github.com/otyang)**.
 
+Released under the [MIT License](LICENSE). Copyright (c) 2026 Otyang.
+
 humanblnk is an independent project and is not affiliated with or endorsed by Blnk Finance. Blnk is a trademark of its owners.
