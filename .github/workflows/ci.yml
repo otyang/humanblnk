@@ -58,4 +58,8 @@ jobs:
       - name: Regenerate docs.html
         run: ./scripts/gendocs.sh
       - name: Check for changes
-        run: git diff --exit-code docs.html || (echo "docs.html is stale: run scripts/gendocs.sh and commit" && exit 1)
+        run: |
+          if ! git diff --exit-code docs.html; then
+            echo "docs.html is stale. Run scripts/gendocs.sh and commit it."
+            exit 1
+          fi
