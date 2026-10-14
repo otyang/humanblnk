@@ -12,7 +12,7 @@ agree on the API before you write it.
 
 ```bash
 make check   # gofmt, go vet, staticcheck, tests with -race (what CI runs)
-make docs    # regenerate docs.html after changing a documented sample
+make docs    # regenerate docs.html and CONTRACT.md after changing the API or a sample
 make live    # tests against a real Blnk Core (writes test data)
 ```
 
@@ -27,8 +27,11 @@ it that way unless there is a strong reason.
 - **Blnk behaviour changes go in the emulator too**, so `ledgertest` keeps
   matching real Core. If you observed something on a real Core, say which
   version in the pull request.
-- **Documented samples live in** `ledger/docs_examples_test.go`; run
-  `make docs` and commit `docs.html` when you change one.
+- **Documented samples live in** `ledger/docs_examples_test.go`. After
+  changing a sample or any exported API, run `make docs` and commit
+  `docs.html` and `CONTRACT.md` (CI checks they are current).
+- **New exported names in `ledger`** must be re-exported in `humanblnk.go`;
+  `TestReexportsEverything` tells you which.
 - Keep exported names in product language (`Deposit`, `Confirm`) and system
   accounts in accounting language (`@FeeIncome`).
 

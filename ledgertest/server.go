@@ -7,10 +7,14 @@
 //	core.Advance(25 * time.Hour) // expire holds, run scheduled transfers
 //
 // The real Service code runs unchanged against the emulator, so tests exercise
-// the same requests production sends. The emulator implements the Blnk
-// behaviour this module relies on (balances, inflight, splits, refunds, bulk,
-// filters, metadata, identities, balance monitors, historical balances and
-// webhooks); it is not a complete Blnk implementation.
+// the same requests production sends. It implements the Blnk behaviour this
+// module relies on (balances, inflight, splits, refunds, bulk, filters,
+// metadata, identities, balance monitors, historical balances, dry run,
+// instant reconciliation and signed webhooks) and behaves like Blnk Core 0.15
+// where that matters: a split is stored only as its legs ("<ref>-1", …, in
+// reverse order, since Blnk doesn't keep request order), "@" accounts are
+// stored by balance id, blank descriptions are rejected, and filter results
+// leave parent_transaction empty. It is not a complete Blnk implementation.
 package ledgertest
 
 import (
@@ -102,8 +106,11 @@ func New(t testing.TB, cfg ledger.Config) (*ledger.Service, *Server) {
 	return ledger.New(s.Client(), cfg), s
 }
 
+// URL is the emulator's base URL, to pass to blnk.New.
 func (s *Server) URL() string { return s.srv.URL }
-func (s *Server) Close()      { s.srv.Close() }
+
+// Close shuts the emulator down.
+func (s *Server) Close() { s.srv.Close() }
 
 // Client returns a blnk.Client pointed at the emulator, with retries off.
 func (s *Server) Client(opts ...blnk.Option) *blnk.Client {
@@ -501,7 +508,26 @@ func (s *Server) filterTxns(body []byte) (any, int, error) {
 	for _, id := range s.order {
 		rows = append(rows, s.txns[id].stored())
 	}
-	return applyFilter(in, rows)
+	out, status, err := applyFilter(in, rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	// Blnk 0.15 filters on parent_transaction but returns it empty on every
+	// row; only a GET by id or reference shows it.
+	blank := func(data []any) {
+		for i, r := range data {
+			t := r.(blnk.Transaction)
+			t.ParentTransaction = ""
+			data[i] = t
+		}
+	}
+	switch v := out.(type) {
+	case []any:
+		blank(v)
+	case map[string]any:
+		blank(v["data"].([]any))
+	}
+	return out, status, nil
 }
 
 func applyFilter(in blnk.FilterRequest, rows []any) (any, int, error) {

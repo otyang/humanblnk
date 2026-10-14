@@ -314,12 +314,12 @@ func (s *Server) updateInflight(id string, in blnk.UpdateInflightRequest) (*txn,
 // transaction, recording the outcome as a child transaction.
 func (s *Server) inflightAction(id, action string, partial *big.Int) (*txn, error) {
 	if legIDs, isSplit := s.splits[id]; isSplit {
-		if partial != nil {
-			return nil, fail(400, blnk.CodeTxnValidation, "emulator: partial commit of a split transaction is not supported")
-		}
+		// Like Blnk 0.15, a partial amount is committed on each leg in turn;
+		// a leg smaller than it fails the call and leaves the earlier legs
+		// committed.
 		var first *txn
 		for _, lid := range legIDs {
-			c, err := s.inflightAction(lid, action, nil)
+			c, err := s.inflightAction(lid, action, partial)
 			if err != nil {
 				return nil, err
 			}
@@ -381,7 +381,7 @@ func (s *Server) child(parent *txn, status string, amt *big.Int, legs []leg) *tx
 	c.Reference = "ref_" + c.TransactionID
 	c.ParentTransaction = parent.TransactionID
 	c.Status = status
-	c.Inflight = false
+	c.Inflight = true // as Blnk marks the commit / void record of a pending transaction
 	c.Destinations = nil
 	c.CreatedAt = blnk.Time{Time: s.now}
 	c.EffectiveDate = c.CreatedAt

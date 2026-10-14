@@ -37,6 +37,7 @@ type OpError struct {
 	Cause error
 }
 
+// Error formats the operation, the sentinel and the cause.
 func (e *OpError) Error() string {
 	if e.Cause == nil {
 		return fmt.Sprintf("%s: %v", e.Op, e.Kind)

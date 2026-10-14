@@ -169,7 +169,7 @@ func TestDuplicateReferenceReplaysWhenPayloadMatches(t *testing.T) {
 	dup := `{"error":"dup","error_detail":{"code":"TXN_DUPLICATE_REFERENCE","message":"dup"}}`
 	f.on("POST /transactions", 409, dup)
 	f.on("GET /transactions/reference/t-9", 200,
-		`{"transaction_id":"txn_9","reference":"t-9","precise_amount":500,"currency":"NGN","source":"bln_a","status":"APPLIED"}`)
+		`{"transaction_id":"txn_9","reference":"t-9","precise_amount":500,"currency":"NGN","source":"bln_a","destination":"bln_b","status":"APPLIED"}`)
 
 	r, err := svc.Payments().Transfer(context.Background(), ledger.TransferInput{
 		Fee:  ledger.NoFee,

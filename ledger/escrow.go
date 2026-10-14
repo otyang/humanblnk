@@ -24,6 +24,7 @@ type Escrow struct {
 	Account     *Account
 }
 
+// EscrowInput opens an escrow.
 type EscrowInput struct {
 	Payer       string // account the money comes from
 	Beneficiary string // account it goes to on release

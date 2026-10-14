@@ -136,7 +136,8 @@ type BulkEvent struct {
 // Webhook verification settings.
 type WebhookConfig struct {
 	// Secret is Blnk's server.secret_key. When set, unsigned or mis-signed
-	// deliveries are rejected with ErrSignature.
+	// deliveries are rejected with ErrSignature. When empty, nothing is
+	// verified: leave it empty only if your Blnk doesn't sign webhooks.
 	Secret string
 	// Tolerance rejects deliveries whose X-Blnk-Timestamp is further than this
 	// from now (replay protection). Default 5 minutes; negative disables it.

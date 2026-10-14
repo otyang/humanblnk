@@ -132,10 +132,16 @@ func (s paymentsAPI) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeR
 
 // resolveIn resolves m in currency cur, rejecting a different explicit currency.
 func (s *Service) resolveIn(op string, m Money, cur string) (Money, error) {
+	return s.resolveInAt(op, m, cur, s.Precision(cur))
+}
+
+// resolveInAt is resolveIn at an explicit precision, e.g. the one a stored
+// transaction was recorded with.
+func (s *Service) resolveInAt(op string, m Money, cur string, precision int64) (Money, error) {
 	if m.Currency != "" && !strings.EqualFold(m.Currency, cur) {
 		return Money{}, invalid(op, "amount currency %s differs from account currency %s", m.Currency, cur)
 	}
-	r, err := s.resolve(op, m, cur)
+	r, err := s.resolveAt(op, m, strings.ToUpper(cur), precision)
 	if err != nil {
 		return Money{}, err
 	}

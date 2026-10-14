@@ -44,7 +44,7 @@ func (s paymentsAPI) Split(ctx context.Context, in SplitInput) (*Receipt, error)
 	if err != nil {
 		return nil, err
 	}
-	amounts, err := splitAmounts(op, total, in.Parts)
+	amounts, err := s.splitAmounts(op, total, in.Parts)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s paymentsAPI) Split(ctx context.Context, in SplitInput) (*Receipt, error)
 	return s.post(ctx, op, req)
 }
 
-func splitAmounts(op string, total Money, parts []SplitPart) ([]*big.Int, error) {
+func (s *Service) splitAmounts(op string, total Money, parts []SplitPart) ([]*big.Int, error) {
 	if len(parts) < 2 {
 		return nil, invalid(op, "a split needs at least two parts")
 	}
@@ -114,12 +114,9 @@ func splitAmounts(op string, total Money, parts []SplitPart) ([]*big.Int, error)
 			if p.Amount.Currency != "" && !strings.EqualFold(p.Amount.Currency, total.Currency) {
 				return nil, invalid(op, "part %d: currency %s differs from %s", i, p.Amount.Currency, total.Currency)
 			}
-			m := p.Amount
-			m.Precision = total.Precision
-			m.Currency = total.Currency
-			r, err := m.resolve(total.Precision)
+			r, err := s.resolveAt(op, p.Amount, total.Currency, total.Precision)
 			if err != nil {
-				return nil, &OpError{Op: op, Kind: ErrInvalidInput, Cause: err}
+				return nil, err
 			}
 			out[i] = r.PreciseAmount
 		}

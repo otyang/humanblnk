@@ -41,6 +41,7 @@ type Statement struct {
 	Lines     []StatementLine
 }
 
+// StatementLine is one posted entry on a Statement.
 type StatementLine struct {
 	Date        time.Time
 	Reference   string

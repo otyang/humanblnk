@@ -93,3 +93,53 @@ func TestUploadIsMultipart(t *testing.T) {
 		t.Fatalf("upload body: %s %s", got.ctype, got.body)
 	}
 }
+
+func TestVerifySignatureRejectsEmptySecret(t *testing.T) {
+	body := []byte(`{"event":"transaction.applied","data":{}}`)
+	forged := blnk.Sign("", "1700000000", body) // anyone can compute this
+	err := blnk.VerifySignature("", forged, "1700000000", body, time.Unix(1700000000, 0), 0)
+	if !errors.Is(err, blnk.ErrBadSignature) {
+		t.Fatalf("an empty secret must not verify anything, got %v", err)
+	}
+	upper := strings.ToUpper(blnk.Sign("key", "1700000000", body))
+	if err := blnk.VerifySignature("key", upper, "1700000000", body, time.Unix(1700000000, 0), 0); err != nil {
+		t.Fatalf("hex case should not matter: %v", err)
+	}
+}
+
+func TestCommitIsNotRetriedWhenItMayHaveApplied(t *testing.T) {
+	for _, tc := range []struct {
+		status   int
+		attempts int
+	}{
+		{http.StatusGatewayTimeout, 1}, // may have committed: retrying could capture twice
+		{http.StatusBadGateway, 1},
+		{http.StatusLocked, 3}, // refused by Blnk: safe to retry
+	} {
+		n := 0
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n++
+			w.WriteHeader(tc.status)
+		}))
+		c := blnk.New(srv.URL, blnk.WithRetries(2, time.Millisecond))
+		_, err := c.UpdateInflight(context.Background(), "txn_1", blnk.UpdateInflightRequest{Status: blnk.ActionCommit, PreciseAmount: blnk.NewBigInt(500)})
+		srv.Close()
+		if err == nil || n != tc.attempts {
+			t.Errorf("status %d: %d attempts (want %d), err %v", tc.status, n, tc.attempts, err)
+		}
+	}
+	// Reads and reference-keyed writes are still retried on a gateway timeout.
+	n := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n++; n == 1 {
+			w.WriteHeader(http.StatusGatewayTimeout)
+			return
+		}
+		_, _ = w.Write([]byte(`{"transaction_id":"txn_1"}`))
+	}))
+	defer srv.Close()
+	c := blnk.New(srv.URL, blnk.WithRetries(2, time.Millisecond))
+	if _, err := c.CreateTransaction(context.Background(), blnk.CreateTransactionRequest{Reference: "r"}); err != nil || n != 2 {
+		t.Fatalf("create: %d attempts, %v", n, err)
+	}
+}

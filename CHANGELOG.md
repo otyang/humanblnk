@@ -7,11 +7,6 @@ change the API; such changes are listed under **Changed**.
 
 ## [Unreleased]
 
-### Added
-- Import the module root: `import "github.com/otyang/humanblnk"`. Package
-  `humanblnk` re-exports package `ledger` (types are aliases) and adds
-  `humanblnk.New(blnkURL, cfg, opts...)`; a test keeps the re-exports complete.
-
 ## [0.1.0] - 2026-10-14
 
 First release.
@@ -38,6 +33,14 @@ First release.
   `LogObserver` for logs, metrics and tracing.
 - `blnk`: typed client for Blnk Core with retries and structured errors.
 - `ledgertest`: in-memory Blnk Core emulator that behaves like Core 0.15.
+- Import the module root: `import "github.com/otyang/humanblnk"` re-exports
+  package `ledger` (types are aliases) and adds `humanblnk.New(blnkURL, cfg, opts...)`.
+- Safety checks verified against Blnk Core 0.15: amounts always post at their
+  currency's precision; retries replay only the identical payment; partial
+  confirms of a payment with a fee, over-refunds and over-disputes are refused;
+  inflight commits are never blindly retried; webhook verification refuses an
+  empty secret.
+- `CONTRACT.md` and the guide are generated from the source and checked in CI.
 - Guide with tested, real-world samples: https://otyang.github.io/humanblnk/
 
 [Unreleased]: https://github.com/otyang/humanblnk/compare/v0.1.0...HEAD

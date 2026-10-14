@@ -54,6 +54,7 @@ type APIError struct {
 	Body    string         // raw body, for logging
 }
 
+// Error formats the status, code and message.
 func (e *APIError) Error() string {
 	if e.Code != "" {
 		return fmt.Sprintf("blnk: %d %s: %s", e.Status, e.Code, e.Message)

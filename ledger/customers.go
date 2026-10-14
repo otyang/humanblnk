@@ -23,6 +23,7 @@ type AccountQuery struct {
 	Offset     int
 }
 
+// AccountPage is one page of Accounts().Find results.
 type AccountPage struct {
 	Items  []*Account
 	Limit  int
@@ -120,6 +121,7 @@ type CustomerInput struct {
 	MetaData   map[string]any
 }
 
+// Customer is an identity with its customer accounts.
 type Customer struct {
 	ID       string // Blnk identity id
 	Identity *blnk.Identity

@@ -11,6 +11,7 @@ import (
 
 // ----- Account closure -------------------------------------------------------
 
+// CloseInput closes an account (Accounts().Close).
 type CloseInput struct {
 	// SweepTo receives any remaining balance (e.g. the customer's bank payout
 	// account, or another of their accounts). Required when the balance isn't zero.
@@ -186,6 +187,7 @@ const (
 	SettlementPayout
 )
 
+// SettlementInput records a provider settlement (Operations().RecordSettlement).
 type SettlementInput struct {
 	Provider        string // e.g. "paystack" → @PaystackClearing
 	ClearingAccount string // or an exact clearing account

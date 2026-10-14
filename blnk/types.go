@@ -30,8 +30,10 @@ func BigFrom(v *big.Int) *BigInt {
 	return b
 }
 
+// MarshalJSON writes the integer as a bare JSON number.
 func (b BigInt) MarshalJSON() ([]byte, error) { return []byte(b.String()), nil }
 
+// UnmarshalJSON reads a number, a quoted string or null (as zero).
 func (b *BigInt) UnmarshalJSON(data []byte) error {
 	data = bytes.TrimSpace(data)
 	if len(data) == 0 || bytes.Equal(data, []byte("null")) {
@@ -58,6 +60,7 @@ func (b *BigInt) UnmarshalJSON(data []byte) error {
 // Time tolerates Blnk's zero value ("0001-01-01T00:00:00Z"), "" and null.
 type Time struct{ time.Time }
 
+// UnmarshalJSON reads RFC 3339 text; "", null and Blnk's zero time give the zero Time.
 func (t *Time) UnmarshalJSON(data []byte) error {
 	s := string(bytes.Trim(bytes.TrimSpace(data), `"`))
 	if s == "" || s == "null" {
@@ -72,6 +75,7 @@ func (t *Time) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// MarshalJSON writes RFC 3339 text, or null for the zero Time.
 func (t Time) MarshalJSON() ([]byte, error) {
 	if t.IsZero() {
 		return []byte("null"), nil
@@ -86,11 +90,13 @@ type MetaData map[string]any
 // Ledgers
 // ---------------------------------------------------------------------------
 
+// CreateLedgerRequest is the body of POST /ledgers.
 type CreateLedgerRequest struct {
 	Name     string   `json:"name"`
 	MetaData MetaData `json:"meta_data,omitempty"`
 }
 
+// Ledger is a Blnk ledger, a group of balances.
 type Ledger struct {
 	LedgerID  string   `json:"ledger_id"`
 	Name      string   `json:"name"`
@@ -102,6 +108,7 @@ type Ledger struct {
 // Balances
 // ---------------------------------------------------------------------------
 
+// CreateBalanceRequest is the body of POST /balances.
 type CreateBalanceRequest struct {
 	LedgerID   string   `json:"ledger_id"`
 	Currency   string   `json:"currency"`
@@ -109,6 +116,7 @@ type CreateBalanceRequest struct {
 	MetaData   MetaData `json:"meta_data,omitempty"`
 }
 
+// Balance is a Blnk balance. Amounts are in the smallest unit.
 type Balance struct {
 	BalanceID             string   `json:"balance_id"`
 	LedgerID              string   `json:"ledger_id"`
@@ -262,6 +270,7 @@ type RefundRequest struct {
 // Bulk
 // ---------------------------------------------------------------------------
 
+// BulkTransactionRequest is the body of POST /transactions/bulk.
 type BulkTransactionRequest struct {
 	Atomic       bool                       `json:"atomic"`
 	Inflight     bool                       `json:"inflight"`
@@ -271,6 +280,7 @@ type BulkTransactionRequest struct {
 	Transactions []CreateTransactionRequest `json:"transactions"`
 }
 
+// BulkTransactionResponse is the answer to a bulk request.
 type BulkTransactionResponse struct {
 	BatchID          string `json:"batch_id"`
 	Status           string `json:"status"` // applied | inflight | processing
@@ -278,21 +288,25 @@ type BulkTransactionResponse struct {
 	Message          string `json:"message,omitempty"`
 }
 
+// BulkCommitItem is one transaction to commit; PreciseAmount commits part of it.
 type BulkCommitItem struct {
 	TransactionID string  `json:"transaction_id"`
 	PreciseAmount *BigInt `json:"precise_amount,omitempty"`
 }
 
+// BulkCommitInflightRequest is the body of POST /transactions/inflight/bulk/commit.
 type BulkCommitInflightRequest struct {
 	SkipQueue    bool             `json:"skip_queue,omitempty"`
 	Transactions []BulkCommitItem `json:"transactions"`
 }
 
+// BulkVoidInflightRequest is the body of POST /transactions/inflight/bulk/void.
 type BulkVoidInflightRequest struct {
 	SkipQueue      bool     `json:"skip_queue,omitempty"`
 	TransactionIDs []string `json:"transaction_ids"`
 }
 
+// BulkInflightResult is the outcome for one transaction of a bulk commit or void.
 type BulkInflightResult struct {
 	TransactionID string `json:"transaction_id"`
 	Status        string `json:"status"` // succeeded | failed | queued
@@ -300,6 +314,7 @@ type BulkInflightResult struct {
 	Message       string `json:"message,omitempty"`
 }
 
+// BulkInflightResponse is the answer to a bulk commit or void.
 type BulkInflightResponse struct {
 	Succeeded int                  `json:"succeeded"`
 	Failed    int                  `json:"failed"`
@@ -310,6 +325,7 @@ type BulkInflightResponse struct {
 // Filter (POST /{collection}/filter, Core 0.13.2+)
 // ---------------------------------------------------------------------------
 
+// Filter is one condition of a filter request.
 type Filter struct {
 	Field    string `json:"field"`
 	Operator string `json:"operator"` // eq ne gt gte lt lte in between like ilike isnull isnotnull
@@ -317,6 +333,7 @@ type Filter struct {
 	Values   []any  `json:"values,omitempty"`
 }
 
+// FilterRequest is the body of POST /transactions/filter and /balances/filter.
 type FilterRequest struct {
 	Filters         []Filter `json:"filters"`
 	LogicalOperator string   `json:"logical_operator,omitempty"` // and | or
@@ -331,6 +348,7 @@ type FilterRequest struct {
 // Identities
 // ---------------------------------------------------------------------------
 
+// Identity is a Blnk identity: the person or organisation balances belong to.
 type Identity struct {
 	IdentityID       string   `json:"identity_id,omitempty"`
 	IdentityType     string   `json:"identity_type"` // individual | organization
@@ -420,6 +438,7 @@ type TransactionPreview struct {
 	Notes         []string         `json:"notes,omitempty"`
 }
 
+// PreviewBalance is one balance a dry run would change, before and after.
 type PreviewBalance struct {
 	BalanceID        string `json:"balance_id"`
 	Role             string `json:"role"` // source | destination
@@ -434,6 +453,7 @@ type PreviewBalance struct {
 // Reconciliation
 // ---------------------------------------------------------------------------
 
+// MatchingCriterion is one condition of a MatchingRule.
 type MatchingCriterion struct {
 	Field          string  `json:"field"`    // amount | date | description | reference | currency
 	Operator       string  `json:"operator"` // equals | greater_than | less_than | contains
@@ -442,6 +462,7 @@ type MatchingCriterion struct {
 	AllowableDrift float64 `json:"allowable_drift,omitempty"` // amount: fraction (0.01 = 1%, Core 0.15.0+); date: seconds
 }
 
+// MatchingRule says when an external record and a ledger transaction match.
 type MatchingRule struct {
 	RuleID      string              `json:"rule_id,omitempty"`
 	Name        string              `json:"name"`
@@ -462,12 +483,14 @@ type ExternalTransaction struct {
 	Source      string      `json:"source,omitempty"`
 }
 
+// UploadResponse is the answer to a reconciliation upload.
 type UploadResponse struct {
 	UploadID    string `json:"upload_id"`
 	RecordCount int    `json:"record_count"`
 	Source      string `json:"source"`
 }
 
+// StartReconciliationRequest is the body of POST /reconciliation/start and /start-instant.
 type StartReconciliationRequest struct {
 	UploadID             string                `json:"upload_id,omitempty"`
 	ExternalTransactions []ExternalTransaction `json:"external_transactions,omitempty"` // start-instant only
@@ -477,6 +500,7 @@ type StartReconciliationRequest struct {
 	MatchingRuleIDs      []string              `json:"matching_rule_ids"`
 }
 
+// Reconciliation is a reconciliation run's status and counts.
 type Reconciliation struct {
 	ReconciliationID      string `json:"reconciliation_id"`
 	UploadID              string `json:"upload_id"`

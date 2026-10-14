@@ -160,7 +160,17 @@ func (m Money) Sign() int {
 	return m.PreciseAmount.Sign()
 }
 
-func (m Money) IsZero() bool     { return m.Sign() == 0 && (m.Value == "" || m.PreciseAmount != nil) }
+// IsZero reports whether m is zero or not set at all. An unresolved amount
+// is read from its Value, so NoFee and Amount("0.00", "USD") are zero.
+func (m Money) IsZero() bool {
+	if m.PreciseAmount == nil && m.Value != "" {
+		v, err := ratOf(Money{Value: m.Value})
+		return err == nil && v.Sign() == 0
+	}
+	return m.Sign() == 0
+}
+
+// IsPositive reports whether m is greater than zero (resolved Money only).
 func (m Money) IsPositive() bool { return m.Sign() > 0 }
 
 // isSet reports whether the caller supplied any amount at all.

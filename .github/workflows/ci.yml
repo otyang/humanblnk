@@ -55,11 +55,11 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: stable
-      - name: Regenerate docs.html
+      - name: Regenerate docs.html and CONTRACT.md
         run: ./scripts/gendocs.sh
       - name: Check for changes
         run: |
-          if ! git diff --exit-code docs.html; then
-            echo "docs.html is stale. Run scripts/gendocs.sh and commit it."
+          if ! git diff --exit-code docs.html CONTRACT.md; then
+            echo "Docs are stale. Run 'make docs' and commit the result."
             exit 1
           fi

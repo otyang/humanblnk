@@ -167,6 +167,7 @@ section('references', 'References and retries', f'''
 <li>Generate the reference <strong>once</strong>, when the user taps "Send", and store it with the pending request, so a retry after a timeout reuses it.</li>
 <li>For money arriving from a provider, use <strong>the provider’s reference</strong> (Paystack’s, a blockchain <code>txid:vout</code>), so a repeated webhook can’t credit twice.</li>
 <li>The same reference with a different amount, account or kind of movement fails with <code>ErrDuplicateReference</code>: a real conflict to investigate, not to retry.</li>
+<li><code>Pending().Confirm</code> and <code>Cancel</code> carry no reference, so the client never repeats them blindly after a timeout: look the transaction up before trying again.</li>
 </ul>
 ''')
 
@@ -287,7 +288,7 @@ section('dispute', 'Disputes and chargebacks', f'''
 
 section('refund', 'Refunds', f'''
 {code('refund')}
-<p>Partial refunds are linked to the original with <code>meta_data.refund_of</code>, and the original keeps a running refunded total, so over-refunding is refused. If refunds for the same transaction can run concurrently, serialise them (one worker or a row lock).</p>
+<p>Partial refunds are linked to the original with <code>meta_data.refund_of</code>, and they are added up before each new one, so over-refunding is refused, and a retried refund replays instead of counting twice. A transaction can be reversed in full with <code>Refund</code> or in parts with <code>RefundPartial</code>, not both. If refunds for the same transaction can run concurrently, serialise them (one worker or a row lock).</p>
 ''', 'Return part of a payment when an item is out of stock.')
 
 # --- Savings & payroll
@@ -319,7 +320,7 @@ section('fees', 'Fees', f'''
 
 section('limits', 'Limits and KYC tiers', f'''
 {code('limits')}
-<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow. A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
+<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow (bulk batches are not checked). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
 ''', 'Per-tier caps, checked before any money moves.')
 
 # --- Reporting
@@ -360,7 +361,7 @@ section('reconcile', 'Reconciliation', f'''
 group('Integration')
 section('webhooks', 'Webhooks', f'''
 {code('webhook')}
-<p>Signatures (<code>X-Blnk-Signature</code>, HMAC-SHA256 of <code>timestamp.body</code>) and a five-minute timestamp window are checked. Blnk delivers at least once and retries on errors, so make handlers idempotent, for example keyed on <code>e.Receipt.TransactionID</code> plus <code>e.Name</code>. An expired hold arrives as <code>transaction.void</code>.</p>
+<p>With <code>Secret</code> set, signatures (<code>X-Blnk-Signature</code>, HMAC-SHA256 of <code>timestamp.body</code>) and a five-minute timestamp window are checked; without it nothing is verified, so make sure it is set in production. Blnk delivers at least once and retries on errors, so make handlers idempotent, for example keyed on <code>e.Receipt.TransactionID</code> plus <code>e.Name</code>. An expired hold arrives as <code>transaction.void</code>.</p>
 ''', 'React to what happens in the ledger.')
 
 section('observe', 'Logging, metrics and tracing', f'''
@@ -387,7 +388,7 @@ section('versions', 'Blnk versions and known limits', f'''
  ['0.15.3', '<code>CoreDryRun</code> quotes, refund descriptions'],
 ])}
 <ul class="limits">
-<li><strong>Fee legs.</strong> A movement with a fee is stored as legs (<code>ref-1</code>, <code>ref-2</code>) with no parent record. The library rebuilds the parent for lookups and retries, and disputes or refunds pick the recipient’s leg, but raw Blnk queries and reconciliation see legs.</li>
+<li><strong>Fee legs.</strong> A movement with a fee is stored as legs (<code>ref-1</code>, <code>ref-2</code>) with no parent record. The library rebuilds the parent for lookups and retries, and disputes or refunds pick the recipient’s leg, but raw Blnk queries and reconciliation see legs. A pending one is confirmed in full (or one leg at a time), never partially.</li>
 <li><strong>System account ids.</strong> Blnk stores <code>@FeeIncome</code>-style accounts by balance id; receipts and history show the id, statements show the name.</li>
 <li><strong>Concurrent partial refunds</strong> of one transaction can both pass the remaining-amount check; serialise them.</li>
 <li><strong>Balance alerts</strong> fire after every update while the condition holds; debounce them.</li>

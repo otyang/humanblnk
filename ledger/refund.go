@@ -22,9 +22,11 @@ type PartialRefundInput struct {
 const metaRefunded = "refunded_precise"
 
 // RefundPartial sends part of a posted transaction back: destination → source,
-// linked to the original with meta_data.refund_of. The original's
-// meta_data.refunded_precise tracks the total refunded, and refunds beyond the
-// original amount are rejected. Use Refund for Blnk's one-shot full reversal.
+// linked to the original with meta_data.refund_of. Refunds beyond the original
+// amount (counting the partial refunds linked to it) are rejected, as is a
+// transaction already reversed with Refund; the original's
+// meta_data.refunded_precise records the total refunded. Use Refund for
+// Blnk's one-shot full reversal.
 //
 // Two partial refunds of the same transaction racing each other can both pass
 // the remaining-amount check; serialise refunds per transaction in your app
@@ -45,17 +47,18 @@ func (s transactionsAPI) RefundPartial(ctx context.Context, txID string, in Part
 		return nil, err
 	}
 	txID = orig.GetID() // the leg, when the original had a fee
-	amount := in.Amount
-	if amount.Precision == 0 {
-		amount.Precision = s.txPrecision(orig)
-	}
-	amt, err := s.resolveIn(op, amount, orig.Currency)
+	amt, err := s.resolveInAt(op, in.Amount, orig.Currency, s.txPrecision(orig))
 	if err != nil {
 		return nil, err
 	}
-	refunded := new(big.Int)
-	if v, ok := new(big.Int).SetString(str(orig.MetaData[metaRefunded]), 10); ok {
-		refunded = v
+	if _, err := s.c.GetTransactionByReference(ctx, txID+"_refund"); err == nil {
+		return nil, &OpError{Op: op, Kind: ErrAlreadyFinalized, Cause: fmt.Errorf("transaction %s was refunded in full", txID)}
+	} else if !blnk.IsNotFound(err) {
+		return nil, mapErr(op, err)
+	}
+	refunded, err := s.refundedSoFar(ctx, orig, in.Reference)
+	if err != nil {
+		return nil, mapErr(op, err)
 	}
 	left := new(big.Int).Sub(&orig.PreciseAmount.Int, refunded)
 	if amt.PreciseAmount.Cmp(left) > 0 {
@@ -77,11 +80,44 @@ func (s transactionsAPI) RefundPartial(ctx context.Context, txID string, in Part
 	if err != nil {
 		return nil, err
 	}
-	if !r.Replayed {
-		total := new(big.Int).Add(refunded, amt.PreciseAmount)
-		if _, err := s.c.UpdateMetadata(ctx, txID, blnk.MetaData{metaRefunded: total.String()}); err != nil {
-			return r, mapErr(op, fmt.Errorf("refund %s posted but refunded total not recorded: %w", r.TransactionID, err))
-		}
+	// Written on replays too, so a total lost to an earlier failure is
+	// recorded when the refund is retried.
+	total := new(big.Int).Add(refunded, amt.PreciseAmount)
+	if _, err := s.c.UpdateMetadata(ctx, txID, blnk.MetaData{metaRefunded: total.String()}); err != nil {
+		return r, mapErr(op, fmt.Errorf("refund %s posted but refunded total not recorded: %w", r.TransactionID, err))
 	}
 	return r, nil
+}
+
+// refundedSoFar sums the partial refunds linked to orig by
+// meta_data.refund_of, leaving out the one with reference except (so retrying
+// it replays rather than counting itself). Summing the refunds themselves,
+// rather than trusting the running total on orig, also covers a refund whose
+// total was never recorded.
+func (s *Service) refundedSoFar(ctx context.Context, orig *blnk.Transaction, except string) (*big.Int, error) {
+	id := orig.GetID()
+	linked := new(big.Int)
+	for offset := 0; ; offset += 100 {
+		page, _, err := s.c.FilterTransactions(ctx, blnk.FilterRequest{
+			Filters: []blnk.Filter{{Field: metaField("refund_of"), Operator: "eq", Value: id}},
+			SortBy:  "created_at", SortOrder: "asc", Limit: 100, Offset: offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for i := range page {
+			t := &page[i]
+			switch {
+			case t.Reference == except || t.Reference == except+"_q":
+			case t.Status == blnk.StatusVoid || t.Status == blnk.StatusRejected:
+			case t.QueuedParent() != "" && t.QueuedParent() != t.GetID(): // the queue's copy of a counted refund
+			default:
+				linked.Add(linked, &t.PreciseAmount.Int)
+			}
+		}
+		if len(page) < 100 {
+			break
+		}
+	}
+	return linked, nil
 }

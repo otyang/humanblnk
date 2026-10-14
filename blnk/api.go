@@ -14,11 +14,13 @@ import (
 
 // ----- Ledgers --------------------------------------------------------------
 
+// CreateLedger creates a ledger (POST /ledgers).
 func (c *Client) CreateLedger(ctx context.Context, r CreateLedgerRequest) (*Ledger, error) {
 	var out Ledger
 	return &out, c.do(ctx, http.MethodPost, "/ledgers", r, &out)
 }
 
+// GetLedger fetches a ledger by id.
 func (c *Client) GetLedger(ctx context.Context, id string) (*Ledger, error) {
 	var out Ledger
 	return &out, c.do(ctx, http.MethodGet, "/ledgers/"+esc(id), nil, &out)
@@ -26,11 +28,13 @@ func (c *Client) GetLedger(ctx context.Context, id string) (*Ledger, error) {
 
 // ----- Balances -------------------------------------------------------------
 
+// CreateBalance creates a balance (POST /balances).
 func (c *Client) CreateBalance(ctx context.Context, r CreateBalanceRequest) (*Balance, error) {
 	var out Balance
 	return &out, c.do(ctx, http.MethodPost, "/balances", r, &out)
 }
 
+// GetBalance fetches a balance by id.
 func (c *Client) GetBalance(ctx context.Context, id string) (*Balance, error) {
 	var out Balance
 	return &out, c.do(ctx, http.MethodGet, "/balances/"+esc(id), nil, &out)
@@ -43,11 +47,13 @@ func (c *Client) GetBalanceByIndicator(ctx context.Context, indicator, currency 
 	return &out, c.do(ctx, http.MethodGet, path, nil, &out)
 }
 
+// CreateBalanceMonitor creates a balance monitor (POST /balance-monitors).
 func (c *Client) CreateBalanceMonitor(ctx context.Context, m BalanceMonitor) (*BalanceMonitor, error) {
 	var out BalanceMonitor
 	return &out, c.do(ctx, http.MethodPost, "/balance-monitors", m, &out)
 }
 
+// DeleteBalanceMonitor deletes a balance monitor.
 func (c *Client) DeleteBalanceMonitor(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/balance-monitors/"+esc(id), nil, nil)
 }
@@ -65,6 +71,8 @@ func (c *Client) GetBalanceAt(ctx context.Context, id string, t time.Time, fromS
 
 // ----- Transactions ---------------------------------------------------------
 
+// CreateTransaction records a transaction (POST /transactions). A reference
+// that was already used fails with TXN_DUPLICATE_REFERENCE.
 func (c *Client) CreateTransaction(ctx context.Context, r CreateTransactionRequest) (*Transaction, error) {
 	var out Transaction
 	return &out, c.do(ctx, http.MethodPost, "/transactions", r, &out)
@@ -86,6 +94,7 @@ func (c *Client) PreviewTransaction(ctx context.Context, r CreateTransactionRequ
 	return &out, nil
 }
 
+// GetTransaction fetches a transaction by id.
 func (c *Client) GetTransaction(ctx context.Context, id string) (*Transaction, error) {
 	var out Transaction
 	return &out, c.do(ctx, http.MethodGet, "/transactions/"+esc(id), nil, &out)
@@ -99,10 +108,11 @@ func (c *Client) GetTransactionByReference(ctx context.Context, ref string) (*Tr
 }
 
 // UpdateInflight commits (fully or partially) or voids an INFLIGHT transaction,
-// or every transaction in an inflight bulk batch when id is a batch_id.
+// or every transaction in an inflight bulk batch when id is a batch_id. It is
+// not retried after a network error or gateway timeout (see WithRetries).
 func (c *Client) UpdateInflight(ctx context.Context, id string, r UpdateInflightRequest) (*UpdateInflightResponse, error) {
 	var out UpdateInflightResponse
-	return &out, c.do(ctx, http.MethodPut, "/transactions/inflight/"+esc(id), r, &out)
+	return &out, c.doOnce(ctx, http.MethodPut, "/transactions/inflight/"+esc(id), r, &out)
 }
 
 // Refund reverses a transaction. Each original can be refunded once
@@ -116,15 +126,17 @@ func (c *Client) Refund(ctx context.Context, id string, r *RefundRequest) (*Tran
 	return &out, c.do(ctx, http.MethodPost, "/refund-transaction/"+esc(id), body, &out)
 }
 
+// CreateBulkTransactions posts a batch (POST /transactions/bulk).
 func (c *Client) CreateBulkTransactions(ctx context.Context, r BulkTransactionRequest) (*BulkTransactionResponse, error) {
 	var out BulkTransactionResponse
 	return &out, c.do(ctx, http.MethodPost, "/transactions/bulk", r, &out)
 }
 
 // BulkCommitInflight commits up to 100 independent inflight transactions.
+// Like UpdateInflight, it is not retried when it may have reached Blnk.
 func (c *Client) BulkCommitInflight(ctx context.Context, r BulkCommitInflightRequest) (*BulkInflightResponse, error) {
 	var out BulkInflightResponse
-	return &out, c.do(ctx, http.MethodPost, "/transactions/inflight/bulk/commit", r, &out)
+	return &out, c.doOnce(ctx, http.MethodPost, "/transactions/inflight/bulk/commit", r, &out)
 }
 
 // BulkVoidInflight voids up to 100 independent inflight transactions.
@@ -184,11 +196,13 @@ func (c *Client) UpdateMetadata(ctx context.Context, entityID string, md MetaDat
 
 // ----- Identities -----------------------------------------------------------
 
+// CreateIdentity creates an identity (POST /identities).
 func (c *Client) CreateIdentity(ctx context.Context, id Identity) (*Identity, error) {
 	var out Identity
 	return &out, c.do(ctx, http.MethodPost, "/identities", id, &out)
 }
 
+// GetIdentity fetches an identity by id.
 func (c *Client) GetIdentity(ctx context.Context, id string) (*Identity, error) {
 	var out Identity
 	return &out, c.do(ctx, http.MethodGet, "/identities/"+esc(id), nil, &out)
@@ -215,9 +229,10 @@ func (c *Client) UploadReconciliation(ctx context.Context, source, filename stri
 		return nil, err
 	}
 	var out UploadResponse
-	return &out, c.doRaw(ctx, http.MethodPost, "/reconciliation/upload", w.FormDataContentType(), buf.Bytes(), &out)
+	return &out, c.doRaw(ctx, http.MethodPost, "/reconciliation/upload", w.FormDataContentType(), buf.Bytes(), &out, true)
 }
 
+// CreateMatchingRule stores a reconciliation matching rule.
 func (c *Client) CreateMatchingRule(ctx context.Context, r MatchingRule) (*MatchingRule, error) {
 	var out MatchingRule
 	return &out, c.do(ctx, http.MethodPost, "/reconciliation/matching-rules", r, &out)
@@ -240,6 +255,7 @@ func (c *Client) StartInstantReconciliation(ctx context.Context, r StartReconcil
 	return out.ID, c.do(ctx, http.MethodPost, "/reconciliation/start-instant", r, &out)
 }
 
+// GetReconciliation fetches a reconciliation run's status and counts.
 func (c *Client) GetReconciliation(ctx context.Context, id string) (*Reconciliation, error) {
 	var out Reconciliation
 	return &out, c.do(ctx, http.MethodGet, "/reconciliation/"+esc(id), nil, &out)

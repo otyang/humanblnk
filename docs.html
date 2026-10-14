@@ -171,6 +171,7 @@ ledger.<span class="t">Minor</span>(<span class="n">125050</span>, <span class="
 <li>Generate the reference <strong>once</strong>, when the user taps "Send", and store it with the pending request, so a retry after a timeout reuses it.</li>
 <li>For money arriving from a provider, use <strong>the provider’s reference</strong> (Paystack’s, a blockchain <code>txid:vout</code>), so a repeated webhook can’t credit twice.</li>
 <li>The same reference with a different amount, account or kind of movement fails with <code>ErrDuplicateReference</code>: a real conflict to investigate, not to retry.</li>
+<li><code>Pending().Confirm</code> and <code>Cancel</code> carry no reference, so the client never repeats them blindly after a timeout: look the transaction up before trying again.</li>
 </ul>
 </section><section id="accounts-model"><h2><a href="#accounts-model">Accounts and the chart of accounts</a></h2>
 <p>Customer accounts are where users’ money lives. System accounts, named with <code>@</code>, are the other side of every entry and are what finance reconciles. Blnk creates each system account on first use, per currency.</p>
@@ -386,7 +387,7 @@ _, err = l.<span class="t">Transactions</span>().<span class="t">RefundPartial</
 })
 <span class="c">// A second partial refund above the ₦4,000 left fails with ErrAmountExceeded.</span>
 <span class="c">// For a full reversal in one step: l.Transactions().Refund(ctx, id, ledger.RefundInput{Reason: &quot;…&quot;})</span></code></pre></figure>
-<p>Partial refunds are linked to the original with <code>meta_data.refund_of</code>, and the original keeps a running refunded total, so over-refunding is refused. If refunds for the same transaction can run concurrently, serialise them (one worker or a row lock).</p>
+<p>Partial refunds are linked to the original with <code>meta_data.refund_of</code>, and they are added up before each new one, so over-refunding is refused, and a retried refund replays instead of counting twice. A transaction can be reversed in full with <code>Refund</code> or in parts with <code>RefundPartial</code>, not both. If refunds for the same transaction can run concurrently, serialise them (one worker or a row lock).</p>
 </section><section id="pots"><h2><a href="#pots">Savings pots and standing orders</a></h2><p class="lede">Ada saves for rent automatically every month.</p>
 <figure class="code"><pre><code>rent, err := l.<span class="t">Customers</span>().<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{
 	<span class="t">ParentID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Name</span>: <span class="s">&quot;Rent&quot;</span>, <span class="t">Goal</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;600000&quot;</span>, <span class="s">&quot;&quot;</span>),
@@ -454,7 +455,7 @@ batch, err := l.<span class="t">Payments</span>().<span class="t">Bulk</span>(ct
 }
 u, err := l.<span class="t">Accounts</span>().<span class="t">LimitUsage</span>(ctx, adaNGN.<span class="t">ID</span>)
 fmt.<span class="t">Printf</span>(<span class="s">&quot;You can send ₦%s more today\n&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)</code></pre></figure>
-<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow. A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
+<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow (bulk batches are not checked). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
 </section><section id="statement"><h2><a href="#statement">Statements</a></h2><p class="lede">A downloadable month for Ada, checked against the ledger.</p>
 <figure class="code"><pre><code><span class="c">// Ada downloads her September statement from the app.</span>
 from := time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos)
@@ -568,7 +569,7 @@ http.<span class="t">Handle</span>(<span class="s">&quot;/webhooks/blnk&quot;</s
 		}
 		<span class="k">return</span> <span class="b">nil</span> <span class="c">// an error answers 500 and Blnk retries: keep handlers idempotent</span>
 	}))</code></pre></figure>
-<p>Signatures (<code>X-Blnk-Signature</code>, HMAC-SHA256 of <code>timestamp.body</code>) and a five-minute timestamp window are checked. Blnk delivers at least once and retries on errors, so make handlers idempotent, for example keyed on <code>e.Receipt.TransactionID</code> plus <code>e.Name</code>. An expired hold arrives as <code>transaction.void</code>.</p>
+<p>With <code>Secret</code> set, signatures (<code>X-Blnk-Signature</code>, HMAC-SHA256 of <code>timestamp.body</code>) and a five-minute timestamp window are checked; without it nothing is verified, so make sure it is set in production. Blnk delivers at least once and retries on errors, so make handlers idempotent, for example keyed on <code>e.Receipt.TransactionID</code> plus <code>e.Name</code>. An expired hold arrives as <code>transaction.void</code>.</p>
 </section><section id="observe"><h2><a href="#observe">Logging, metrics and tracing</a></h2>
 <figure class="code"><pre><code><span class="k">var</span> observed ledger.<span class="t">Ledger</span> = ledger.<span class="t">Instrument</span>(svc, ledger.<span class="t">LogObserver</span>(slog.<span class="t">Default</span>()))
 <span class="c">// INFO ledger call op=Payments.Transfer duration=4.1ms</span>
@@ -604,7 +605,7 @@ http.<span class="t">Handle</span>(<span class="s">&quot;/webhooks/blnk&quot;</s
 </section><section id="versions"><h2><a href="#versions">Blnk versions and known limits</a></h2>
 <div class="tablewrap"><table class=""><thead><tr><th>Needs Core</th><th>Feature</th></tr></thead><tbody><tr><td>0.8.4</td><td>Historical balances (<code>BalanceAt</code>, <code>Statement</code>), global webhooks</td></tr><tr><td>0.10.0</td><td>Inline reconciliation</td></tr><tr><td>0.13.2</td><td>Filters: history, account search, limits, trial balance, <code>ExternalID</code></td></tr><tr><td>0.14.1</td><td>Auto-capture with <code>CaptureAt</code> (inflight commit queue enabled)</td></tr><tr><td>0.14.2</td><td><code>ConfirmMany</code> / <code>CancelMany</code></td></tr><tr><td>0.15.0</td><td>Structured error codes (older versions fall back to HTTP status)</td></tr><tr><td>0.15.3</td><td><code>CoreDryRun</code> quotes, refund descriptions</td></tr></tbody></table></div>
 <ul class="limits">
-<li><strong>Fee legs.</strong> A movement with a fee is stored as legs (<code>ref-1</code>, <code>ref-2</code>) with no parent record. The library rebuilds the parent for lookups and retries, and disputes or refunds pick the recipient’s leg, but raw Blnk queries and reconciliation see legs.</li>
+<li><strong>Fee legs.</strong> A movement with a fee is stored as legs (<code>ref-1</code>, <code>ref-2</code>) with no parent record. The library rebuilds the parent for lookups and retries, and disputes or refunds pick the recipient’s leg, but raw Blnk queries and reconciliation see legs. A pending one is confirmed in full (or one leg at a time), never partially.</li>
 <li><strong>System account ids.</strong> Blnk stores <code>@FeeIncome</code>-style accounts by balance id; receipts and history show the id, statements show the name.</li>
 <li><strong>Concurrent partial refunds</strong> of one transaction can both pass the remaining-amount check; serialise them.</li>
 <li><strong>Balance alerts</strong> fire after every update while the condition holds; debounce them.</li>

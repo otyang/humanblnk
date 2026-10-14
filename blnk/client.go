@@ -40,7 +40,11 @@ func WithAPIKey(key string) Option { return func(c *Client) { c.apiKey = key } }
 func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
 
 // WithRetries sets how many times retryable failures are retried
-// (423 lock contention, 429 rate limit, 503 queue backpressure, network errors).
+// (423 lock contention, 429 rate limit, 503 queue backpressure, 502/504 and
+// network errors). Committing or voiding a pending transaction carries no
+// reference that would make a repeat harmless, so those calls are retried only
+// on answers that show Blnk didn't act (423, 429, 503), never after a network
+// error or gateway timeout: check the transaction before trying again.
 func WithRetries(n int, base time.Duration) Option {
 	return func(c *Client) { c.maxRetries, c.backoff = n, base }
 }
@@ -73,6 +77,17 @@ func retryable(status int) bool {
 // do performs a JSON request. Retrying a transaction POST is safe because Blnk
 // enforces idempotency on `reference`; a replay surfaces as TXN_DUPLICATE_REFERENCE.
 func (c *Client) do(ctx context.Context, method, path string, in, out any) error {
+	return c.send(ctx, method, path, in, out, true)
+}
+
+// doOnce performs a request that must not be applied twice (an inflight
+// commit has no reference, so a repeated partial commit would capture twice).
+// It is retried only when Blnk certainly did nothing.
+func (c *Client) doOnce(ctx context.Context, method, path string, in, out any) error {
+	return c.send(ctx, method, path, in, out, false)
+}
+
+func (c *Client) send(ctx context.Context, method, path string, in, out any, repeatable bool) error {
 	var payload []byte
 	if in != nil {
 		b, err := json.Marshal(in)
@@ -81,11 +96,13 @@ func (c *Client) do(ctx context.Context, method, path string, in, out any) error
 		}
 		payload = b
 	}
-	return c.doRaw(ctx, method, path, "application/json", payload, out)
+	return c.doRaw(ctx, method, path, "application/json", payload, out, repeatable)
 }
 
-// doRaw sends payload as-is with the given content type and decodes a JSON response.
-func (c *Client) doRaw(ctx context.Context, method, path, contentType string, payload []byte, out any) error {
+// doRaw sends payload as-is with the given content type and decodes a JSON
+// response. Unless repeatable, a failure that may have reached Blnk (network
+// error, 502, 504) is returned without retrying.
+func (c *Client) doRaw(ctx context.Context, method, path, contentType string, payload []byte, out any, repeatable bool) error {
 	if !strings.HasPrefix(c.baseURL, "http://") && !strings.HasPrefix(c.baseURL, "https://") {
 		return fmt.Errorf("blnk: base URL %q must start with http:// or https:// (is BLNK_URL set?)", c.baseURL)
 	}
@@ -124,12 +141,18 @@ func (c *Client) doRaw(ctx context.Context, method, path, contentType string, pa
 				return ctx.Err()
 			}
 			lastErr = fmt.Errorf("blnk: %s %s: %w", method, path, err)
+			if !repeatable {
+				return lastErr
+			}
 			continue
 		}
 		raw, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if readErr != nil {
 			lastErr = fmt.Errorf("blnk: read response: %w", readErr)
+			if !repeatable {
+				return lastErr
+			}
 			continue
 		}
 
@@ -144,13 +167,20 @@ func (c *Client) doRaw(ctx context.Context, method, path, contentType string, pa
 		}
 
 		apiErr := parseAPIError(resp.StatusCode, raw)
-		if retryable(resp.StatusCode) {
+		if retryable(resp.StatusCode) && (repeatable || refused(resp.StatusCode)) {
 			lastErr = apiErr
 			continue
 		}
 		return apiErr
 	}
 	return lastErr
+}
+
+// refused reports whether a retryable status shows Blnk turned the request
+// away without acting on it (as opposed to a gateway that may have passed it on).
+func refused(status int) bool {
+	return status == http.StatusLocked || status == http.StatusTooManyRequests ||
+		status == http.StatusServiceUnavailable
 }
 
 func esc(s string) string { return url.PathEscape(s) }

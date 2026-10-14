@@ -88,13 +88,15 @@ func (s *Service) partialAmount(ctx context.Context, op, txID string, partial Mo
 	if err != nil {
 		return Money{}, mapErr(op, err)
 	}
+	if held.Destination == "" && len(held.Destinations) > 1 {
+		// Blnk applies a partial amount to each leg in turn and stops at the
+		// first leg smaller than it, leaving the earlier legs committed.
+		return Money{}, invalid(op, "transaction %s has several legs (e.g. a fee); confirm it in full, or confirm one leg by its transaction id", txID)
+	}
 	if partial.Currency != "" && !strings.EqualFold(partial.Currency, held.Currency) {
 		return Money{}, invalid(op, "partial amount currency %s differs from held currency %s", partial.Currency, held.Currency)
 	}
-	if partial.Precision == 0 {
-		partial.Precision = s.txPrecision(held)
-	}
-	amt, err := s.resolve(op, partial, held.Currency)
+	amt, err := s.resolveAt(op, partial, held.Currency, s.txPrecision(held))
 	if err != nil {
 		return Money{}, err
 	}

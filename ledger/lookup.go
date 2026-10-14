@@ -48,6 +48,13 @@ func (s *Service) byReference(ctx context.Context, ref string) (*blnk.Transactio
 			if lerr != nil {
 				return nil, lerr
 			}
+			// A leg points at its (unstored) parent, the same one as the
+			// first leg; anything else is an unrelated transaction whose
+			// reference happens to look like a leg's (e.g. "<ref>_1" of a
+			// standing order).
+			if leg.ParentTransaction == "" || (len(legs) > 0 && leg.ParentTransaction != legs[0].ParentTransaction) {
+				break
+			}
 			legs = append(legs, *leg)
 		}
 		if len(legs) > 0 {
@@ -121,7 +128,9 @@ func (s *Service) samePayload(ctx context.Context, t *blnk.Transaction, req blnk
 		!s.sameAccount(ctx, t.Source, req.Source, req.Currency) {
 		return false
 	}
-	if req.Destination != "" && t.Destination != "" && !s.sameAccount(ctx, t.Destination, req.Destination, req.Currency) {
+	// A single-destination request never matches a stored split and vice
+	// versa: same total, different recipients.
+	if req.Destination != "" && !s.sameAccount(ctx, t.Destination, req.Destination, req.Currency) {
 		return false
 	}
 	if len(req.Destinations) > 0 {

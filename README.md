@@ -70,6 +70,7 @@ You pass amounts as the decimal the user typed. Every `Receipt`, `Account` balan
 - `Money` marshals to JSON as `{"amount":"0.456","display":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}` (`precise_amount` is a string so JavaScript doesn't lose digits on 18-decimal tokens). It also unmarshals from your API's request body, accepting `"0.456"` or a bare `0.456` — read from its literal text, never through `float64`.
 - More decimals than the currency allows (`"100.567"` USD) is rejected before anything is sent. Exponents (`1e3`) are rejected.
 - A fee written as `Amount("0.56", "")` inherits the main amount's currency. Partial confirms resolve against the *held* transaction's stored precision.
+- A `Money` that names its own `Precision` (from `Precise`, or a client's JSON) is converted to the currency's precision with its value kept, or rejected if it has more decimals than the currency allows; it is never posted at a precision of its own.
 - `ledger.Minor(10056, "USD")` still works if you already have the integer.
 - `Fixed()` renders all decimal places (`"0.45600000"`); `String()` renders `"0.456 BTC"`.
 
@@ -128,7 +129,7 @@ A component that only needs one area can depend on that interface alone, e.g. a 
 | `Payments().Split` | one payment to several recipients: fixed amounts, percentages and one `Rest`. Every share is computed exactly here; percentage dust goes to `Rest` |
 | `Payments().Exchange` | currency conversion through `@FXPool`, both legs in one atomic batch. Give `Sell` or `Buy` and a `Rate`; rounding never costs the house |
 | `Pending().Hold` | pending authorisation with optional `ExpiresAt` / `CaptureAt` |
-| `Pending().Confirm` / `Pending().Cancel` (+ `Pending().ConfirmMany` / `Pending().CancelMany`, ≤ 100) | finish pending transactions, fully or partially |
+| `Pending().Confirm` / `Pending().Cancel` (+ `Pending().ConfirmMany` / `Pending().CancelMany`, ≤ 100) | finish pending transactions, fully or partially (a transaction with a fee only in full, or leg by leg) |
 | `Payments().Bulk` | `POST /transactions/bulk`; atomic, pending and async options, ≤ 10,000 |
 | `Payments().Schedule` | creates every occurrence as a scheduled transfer (Blnk has no recurrence); references `ref_1 … ref_N` |
 
@@ -136,8 +137,8 @@ A component that only needs one area can depend on that interface alone, e.g. a 
 
 | Method | Entries |
 |---|---|
-| `Transactions().Refund` | Blnk's one-shot full reversal (`POST /refund-transaction/{id}`) |
-| `Transactions().RefundPartial` | reverse transfer for part of the amount, linked by `meta_data.refund_of`; the original tracks `refunded_precise` and over-refunds are refused |
+| `Transactions().Refund` | Blnk's one-shot full reversal (`POST /refund-transaction/{id}`); refused once partial refunds exist |
+| `Transactions().RefundPartial` | reverse transfer for part of the amount, linked by `meta_data.refund_of`; the linked refunds are summed and over-refunds are refused (as is a transaction already fully refunded); the original records `refunded_precise` |
 | `Disputes().Open` / `Disputes().Resolve` | holds the disputed amount in the recipient's account pointed back at the payer; `DisputeUpheld` returns it (partially if you like), `DisputeRejected` releases it |
 | `Escrows().Open` / `Escrows().Release` / `Escrows().Refund` / `Escrows().Get` | each escrow is its own balance, so what's left is that balance and Blnk itself stops over-release |
 
@@ -172,11 +173,11 @@ With neither, the call fails with `ErrInvalidInput` before anything reaches Blnk
 - A retried call is priced again. If the price changed in between, the retry carries a different total and gets `ErrDuplicateReference` instead of a replay; retry with the original `Fee` to be safe.
 - `FeeRule` + `ComputeFee`: percentage + fixed, min/max, tiers, rounding mode. `ledger.ComputeFee` works on a resolved amount such as `FeeRequest.Amount`; `Service.ComputeFee` takes an amount as typed.
 - `Payments().QuoteDeposit` / `Payments().QuoteWithdraw` / `Payments().QuoteTransfer`: fee, total debit, net credit and available balance after, plus `Allowed`/`Reason` (insufficient funds, limit, frozen). With `Config.CoreDryRun` (Core 0.15.3+) Blnk also dry-runs it.
-- `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`. `Accounts().LimitUsage` shows what's left.
+- `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`, on money leaving customer accounts (transfers, withdrawals, holds, splits, exchanges, escrow; `Bulk` batches are not checked). `Accounts().LimitUsage` shows what's left. The check reads usage, then posts, so two payments racing each other can both pass it.
 
 ### Statements and reports
 
-- `Accounts().Statement(account, from, to)`: opening balance, every posted entry with running balance, closing balance; `WriteCSV`. The total is checked against Blnk's historical balance at `to`.
+- `Accounts().Statement(account, from, to)`: opening balance, every posted entry with running balance, closing balance; `WriteCSV`. Entries are dated by when they took effect (`effective_date`), so a standing order appears on the day it posted, and a fee is listed right after the payment it belongs to. The total is checked against Blnk's historical balance at `to`.
 - `Accounts().BalanceAt(account, t)`: posted balance at any moment (`GET /balances/{id}/at`).
 - `Operations().TrialBalance(currency)`: every balance summed. Double entry means it nets to zero; also returns system account balances and total customer funds.
 
@@ -205,7 +206,7 @@ http.Handle("/webhooks/blnk", svc.WebhookHandler(ledger.WebhookConfig{Secret: os
     }))
 ```
 
-Signatures (`X-Blnk-Signature` = HMAC-SHA256 of `timestamp.body` with Blnk's `server.secret_key`) and a 5-minute timestamp window are checked. Blnk delivers at least once, so make handlers idempotent.
+With `Secret` set, signatures (`X-Blnk-Signature` = HMAC-SHA256 of `timestamp.body` with Blnk's `server.secret_key`) and a 5-minute timestamp window are checked. **Without a `Secret` nothing is verified**, so make sure the variable is set in production. Blnk delivers at least once, so make handlers idempotent.
 
 ### Observability
 
@@ -259,17 +260,20 @@ Blnk debits the source and credits the destination, so debit-normal accounts (as
 - **Synchronous by default.** `skip_queue: true` is sent so you get `APPLIED`/`INFLIGHT` or a definite error (e.g. `ErrInsufficientFunds`) in the response. Set `Config.UseQueue` for high-throughput hot balances; you then get `Queued: true` receipts and must confirm via webhooks. Atomic flows (`Payments().Exchange`, `Operations().RecordSettlement`) always run synchronously.
 - **Overdraft.** Only external sources (deposits, settlements, system counterparties) are sent with `allow_overdraft`; customer accounts never overdraft unless you set `AllowOverdraft`.
 - **Errors.** Check with `errors.Is(err, ledger.ErrInsufficientFunds)` etc. — mapped from Blnk's stable `error_detail.code` (Core 0.15.0+). The raw `*blnk.APIError` stays reachable with `errors.As` for logging.
-- **Retries.** The client retries 423 (lock contention), 429, 502/503/504 and network errors with jittered backoff. Retrying a transaction POST is safe because of reference idempotency.
+- **Retries.** The client retries 423 (lock contention), 429, 502/503/504 and network errors with jittered backoff. Retrying a transaction POST is safe because of reference idempotency. Confirming a pending transaction has no reference, so a commit is retried only when Blnk refused it (423, 429, 503), never after a network error or gateway timeout that it may have acted on: look the transaction up before confirming again.
 - **History** filters on Blnk's `balance_id` (source or destination), so every query is one exactly paginated request.
-- **Split transactions** (anything with a fee) are stored by Blnk only as their legs, `<ref>-1`, `<ref>-2`, … (`_1` on newer Core), each pointing at a parent id that has no record of its own. `Transactions().Get`, `GetByReference` and retries rebuild the parent from its legs, and `Pending().Confirm`/`Cancel` on the parent id act on every leg. Statements list each leg, so a fee shows as its own line; to refund or dispute one leg, use the leg's transaction id.
+- **Split transactions** (anything with a fee) are stored by Blnk only as their legs, `<ref>-1`, `<ref>-2`, … (`_1` on newer Core), each pointing at a parent id that has no record of its own. `Transactions().Get`, `GetByReference` and retries rebuild the parent from its legs, and `Pending().Confirm`/`Cancel` on the parent id act on every leg. Statements list each leg, so a fee shows as its own line. `Disputes().Open` and `Transactions().RefundPartial` given a payment with a fee act on the recipient's leg automatically; a split paying several recipients needs the leg's own transaction id. Blnk doesn't keep legs in request order; the library never relies on it.
+- **Reconciling payments with a fee** one-to-one doesn't match a provider's line, because Blnk stores the legs separately. Try `Strategy: "one_to_many"` with `GroupingCriteria: "parent_transaction"` and check the counts against your Core version; Blnk reports counts, not matched lines.
 - **System accounts** (`@FeeIncome`, …) are stored by Blnk under their balance id. Receipts and history show that id; statements show the `@Name`.
 - **Descriptions** are required by Blnk; when you don't give one, the movement's type is used ("Deposit", "Escrow release", …).
 - **Partial refunds racing** each other on the same transaction can both pass the remaining-amount check; serialise refunds per transaction if they can run concurrently.
+- **Partial confirms of a transaction with a fee** are refused: Blnk would apply the amount to every leg in turn and stop part-way. Confirm it in full, or confirm one leg by its transaction id.
 
 ## Running
 
 ```bash
-go test ./... -race
+make check                                                    # format, vet, staticcheck, tests with -race (what CI runs)
+make docs                                                     # regenerate docs.html and CONTRACT.md from the source
 go run ./cmd/example                                          # in-memory emulator, no setup
 BLNK_URL=https://your-core BLNK_API_KEY=... go run ./cmd/example # a real Blnk Core
 ```

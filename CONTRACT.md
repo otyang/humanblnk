@@ -1,6 +1,24 @@
 # Ledger service contract
 
-The `ledger.Ledger` interface, its namespaces, and every parameter and result type they use, generated from the source in `ledger/` (the source is authoritative). `Config` is documented in `ledger/ledger.go`.
+Generated from the Go source by `scripts/gencontract.py` (run `make docs`); the
+source is authoritative. It lists the `Ledger` interface, its namespaces, and
+every exported type, function, value and constant they use. For explanations
+and real-world examples, see the guide at https://otyang.github.io/humanblnk/.
+
+## Importing
+
+```go
+import "github.com/otyang/humanblnk"         // everything below, re-exported, plus humanblnk.New
+import "github.com/otyang/humanblnk/ledger"  // the same types, defined here
+```
+
+`humanblnk` re-exports package `ledger` with type aliases (`humanblnk.Money`
+is `ledger.Money`), renames `ledger.New` to `humanblnk.NewService`, and adds:
+
+```go
+// New connects to the Blnk Core at blnkURL and returns the ledger service.
+func New(blnkURL string, cfg Config, opts ...Option) *Service
+```
 
 ## Interface
 
@@ -151,6 +169,8 @@ type Pending interface {
 
 	// Confirm settles an INFLIGHT transaction. With partial set, only that amount is
 	// settled and the rest stays held (call Confirm again or Cancel the remainder).
+	// A transaction with several legs (one with a fee) can only be confirmed in
+	// full, or one leg at a time by the leg's transaction id.
 	Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error)
 
 	// Cancel releases whatever is still held on an INFLIGHT transaction.
@@ -175,12 +195,16 @@ type Transactions interface {
 
 	// Refund reverses a settled (or confirmed/cancelled pending) transaction once.
 	// For split transactions created through the queue, pass the queued parent id.
+	// Blnk reverses the whole amount, so a transaction that already has partial
+	// refunds (RefundPartial) is refused; refund the rest with RefundPartial.
 	Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error)
 
 	// RefundPartial sends part of a posted transaction back: destination → source,
-	// linked to the original with meta_data.refund_of. The original's
-	// meta_data.refunded_precise tracks the total refunded, and refunds beyond the
-	// original amount are rejected. Use Refund for Blnk's one-shot full reversal.
+	// linked to the original with meta_data.refund_of. Refunds beyond the original
+	// amount (counting the partial refunds linked to it) are rejected, as is a
+	// transaction already reversed with Refund; the original's
+	// meta_data.refunded_precise records the total refunded. Use Refund for
+	// Blnk's one-shot full reversal.
 	//
 	// Two partial refunds of the same transaction racing each other can both pass
 	// the remaining-amount check; serialise refunds per transaction in your app
@@ -263,9 +287,18 @@ type Reconciliations interface {
 }
 ```
 
-## Money
+## Money and display
 
 ```go
+// Money is an amount in a currency, carried in both forms Blnk stores:
+//
+//	Value         "0.456"      the human decimal, exactly as typed (trailing zeros trimmed)
+//	PreciseAmount 45600000     the integer in the smallest unit (what Blnk sums on balances)
+//	Precision     100000000    the multiplier between them (Value × Precision = PreciseAmount)
+//
+// Build one from what the user typed with Amount("0.456", "BTC"); the Service
+// fills PreciseAmount and Precision from the currency's configured precision.
+// No floats are involved at any step.
 type Money struct {
 	Value         string
 	Currency      string
@@ -278,15 +311,31 @@ type Money struct {
 	Display string
 }
 
+// DisplayRule says how a currency's amounts are shown to people. Amounts are
+// cut (never rounded up) to Decimals, so a displayed balance can always be
+// spent in full; the exact amount stays in Money.Value.
+//
+// Fiat style pads to a fixed number of places ("100.00"); crypto style trims
+// trailing zeros ("0.5", "0.456789").
 type DisplayRule struct {
 	Decimals  int  // most decimal places shown; capped at the currency's precision
 	TrimZeros bool // drop trailing zeros instead of padding to Decimals
 }
+
+// Rounding decides what happens to a fraction of the smallest unit.
+type Rounding int
+
+const (
+	RoundHalfUp Rounding = iota // 0.5 and above rounds up (default)
+	RoundUp                     // any fraction rounds up (in the house's favour for fees)
+	RoundDown                   // fractions are dropped (in the customer's favour for fees)
+)
 ```
 
 ## Accounts and customers
 
 ```go
+// OpenAccountInput opens a customer account.
 type OpenAccountInput struct {
 	Currency   string
 	IdentityID string // optional: link to a Blnk identity
@@ -299,6 +348,7 @@ type OpenAccountInput struct {
 	MetaData   map[string]any
 }
 
+// Account is a Blnk balance as the wallet sees it, amounts in both forms.
 type Account struct {
 	ID         string      `json:"id"`
 	LedgerID   string      `json:"ledger_id"`
@@ -320,6 +370,7 @@ type Account struct {
 	MetaData  map[string]any `json:"meta_data,omitempty"`
 }
 
+// AccountKind tells customer accounts (the sub-ledger) from system (GL) accounts.
 type AccountKind string
 
 const (
@@ -329,6 +380,7 @@ const (
 	EscrowAccount   AccountKind = "escrow"   // one per escrow agreement (Escrows().Open)
 )
 
+// AccountQuery filters accounts. Empty fields don't filter.
 type AccountQuery struct {
 	IdentityID string
 	Currency   string
@@ -339,6 +391,7 @@ type AccountQuery struct {
 	Offset     int
 }
 
+// AccountPage is one page of Accounts().Find results.
 type AccountPage struct {
 	Items  []*Account
 	Limit  int
@@ -346,6 +399,7 @@ type AccountPage struct {
 	Total  int
 }
 
+// CloseInput closes an account (Accounts().Close).
 type CloseInput struct {
 	// SweepTo receives any remaining balance (e.g. the customer's bank payout
 	// account, or another of their accounts). Required when the balance isn't zero.
@@ -354,6 +408,7 @@ type CloseInput struct {
 	Reason    string
 }
 
+// CustomerInput onboards a customer: a Blnk identity plus one account per currency.
 type CustomerInput struct {
 	Type             string // "individual" (default) or "organization"
 	FirstName        string
@@ -371,18 +426,21 @@ type CustomerInput struct {
 	MetaData   map[string]any
 }
 
+// Customer is an identity with its customer accounts.
 type Customer struct {
 	ID       string // Blnk identity id
 	Identity *blnk.Identity
 	Accounts map[string]*Account // by currency
 }
 
+// PotInput opens a savings pot under a customer account.
 type PotInput struct {
 	ParentID string // the customer's main account
 	Name     string // e.g. "Rent", unique per parent
 	Goal     Money  // optional target
 }
 
+// Pot is a savings sub-account. Move money in and out with Transfer.
 type Pot struct {
 	*Account
 	Name   string
@@ -394,6 +452,7 @@ type Pot struct {
 ## Moving money
 
 ```go
+// DepositInput records money received from outside through a provider.
 type DepositInput struct {
 	AccountID string
 	Amount    Money  // gross amount received from the provider
@@ -411,6 +470,7 @@ type DepositInput struct {
 	MetaData    map[string]any
 }
 
+// WithdrawInput sends money out through a provider.
 type WithdrawInput struct {
 	AccountID string
 	Amount    Money  // amount the customer receives
@@ -429,6 +489,7 @@ type WithdrawInput struct {
 	MetaData    map[string]any
 }
 
+// TransferInput moves money between accounts.
 type TransferInput struct {
 	From           string // account / balance id or indicator
 	To             string
@@ -442,6 +503,8 @@ type TransferInput struct {
 	MetaData       map[string]any
 }
 
+// SplitInput pays one amount out to several accounts in a single transaction,
+// e.g. a marketplace order: seller 90%, platform 10%, delivery a fixed 500.
 type SplitInput struct {
 	From      string // account debited (a customer account, or e.g. "@PaystackClearing" when collecting)
 	Amount    Money  // total debited from From
@@ -456,6 +519,7 @@ type SplitInput struct {
 	MetaData       map[string]any
 }
 
+// SplitPart is one recipient. Set exactly one of Amount, Percent or Rest.
 type SplitPart struct {
 	To        string
 	Amount    Money  // fixed amount
@@ -464,6 +528,8 @@ type SplitPart struct {
 	Narration string
 }
 
+// ExchangeInput converts money between two accounts in different currencies,
+// e.g. a customer's USD account to their NGN account.
 type ExchangeInput struct {
 	From string // account debited, in the sell currency
 	To   string // account credited, in the buy currency
@@ -484,6 +550,7 @@ type ExchangeInput struct {
 	MetaData    map[string]any
 }
 
+// ExchangeReceipt is both legs of an exchange.
 type ExchangeReceipt struct {
 	Sold     Money  // debited from From (excluding Fee)
 	Bought   Money  // credited to To
@@ -494,6 +561,7 @@ type ExchangeReceipt struct {
 	Replayed bool
 }
 
+// HoldInput reserves money on an account (Pending().Hold).
 type HoldInput struct {
 	AccountID   string
 	Destination string // where captured funds go, e.g. merchant account or "@CardSettlement"
@@ -505,6 +573,7 @@ type HoldInput struct {
 	MetaData    map[string]any
 }
 
+// BulkTransferInput is a batch of transfers (Payments().Bulk).
 type BulkTransferInput struct {
 	Items []TransferInput
 	// Atomic: all succeed or all fail. Set it for payroll-style batches (the zero value is false).
@@ -513,12 +582,14 @@ type BulkTransferInput struct {
 	Async   bool // process in background; outcome arrives via bulk_transaction.* webhook
 }
 
+// BulkReceipt is the outcome of Payments().Bulk.
 type BulkReceipt struct {
 	BatchID string
 	Status  string // applied | inflight | processing
 	Count   int
 }
 
+// RecurringInput schedules the same transfer Count times.
 type RecurringInput struct {
 	Transfer TransferInput // Reference is the base; occurrence i uses Reference+"_"+i
 	First    time.Time     // when the first occurrence runs
@@ -526,16 +597,19 @@ type RecurringInput struct {
 	Count    int // 1–120
 }
 
+// Interval is the gap between occurrences of a recurring transfer.
 type Interval struct {
 	Months int
 	Days   int
 }
 
+// ConfirmItem is one pending transaction to confirm, optionally partially.
 type ConfirmItem struct {
 	TransactionID string
 	Partial       *Money
 }
 
+// BatchResult is the outcome for one transaction in ConfirmMany / CancelMany.
 type BatchResult struct {
 	TransactionID string
 	OK            bool
@@ -547,12 +621,14 @@ type BatchResult struct {
 ## Refunds, disputes, escrow
 
 ```go
+// RefundInput describes a full refund (Transactions().Refund).
 type RefundInput struct {
 	Reason      string
 	Description string
 	MetaData    map[string]any
 }
 
+// PartialRefundInput refunds part of a posted transaction.
 type PartialRefundInput struct {
 	Amount      Money
 	Reference   string // REQUIRED, one per partial refund
@@ -561,6 +637,7 @@ type PartialRefundInput struct {
 	MetaData    map[string]any
 }
 
+// DisputeInput opens a dispute (chargeback) on a posted transaction.
 type DisputeInput struct {
 	TransactionID string // the disputed transaction (for a split, the leg's transaction id)
 	Amount        Money  // zero = the full amount
@@ -569,6 +646,7 @@ type DisputeInput struct {
 	MetaData      map[string]any
 }
 
+// DisputeOutcome is how a dispute ends.
 type DisputeOutcome int
 
 const (
@@ -578,6 +656,7 @@ const (
 	DisputeRejected
 )
 
+// EscrowInput opens an escrow.
 type EscrowInput struct {
 	Payer       string // account the money comes from
 	Beneficiary string // account it goes to on release
@@ -587,6 +666,7 @@ type EscrowInput struct {
 	MetaData    map[string]any
 }
 
+// EscrowSettleInput releases or refunds escrowed money.
 type EscrowSettleInput struct {
 	Amount      Money  // zero = everything still held
 	Reference   string // REQUIRED
@@ -594,6 +674,11 @@ type EscrowSettleInput struct {
 	MetaData    map[string]any
 }
 
+// Escrow is money taken from a payer and held until it is released to the
+// beneficiary or refunded to the payer, in whole or in parts.
+//
+// Each escrow is its own Blnk balance, so what is still held is simply that
+// balance, and Blnk itself refuses to release or refund more than is left.
 type Escrow struct {
 	ID          string // the escrow account id; pass it to Escrows().Release / Refund
 	Payer       string
@@ -609,21 +694,10 @@ type Escrow struct {
 ## Fees, quotes, limits
 
 ```go
-// NoFee states that a transaction is deliberately free. Chargeable calls
-// (Deposit, Withdraw, Transfer, Exchange, Schedule, each Bulk item and the
-// quotes) must say what they charge: set Fee, or set Config.Fees to price
-// them. Leaving both out is an error, so a fee can't be forgotten.
-var NoFee = Amount("0", "")
-
-// FeeKind is the kind of transaction a fee is for.
-type FeeKind string
-
-const (
-	FeeDeposit    FeeKind = "deposit"
-	FeeWithdrawal FeeKind = "withdrawal"
-	FeeTransfer   FeeKind = "transfer"
-	FeeExchange   FeeKind = "exchange"
-)
+// FeeFunc returns the fee for a transaction, in r.Amount's currency (an empty
+// currency means r.Amount's). Return NoFee for a free transaction. An error
+// refuses the transaction with ErrFeePricing.
+type FeeFunc func(ctx context.Context, r FeeRequest) (Money, error)
 
 // FeeRequest is what Config.Fees is asked to price.
 type FeeRequest struct {
@@ -643,11 +717,26 @@ type FeeRequest struct {
 	BuyCurrency string // exchanges: the currency bought
 }
 
-// FeeFunc returns the fee for a transaction, in r.Amount's currency (an empty
-// currency means r.Amount's). Return NoFee for a free transaction. An error
-// refuses the transaction with ErrFeePricing.
-type FeeFunc func(ctx context.Context, r FeeRequest) (Money, error)
+// FeeKind is the kind of transaction a fee is for.
+type FeeKind string
 
+const (
+	FeeDeposit    FeeKind = "deposit"
+	FeeWithdrawal FeeKind = "withdrawal"
+	FeeTransfer   FeeKind = "transfer"
+	FeeExchange   FeeKind = "exchange"
+)
+
+// FeeRule describes a fee as percentage + fixed part, clamped to [Min, Max].
+// Amounts are decimals in the transaction currency, so keep one rule per currency:
+//
+//	FeeRule{Percent: "1.5", Min: "10", Max: "2000"}           // 1.5%, at least 10, at most 2,000
+//	FeeRule{Fixed: "50"}                                       // flat 50
+//	FeeRule{Tiers: []FeeTier{                                  // tiered
+//		{UpTo: "5000", Rule: FeeRule{Fixed: "10"}},
+//		{UpTo: "50000", Rule: FeeRule{Fixed: "25"}},
+//		{Rule: FeeRule{Percent: "0.1", Max: "500"}},              // everything above
+//	}}
 type FeeRule struct {
 	Percent  string // e.g. "1.5" for 1.5%; "" = none
 	Fixed    string // flat part, e.g. "100"; "" = none
@@ -660,19 +749,14 @@ type FeeRule struct {
 	Tiers []FeeTier
 }
 
+// FeeTier is one band of a tiered FeeRule.
 type FeeTier struct {
 	UpTo string
 	Rule FeeRule
 }
 
-type Rounding int
-
-const (
-	RoundHalfUp Rounding = iota // 0.5 and above rounds up (default)
-	RoundUp                     // any fraction rounds up (in the house's favour for fees)
-	RoundDown                   // fractions are dropped (in the customer's favour for fees)
-)
-
+// Quote previews a movement before the customer confirms it: what is
+// charged, what arrives, and the paying account's available balance after.
 type Quote struct {
 	Amount Money // the amount as entered (deposit: gross received; withdraw/transfer: what the recipient gets)
 	Fee    Money
@@ -687,6 +771,20 @@ type Quote struct {
 	CheckedByLedger bool  // true when Blnk itself dry-ran it (Config.CoreDryRun)
 }
 
+// Limit caps what a customer account can send. Amounts are decimals in
+// Currency; "" means no cap. Configure them in Config.Limits, e.g. by KYC tier:
+//
+//	Limits: []ledger.Limit{
+//		{Tier: "tier1", Currency: "NGN", PerTransaction: "50000", Daily: "200000"},
+//		{Tier: "tier2", Currency: "NGN", PerTransaction: "1000000", Daily: "5000000", Monthly: "50000000"},
+//		{Currency: "NGN", PerTransaction: "10000", Daily: "30000"}, // accounts with no tier
+//	}
+//
+// An account's tier is its meta_data.tier. Limits apply to money leaving
+// customer accounts (Withdraw, Transfer, Schedule, Hold, Split, Exchange and
+// Escrows().Open); system accounts, pots and escrows are not limited, and
+// Bulk batches are not checked. Usage is read before posting, so two
+// payments racing each other can both pass the check.
 type Limit struct {
 	Tier           string // "" matches accounts without a tier; "*" matches any tier
 	Currency       string
@@ -695,6 +793,7 @@ type Limit struct {
 	Monthly        string
 }
 
+// LimitUsage is how much of its limits an account has used.
 type LimitUsage struct {
 	Limit       *Limit // nil when no limit applies
 	DailyUsed   Money
@@ -707,6 +806,7 @@ type LimitUsage struct {
 ## Results and reads
 
 ```go
+// Receipt is the domain view of a Blnk transaction.
 type Receipt struct {
 	TransactionID     string         `json:"transaction_id"`
 	ParentTransaction string         `json:"parent_transaction,omitempty"`
@@ -727,6 +827,7 @@ type Receipt struct {
 	Raw *blnk.Transaction `json:"-"`
 }
 
+// Leg is one destination of a transaction with several, e.g. a payment and its fee.
 type Leg struct {
 	Account       string `json:"account"`
 	Amount        Money  `json:"amount"`       // set for fixed legs (fee, payout); zero for "left"/"%"
@@ -735,6 +836,7 @@ type Leg struct {
 	Narration     string `json:"narration,omitempty"`
 }
 
+// EntryStatus is the accounting view of Blnk's transaction status.
 type EntryStatus string
 
 const (
@@ -746,6 +848,7 @@ const (
 	EntryRejected  EntryStatus = "rejected"  // Blnk REJECTED: refused (e.g. insufficient funds)
 )
 
+// HistoryQuery filters and pages Accounts().History.
 type HistoryQuery struct {
 	Direction Direction
 	Statuses  []string // "posted"/"pending"/... or Blnk's "APPLIED"/"INFLIGHT"/...; empty = all
@@ -755,14 +858,16 @@ type HistoryQuery struct {
 	Offset    int
 }
 
+// Direction filters History by which side the account is on.
 type Direction int
 
 const (
-	All Direction = iota
-	Incoming
-	Outgoing
+	All      Direction = iota // money in and out
+	Incoming                  // the account is the destination
+	Outgoing                  // the account is the source
 )
 
+// HistoryPage is one page of Accounts().History.
 type HistoryPage struct {
 	Items  []Receipt
 	Limit  int
@@ -770,6 +875,8 @@ type HistoryPage struct {
 	Total  int
 }
 
+// Statement is an account statement for [From, To): opening balance, every
+// posted entry with the running balance after it, and closing balance.
 type Statement struct {
 	AccountID string
 	Currency  string
@@ -781,17 +888,21 @@ type Statement struct {
 	Lines     []StatementLine
 }
 
+// StatementLine is one posted entry on a Statement.
 type StatementLine struct {
 	Date        time.Time
 	Reference   string
 	Description string
-	Credit      Money // money in (zero for debits)
-	Debit       Money // money out (zero for credits)
-	Balance     Money // running balance after this line
-	Counterpart string
+	Credit      Money  // money in (zero for debits)
+	Debit       Money  // money out (zero for credits)
+	Balance     Money  // running balance after this line
+	Counterpart string // the other account: an id, or "@Name" for system accounts
 	Receipt     Receipt
 }
 
+// TrialBalance is every balance in one currency, summed. In double entry the
+// total is always zero; anything else means entries were lost or posted
+// outside this ledger, and is worth an alert.
 type TrialBalance struct {
 	Currency string
 
@@ -812,6 +923,7 @@ type TrialBalance struct {
 ## Back office
 
 ```go
+// SettlementInput records a provider settlement (Operations().RecordSettlement).
 type SettlementInput struct {
 	Provider        string // e.g. "paystack" → @PaystackClearing
 	ClearingAccount string // or an exact clearing account
@@ -824,6 +936,7 @@ type SettlementInput struct {
 	Description     string
 }
 
+// SettlementDirection says which way a provider settlement moves money.
 type SettlementDirection int
 
 const (
@@ -835,11 +948,13 @@ const (
 	SettlementPayout
 )
 
+// SettlementReceipt holds the settlement's entries.
 type SettlementReceipt struct {
 	Entries  []*Receipt // main entry, then the fee entry if any
 	Replayed bool
 }
 
+// SuspenseInput parks money that arrived but can't be matched to a customer yet.
 type SuspenseInput struct {
 	Amount          Money
 	Provider        string // provider it arrived through, e.g. "paystack"
@@ -849,6 +964,7 @@ type SuspenseInput struct {
 	MetaData        map[string]any
 }
 
+// AllocateInput moves money out of suspense once its owner is known.
 type AllocateInput struct {
 	AccountID string // the customer account, or a clearing account to send it back
 	Amount    Money
@@ -858,6 +974,7 @@ type AllocateInput struct {
 	Note              string
 }
 
+// AdjustInput is a manual correction, with who asked for it and who approved it.
 type AdjustInput struct {
 	AccountID   string
 	Type        AdjustmentType
@@ -872,6 +989,7 @@ type AdjustInput struct {
 	AllowOverdraft bool
 }
 
+// AdjustmentType is the direction of a manual correction.
 type AdjustmentType int
 
 const (
@@ -879,6 +997,8 @@ const (
 	AdjustDebit                            // take money from the account
 )
 
+// WatchInput sets up an alert on an account's balance, e.g. "tell me when
+// @PayoutClearing's float drops below 1,000,000".
 type WatchInput struct {
 	AccountID string // balance id (for a system account, use Accounts().GetSystem(...).ID)
 	Field     string // balance (default), credit_balance, debit_balance, inflight_balance, inflight_debit_balance, inflight_credit_balance
@@ -887,6 +1007,9 @@ type WatchInput struct {
 	MetaData  map[string]any
 }
 
+// Watch is a balance monitor. When its condition holds, Blnk sends the
+// "balance.monitor" webhook after every update of the balance (not only the
+// first time), so debounce alerts on your side.
 type Watch struct {
 	ID        string
 	AccountID string
@@ -895,6 +1018,7 @@ type Watch struct {
 	Threshold Money
 }
 
+// ReconcileInput matches a provider's records against the ledger.
 type ReconcileInput struct {
 	Source string // e.g. "paystack"
 
@@ -912,9 +1036,14 @@ type ReconcileInput struct {
 	// per Service).
 	RuleIDs  []string
 	Strategy string // one_to_one (default), one_to_many, many_to_one
-	DryRun   bool   // match without recording the result
+	// GroupingCriteria groups ledger entries for one_to_many / many_to_one,
+	// e.g. "parent_transaction" to match one provider line against the legs
+	// of a transaction that carried a fee.
+	GroupingCriteria string
+	DryRun           bool // match without recording the result
 }
 
+// ExternalRecord is one line of a provider's settlement report or bank statement.
 type ExternalRecord struct {
 	ID          string // the provider's id for the line
 	Amount      Money
@@ -923,6 +1052,8 @@ type ExternalRecord struct {
 	Date        time.Time
 }
 
+// Reconciliation is a reconciliation run. Blnk reports counts only; it has no
+// endpoint listing which lines matched.
 type Reconciliation struct {
 	ID          string
 	Status      string // started | in_progress | completed | failed
@@ -933,31 +1064,182 @@ type Reconciliation struct {
 	CompletedAt time.Time
 }
 
+// MatchingRule says when an external record and a ledger transaction are the same.
 type MatchingRule = blnk.MatchingRule
 
+// MatchingCriterion is one condition of a MatchingRule.
 type MatchingCriterion = blnk.MatchingCriterion
-
-// in package blnk:
-type MatchingCriterion struct {
-	Field          string  `json:"field"`    // amount | date | description | reference | currency
-	Operator       string  `json:"operator"` // equals | greater_than | less_than | contains
-	Value          string  `json:"value,omitempty"`
-	Pattern        string  `json:"pattern,omitempty"`
-	AllowableDrift float64 `json:"allowable_drift,omitempty"` // amount: fraction (0.01 = 1%, Core 0.15.0+); date: seconds
-}
-
-type MatchingRule struct {
-	RuleID      string              `json:"rule_id,omitempty"`
-	Name        string              `json:"name"`
-	Description string              `json:"description,omitempty"`
-	Criteria    []MatchingCriterion `json:"criteria"`
-	CreatedAt   Time                `json:"created_at,omitempty"`
-}
 ```
 
 ## Webhooks and observability
 
 ```go
+// Event is a decoded Blnk webhook. Exactly one of the typed fields is set for
+// known events; Data always holds the raw payload.
+type Event struct {
+	Name string
+
+	Receipt *Receipt   // transaction.* events
+	Bulk    *BulkEvent // bulk_transaction.*
+	Alert   *Watch     // balance.monitor
+	Account *Account   // balance.created
+
+	Data json.RawMessage
+}
+
+// BulkEvent is the payload of bulk_transaction.* events.
+type BulkEvent struct {
+	BatchID string `json:"batch_id"`
+	Status  string `json:"status"`
+	Count   int    `json:"transaction_count"` // non-failed transactions
+	Error   string `json:"error,omitempty"`
+}
+
+// Webhook verification settings.
+type WebhookConfig struct {
+	// Secret is Blnk's server.secret_key. When set, unsigned or mis-signed
+	// deliveries are rejected with ErrSignature. When empty, nothing is
+	// verified: leave it empty only if your Blnk doesn't sign webhooks.
+	Secret string
+	// Tolerance rejects deliveries whose X-Blnk-Timestamp is further than this
+	// from now (replay protection). Default 5 minutes; negative disables it.
+	Tolerance time.Duration
+}
+
+// Observer is told about every Ledger call: Start runs before it and returns
+// the context to use (e.g. carrying a trace span) and a function that is
+// called with the call's error when it returns. Use it for logs, metrics and
+// tracing (OpenTelemetry: start a span in Start, end it in the returned func).
+type Observer interface {
+	Start(ctx context.Context, op string) (context.Context, func(err error))
+}
+
+// ObserverFunc adapts a function to Observer.
+type ObserverFunc func(ctx context.Context, op string) (context.Context, func(err error))
+```
+
+## Service and configuration
+
+```go
+// Service implements Ledger on top of a Blnk Core instance.
+type Service struct {
+	c   *blnk.Client
+	cfg Config
+
+	ruleMu sync.Mutex
+	ruleID string // default reconciliation matching rule, created on first use
+
+	indicators sync.Map // "@Name|CUR" → balance id; indicator balances never move
+}
+
+// Config controls how the Service maps domain operations onto Blnk.
+type Config struct {
+	// LedgerID that customer accounts are created in (required for Accounts().Open).
+	LedgerID string
+
+	// Display sets how amounts are shown to people per currency (Money.Display),
+	// e.g. {"ETH": {Decimals: 4, TrimZeros: true}}. Unlisted currencies use
+	// BuiltinDisplay, else every decimal place of their precision, padded.
+	Display map[string]DisplayRule
+
+	// Precisions maps currency → smallest-unit multiplier. Unlisted currencies use DefaultPrecision.
+	Precisions       map[string]int64
+	DefaultPrecision int64 // default 100
+
+	// System (GL) accounts. Defaults come from the chart of accounts in
+	// accounts.go. If you already have money on older indicators (e.g. "@Fees"),
+	// set them here so balances aren't split across two accounts.
+	FeeIncomeAccount       string // default "@FeeIncome"
+	DepositClearingAccount string // default "@DepositClearing" (used when DepositInput.Provider is empty)
+	PayoutClearingAccount  string // default "@PayoutClearing" (used when WithdrawInput.Provider is empty)
+
+	// Fees prices every chargeable transaction (Deposit, Withdraw, Transfer,
+	// Exchange, Schedule, each Bulk item and the quotes) that has no explicit
+	// Fee. It runs on every such call, so prices can change at runtime. Without
+	// it, those calls must set Fee (ledger.NoFee for a free transaction).
+	Fees FeeFunc
+
+	// UseQueue routes writes through Blnk's queue (status QUEUED, final result via
+	// webhook). Default false = skip_queue:true, so you get APPLIED/INFLIGHT or a
+	// definite error (e.g. insufficient funds) in the response.
+	UseQueue bool
+
+	// WithdrawalHoldTTL auto-cancels pending withdrawals the provider never
+	// confirms. Default 24h. Negative disables expiry.
+	WithdrawalHoldTTL time.Duration
+
+	// Limits caps what customer accounts can send, per tier and currency
+	// (see Limit). Checking a daily or monthly limit reads the account's
+	// outgoing transactions for the period (plus one GET per confirmation or
+	// cancellation of a pending transaction among them).
+	Limits []Limit
+	// Location sets the day and month boundaries for limits. Default UTC.
+	Location *time.Location
+
+	// CoreDryRun makes quotes also ask Blnk to dry-run the transaction
+	// (dry_run, Core 0.15.3+), which checks everything Blnk would check.
+	// Leave it off on older Core: they ignore dry_run and would post.
+	CoreDryRun bool
+
+	// EnforceAccountStatus rejects movements touching accounts whose
+	// meta_data.status is "frozen" or "blocked" (one extra GET per account).
+	EnforceAccountStatus bool
+
+	Now func() time.Time
+}
+
+// OpError carries the operation name, a domain sentinel, and the cause.
+type OpError struct {
+	Op    string
+	Kind  error
+	Cause error
+}
+```
+
+## Constants
+
+```go
+// Chart of accounts for the system (GL) side of the ledger. Customer accounts
+// are the sub-ledger; these are the accounts finance reconciles against.
+//
+// Blnk creates an indicator balance the first time it is used, so none of these
+// need setting up. Blnk debits the source and credits the destination, so a
+// debit-normal account (asset) runs negative and a credit-normal one
+// (liability, income) runs positive.
+const (
+	// FeeIncomeAccount: income. Every fee leg is credited here.
+	FeeIncomeAccount = "@FeeIncome"
+
+	// DepositClearingAccount: asset (receivable). Default deposit source when no
+	// provider is named. Debited on deposit, cleared when the provider settles.
+	DepositClearingAccount = "@DepositClearing"
+
+	// PayoutClearingAccount: liability (payable). Default withdrawal destination
+	// when no provider is named. Credited on withdrawal, cleared when funds leave the bank.
+	PayoutClearingAccount = "@PayoutClearing"
+
+	// MerchantPayableAccount: liability. Captured card-style holds owed to merchants.
+	MerchantPayableAccount = "@MerchantPayable"
+
+	// SuspenseAccount: unidentified or unmatched funds awaiting investigation.
+	SuspenseAccount = "@Suspense"
+
+	// FXPoolAccount: the house's currency position. Exchange debits the customer
+	// into the pool in one currency and pays out of the pool in the other, so
+	// each currency's @FXPool balance is the open position in that currency.
+	FXPoolAccount = "@FXPool"
+
+	// AdjustmentsAccount: counterparty for manual corrections (Adjust).
+	AdjustmentsAccount = "@Adjustments"
+
+	// BankOperatingAccount: asset. Your bank account; debited when a provider
+	// settles collections to you, credited when you fund payouts.
+	BankOperatingAccount = "@BankOperating"
+
+	// ProviderFeesAccount: expense. Fees providers deduct at settlement.
+	ProviderFeesAccount = "@ProviderFees"
+)
+
 // Event names Blnk sends to the global webhook.
 const (
 	EventTransactionQueued    = "transaction.queued"
@@ -975,37 +1257,98 @@ const (
 	EventLedgerCreated        = "ledger.created"
 	EventSystemError          = "system.error"
 )
+```
 
-type Event struct {
-	Name string
+## Values and errors
 
-	Receipt *Receipt   // transaction.* events
-	Bulk    *BulkEvent // bulk_transaction.*
-	Alert   *Watch     // balance.monitor
-	Account *Account   // balance.created
+```go
+// Domain errors. Check with errors.Is; the underlying *blnk.APIError is still
+// reachable with errors.As for logging (status, code, details).
+var (
+	ErrInvalidInput       = errors.New("ledger: invalid input")
+	ErrInsufficientFunds  = errors.New("ledger: insufficient funds")
+	ErrNotFound           = errors.New("ledger: not found")
+	ErrDuplicateReference = errors.New("ledger: reference already used for a different transaction")
+	ErrAlreadyFinalized   = errors.New("ledger: transaction already confirmed, cancelled or refunded")
+	ErrNotPending         = errors.New("ledger: transaction is not pending (INFLIGHT)")
+	ErrAmountExceeded     = errors.New("ledger: amount exceeds remaining held amount")
+	ErrAccountFrozen      = errors.New("ledger: account is frozen or blocked")
+	ErrAccountClosed      = errors.New("ledger: account is closed")
+	ErrPendingActivity    = errors.New("ledger: account has pending (INFLIGHT) activity")
+	ErrLimitExceeded      = errors.New("ledger: transaction limit exceeded")
+	ErrApprovalRequired   = errors.New("ledger: approval required")
+	ErrSignature          = errors.New("ledger: invalid webhook signature")
+	ErrFeePricing         = errors.New("ledger: fee could not be priced")
+	ErrConflict           = errors.New("ledger: conflicting operation in progress")
+	ErrUnavailable        = errors.New("ledger: ledger temporarily unavailable")
+	ErrUnauthorized       = errors.New("ledger: unauthorized")
+)
 
-	Data json.RawMessage
-}
+var (
+	Daily   = Interval{Days: 1}
+	Weekly  = Interval{Days: 7}
+	Monthly = Interval{Months: 1}
+)
 
-type BulkEvent struct {
-	BatchID string `json:"batch_id"`
-	Status  string `json:"status"`
-	Count   int    `json:"transaction_count"` // non-failed transactions
-	Error   string `json:"error,omitempty"`
-}
+// BuiltinDisplay is used for currencies not in Config.Display. Currencies in
+// neither show every decimal place their precision has, padded (fiat style).
+var BuiltinDisplay = map[string]DisplayRule{
 
-type WebhookConfig struct {
-	// Secret is Blnk's server.secret_key. When set, unsigned or mis-signed
-	// deliveries are rejected with ErrSignature.
-	Secret string
-	// Tolerance rejects deliveries whose X-Blnk-Timestamp is further than this
-	// from now (replay protection). Default 5 minutes; negative disables it.
-	Tolerance time.Duration
-}
+// NoFee states that a transaction is deliberately free. Chargeable calls
+// (Deposit, Withdraw, Transfer, Exchange, Schedule, each Bulk item and the
+// quotes) must say what they charge: set Fee, or set Config.Fees to price
+// them. Leaving both out is an error, so a fee can't be forgotten.
+var NoFee = Amount("0", "")
 
-type Observer interface {
-	Start(ctx context.Context, op string) (context.Context, func(err error))
-}
+// BuiltinPrecisions are used when Config.Precisions doesn't list a currency.
+// Fiat not listed here falls back to Config.DefaultPrecision (100 = 2 dp).
+//
+// Keep a currency's precision fixed once money has moved: Blnk sums
+// precise_amount on balances, so mixing precisions corrupts the totals.
+var BuiltinPrecisions = map[string]int64{
+```
+
+## Functions
+
+```go
+// ClearingAccount returns the per-provider clearing account:
+// ClearingAccount("paystack") == "@PaystackClearing". It also accepts "@Paystack"
+// and "@PaystackClearing". One clearing account per provider means each
+// provider's settlement report can be reconciled against its own balance.
+func ClearingAccount(provider string) string
+
+// EntryStatusOf maps a Blnk status (APPLIED, INFLIGHT, ...) to an EntryStatus.
+func EntryStatusOf(blnkStatus string) EntryStatus
+
+// ComputeFee applies rule to a resolved amount (one with Precision set, such
+// as FeeRequest.Amount) and returns the fee in the same currency and
+// precision. Use Service.ComputeFee for an amount as typed.
+func ComputeFee(rule FeeRule, amount Money) (Money, error)
+
+// LogObserver logs every call with its duration: Info on success, Warn for
+// business refusals (insufficient funds, limits, frozen accounts), Error
+// otherwise.
+func LogObserver(log *slog.Logger) Observer
+
+// Instrument wraps l so o observes every call. Calls are named
+// "Namespace.Method", e.g. "Payments.Transfer".
+func Instrument(l Ledger, o Observer) Ledger
+
+// New builds a Service. The client is shared and safe for concurrent use.
+func New(c *blnk.Client, cfg Config) *Service
+
+// Amount builds Money from a decimal string as the user typed it:
+// Amount("0.456", "BTC"), Amount("100.56", "USD"), Amount("1,500", "NGN").
+func Amount(value, currency string) Money
+
+// Minor builds Money from an integer in the smallest unit: Minor(10056, "USD") = 100.56 USD.
+func Minor(precise int64, currency string) Money
+
+// Precise builds a fully specified Money from a smallest-unit integer and precision.
+func Precise(precise *big.Int, precision int64, currency string) Money
+
+// ParseDecimal resolves a decimal string against an explicit precision.
+func ParseDecimal(value, currency string, precision int64) (Money, error)
 ```
 
 Every money-movement method requires `Reference`. Resending the same reference returns the original with `Replayed: true` instead of posting twice.

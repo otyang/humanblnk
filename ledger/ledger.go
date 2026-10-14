@@ -84,7 +84,8 @@ type Config struct {
 
 	// Limits caps what customer accounts can send, per tier and currency
 	// (see Limit). Checking a daily or monthly limit reads the account's
-	// outgoing transactions for the period.
+	// outgoing transactions for the period (plus one GET per confirmation or
+	// cancellation of a pending transaction among them).
 	Limits []Limit
 	// Location sets the day and month boundaries for limits. Default UTC.
 	Location *time.Location
@@ -126,6 +127,7 @@ func (c *Config) defaults() {
 // Inputs / outputs
 // ---------------------------------------------------------------------------
 
+// OpenAccountInput opens a customer account.
 type OpenAccountInput struct {
 	Currency   string
 	IdentityID string // optional: link to a Blnk identity
@@ -138,6 +140,7 @@ type OpenAccountInput struct {
 	MetaData   map[string]any
 }
 
+// Account is a Blnk balance as the wallet sees it, amounts in both forms.
 type Account struct {
 	ID         string      `json:"id"`
 	LedgerID   string      `json:"ledger_id"`
@@ -159,7 +162,7 @@ type Account struct {
 	MetaData  map[string]any `json:"meta_data,omitempty"`
 }
 
-// Common fields for money movement.
+// DepositInput records money received from outside through a provider.
 type DepositInput struct {
 	AccountID string
 	Amount    Money  // gross amount received from the provider
@@ -177,6 +180,7 @@ type DepositInput struct {
 	MetaData    map[string]any
 }
 
+// WithdrawInput sends money out through a provider.
 type WithdrawInput struct {
 	AccountID string
 	Amount    Money  // amount the customer receives
@@ -195,6 +199,7 @@ type WithdrawInput struct {
 	MetaData    map[string]any
 }
 
+// TransferInput moves money between accounts.
 type TransferInput struct {
 	From           string // account / balance id or indicator
 	To             string
@@ -208,6 +213,7 @@ type TransferInput struct {
 	MetaData       map[string]any
 }
 
+// HoldInput reserves money on an account (Pending().Hold).
 type HoldInput struct {
 	AccountID   string
 	Destination string // where captured funds go, e.g. merchant account or "@CardSettlement"
@@ -219,12 +225,14 @@ type HoldInput struct {
 	MetaData    map[string]any
 }
 
+// RefundInput describes a full refund (Transactions().Refund).
 type RefundInput struct {
 	Reason      string
 	Description string
 	MetaData    map[string]any
 }
 
+// BulkTransferInput is a batch of transfers (Payments().Bulk).
 type BulkTransferInput struct {
 	Items []TransferInput
 	// Atomic: all succeed or all fail. Set it for payroll-style batches (the zero value is false).
@@ -263,6 +271,7 @@ func (r *Receipt) Settled() bool { return r.Status == blnk.StatusApplied }
 // Posted reports whether the entry is in the balances (same as Settled).
 func (r *Receipt) Posted() bool { return r.EntryStatus == EntryPosted }
 
+// Leg is one destination of a transaction with several, e.g. a payment and its fee.
 type Leg struct {
 	Account       string `json:"account"`
 	Amount        Money  `json:"amount"`       // set for fixed legs (fee, payout); zero for "left"/"%"
@@ -271,20 +280,23 @@ type Leg struct {
 	Narration     string `json:"narration,omitempty"`
 }
 
+// BulkReceipt is the outcome of Payments().Bulk.
 type BulkReceipt struct {
 	BatchID string
 	Status  string // applied | inflight | processing
 	Count   int
 }
 
+// Direction filters History by which side the account is on.
 type Direction int
 
 const (
-	All Direction = iota
-	Incoming
-	Outgoing
+	All      Direction = iota // money in and out
+	Incoming                  // the account is the destination
+	Outgoing                  // the account is the source
 )
 
+// HistoryQuery filters and pages Accounts().History.
 type HistoryQuery struct {
 	Direction Direction
 	Statuses  []string // "posted"/"pending"/... or Blnk's "APPLIED"/"INFLIGHT"/...; empty = all
@@ -294,6 +306,7 @@ type HistoryQuery struct {
 	Offset    int
 }
 
+// HistoryPage is one page of Accounts().History.
 type HistoryPage struct {
 	Items  []Receipt
 	Limit  int
@@ -356,13 +369,31 @@ func (s *Service) Parse(amount, currency string) (Money, error) {
 // resolve fills PreciseAmount/Precision (or Value) using the currency's precision.
 // currency is used when m.Currency is empty (e.g. a fee written as Amount("1.50", "")).
 func (s *Service) resolve(op string, m Money, currency string) (Money, error) {
+	cur := strings.ToUpper(firstNonEmpty(m.Currency, currency))
+	return s.resolveAt(op, m, cur, s.Precision(cur))
+}
+
+// resolveAt resolves m at precision, the precision it will be posted with.
+// Blnk sums precise amounts on a balance whatever precision each transaction
+// names, so a Money carrying another Precision (built with Precise, or decoded
+// from a client's JSON) is converted with its value kept, or rejected when it
+// has more decimal places than precision allows. It is never posted as is.
+func (s *Service) resolveAt(op string, m Money, currency string, precision int64) (Money, error) {
 	if m.Currency == "" {
 		m.Currency = strings.ToUpper(currency)
 	}
 	if m.Currency == "" {
 		return Money{}, invalid(op, "currency is required")
 	}
-	r, err := m.resolve(s.Precision(m.Currency))
+	if m.Precision > 0 && m.Precision != precision {
+		own, err := m.resolve(m.Precision) // checks Value and PreciseAmount agree
+		if err != nil {
+			return Money{}, &OpError{Op: op, Kind: ErrInvalidInput, Cause: err}
+		}
+		m = Money{Value: own.Value, Currency: own.Currency}
+	}
+	m.Precision = 0
+	r, err := m.resolve(precision)
 	if err != nil {
 		return Money{}, &OpError{Op: op, Kind: ErrInvalidInput, Cause: err}
 	}
@@ -390,8 +421,7 @@ func (s *Service) prepare(op, account string, amount, fee Money, ref string) (Mo
 		if fee.Currency != "" && !strings.EqualFold(fee.Currency, a.Currency) {
 			return Money{}, Money{}, invalid(op, "fee currency %s differs from amount currency %s", fee.Currency, a.Currency)
 		}
-		fee.Precision = a.Precision
-		if f, err = s.resolve(op, fee, a.Currency); err != nil {
+		if f, err = s.resolveAt(op, fee, a.Currency, a.Precision); err != nil {
 			return Money{}, Money{}, err
 		}
 		if f.Sign() < 0 {
@@ -696,6 +726,8 @@ func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string
 
 // Confirm settles an INFLIGHT transaction. With partial set, only that amount is
 // settled and the rest stays held (call Confirm again or Cancel the remainder).
+// A transaction with several legs (one with a fee) can only be confirmed in
+// full, or one leg at a time by the leg's transaction id.
 func (s pendingAPI) Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error) {
 	const op = "ledger.Pending.Confirm"
 	if txID == "" {
@@ -733,10 +765,24 @@ func (s pendingAPI) Cancel(ctx context.Context, txID string) (*Receipt, error) {
 
 // Refund reverses a settled (or confirmed/cancelled pending) transaction once.
 // For split transactions created through the queue, pass the queued parent id.
+// Blnk reverses the whole amount, so a transaction that already has partial
+// refunds (RefundPartial) is refused; refund the rest with RefundPartial.
 func (s transactionsAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error) {
 	const op = "ledger.Transactions.Refund"
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
+	}
+	if orig, err := s.c.GetTransaction(ctx, txID); err == nil {
+		done, err := s.refundedSoFar(ctx, orig, "")
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		if done.Sign() > 0 {
+			return nil, &OpError{Op: op, Kind: ErrAlreadyFinalized, Cause: fmt.Errorf(
+				"transaction %s already has partial refunds (%s); refund the rest with RefundPartial", txID, s.money(done, s.txPrecision(orig), orig.Currency))}
+		}
+	} else if !blnk.IsNotFound(err) {
+		return nil, mapErr(op, err)
 	}
 	md := blnk.MetaData{}
 	for k, v := range in.MetaData {

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -36,12 +37,18 @@ func Sign(secret, ts string, body []byte) string {
 // VerifySignature checks a webhook's signature and that its timestamp is within
 // tolerance of now (which rejects replays of old deliveries). tolerance <= 0
 // skips the age check.
+//
+// An empty secret is an error: anyone can sign with an empty key, so it
+// would accept forged deliveries.
 func VerifySignature(secret, signature, ts string, body []byte, now time.Time, tolerance time.Duration) error {
+	if secret == "" {
+		return fmt.Errorf("%w: no secret configured", ErrBadSignature)
+	}
 	if signature == "" || ts == "" {
 		return fmt.Errorf("%w: missing %s or %s header", ErrBadSignature, HeaderSignature, HeaderTimestamp)
 	}
 	want := Sign(secret, ts, body)
-	if !hmac.Equal([]byte(want), []byte(signature)) {
+	if !hmac.Equal([]byte(want), []byte(strings.ToLower(strings.TrimSpace(signature)))) {
 		return ErrBadSignature
 	}
 	if tolerance > 0 {

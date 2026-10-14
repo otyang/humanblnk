@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/otyang/humanblnk/blnk"
 )
@@ -45,12 +46,13 @@ func (s disputesAPI) Open(ctx context.Context, in DisputeInput) (*Receipt, error
 	}
 	amount := s.txMoney(orig)
 	if in.Amount.isSet() {
-		m := in.Amount
-		if m.Precision == 0 {
-			m.Precision = amount.Precision
-		}
-		if amount, err = s.resolveIn(op, m, orig.Currency); err != nil {
+		full := amount
+		if amount, err = s.resolveInAt(op, in.Amount, orig.Currency, full.Precision); err != nil {
 			return nil, err
+		}
+		if amount.cmp(full) > 0 {
+			return nil, &OpError{Op: op, Kind: ErrAmountExceeded,
+				Cause: fmt.Errorf("%s is more than the disputed transaction's %s", amount, full)}
 		}
 	}
 	md := map[string]any{"dispute_of": orig.GetID(), "dispute_reason": in.Reason}

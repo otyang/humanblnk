@@ -20,8 +20,10 @@ import (
 //	}
 //
 // An account's tier is its meta_data.tier. Limits apply to money leaving
-// customer accounts (Withdraw, Transfer, Hold, Split, Exchange); system
-// accounts, pots and escrows are not limited.
+// customer accounts (Withdraw, Transfer, Schedule, Hold, Split, Exchange and
+// Escrows().Open); system accounts, pots and escrows are not limited, and
+// Bulk batches are not checked. Usage is read before posting, so two
+// payments racing each other can both pass the check.
 type Limit struct {
 	Tier           string // "" matches accounts without a tier; "*" matches any tier
 	Currency       string
@@ -181,17 +183,39 @@ func (s *Service) outflows(ctx context.Context, accountID string, since time.Tim
 		}
 		out = append(out, page...)
 		if len(page) < 100 {
-			return out, nil
+			break
 		}
 	}
+	// Blnk 0.15's filter leaves parent_transaction empty on the rows it
+	// returns, which spent needs to count each amount once. A queue copy
+	// names its parent in meta_data; a commit or void of a pending
+	// transaction (inflight, but APPLIED or VOID) is read back by id.
+	for i := range out {
+		t := &out[i]
+		if t.ParentTransaction != "" {
+			continue
+		}
+		if qp := t.QueuedParent(); qp != "" && qp != t.GetID() {
+			t.ParentTransaction = qp
+			continue
+		}
+		if t.Inflight && (t.Status == blnk.StatusApplied || t.Status == blnk.StatusVoid) {
+			full, err := s.c.GetTransaction(ctx, t.GetID())
+			if err != nil {
+				return nil, err
+			}
+			t.ParentTransaction = full.ParentTransaction
+		}
+	}
+	return out, nil
 }
 
 // spent sums money committed to leave the account since t, counting each
 // amount once:
 //   - an INFLIGHT or QUEUED transaction counts in full;
-//   - an APPLIED child of a counted INFLIGHT/QUEUED parent (a commit, or the
-//     "_q" copy the queue writes) isn't counted again;
-//   - a VOID child of a counted hold gives its amount back;
+//   - an APPLIED or INFLIGHT child of a counted INFLIGHT/QUEUED parent (a
+//     commit, or the "_q" copy the queue writes) isn't counted again;
+//   - a VOID (or REJECTED) child of a counted parent gives its amount back;
 //   - a split parent (no single destination) is skipped; its legs count.
 func spent(txs []blnk.Transaction, since time.Time) *big.Int {
 	byID := make(map[string]*blnk.Transaction, len(txs))
@@ -209,13 +233,11 @@ func spent(txs []blnk.Transaction, since time.Time) *big.Int {
 		counted := parent != nil && !parent.CreatedAt.Before(since) &&
 			(parent.Status == blnk.StatusInflight || parent.Status == blnk.StatusQueued)
 		switch t.Status {
-		case blnk.StatusInflight, blnk.StatusQueued:
-			sum.Add(sum, &t.PreciseAmount.Int)
-		case blnk.StatusApplied:
+		case blnk.StatusInflight, blnk.StatusQueued, blnk.StatusApplied:
 			if !counted {
 				sum.Add(sum, &t.PreciseAmount.Int)
 			}
-		case blnk.StatusVoid:
+		case blnk.StatusVoid, blnk.StatusRejected:
 			if counted {
 				sum.Sub(sum, &t.PreciseAmount.Int)
 			}

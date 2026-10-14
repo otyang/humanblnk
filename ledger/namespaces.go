@@ -151,6 +151,8 @@ type Pending interface {
 
 	// Confirm settles an INFLIGHT transaction. With partial set, only that amount is
 	// settled and the rest stays held (call Confirm again or Cancel the remainder).
+	// A transaction with several legs (one with a fee) can only be confirmed in
+	// full, or one leg at a time by the leg's transaction id.
 	Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error)
 
 	// Cancel releases whatever is still held on an INFLIGHT transaction.
@@ -175,12 +177,16 @@ type Transactions interface {
 
 	// Refund reverses a settled (or confirmed/cancelled pending) transaction once.
 	// For split transactions created through the queue, pass the queued parent id.
+	// Blnk reverses the whole amount, so a transaction that already has partial
+	// refunds (RefundPartial) is refused; refund the rest with RefundPartial.
 	Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error)
 
 	// RefundPartial sends part of a posted transaction back: destination → source,
-	// linked to the original with meta_data.refund_of. The original's
-	// meta_data.refunded_precise tracks the total refunded, and refunds beyond the
-	// original amount are rejected. Use Refund for Blnk's one-shot full reversal.
+	// linked to the original with meta_data.refund_of. Refunds beyond the original
+	// amount (counting the partial refunds linked to it) are rejected, as is a
+	// transaction already reversed with Refund; the original's
+	// meta_data.refunded_precise records the total refunded. Use Refund for
+	// Blnk's one-shot full reversal.
 	//
 	// Two partial refunds of the same transaction racing each other can both pass
 	// the remaining-amount check; serialise refunds per transaction in your app
@@ -275,14 +281,31 @@ type (
 	reconciliationsAPI struct{ *Service }
 )
 
-func (s *Service) Accounts() Accounts               { return accountsAPI{s} }
-func (s *Service) Customers() Customers             { return customersAPI{s} }
-func (s *Service) Payments() Payments               { return paymentsAPI{s} }
-func (s *Service) Pending() Pending                 { return pendingAPI{s} }
-func (s *Service) Transactions() Transactions       { return transactionsAPI{s} }
-func (s *Service) Disputes() Disputes               { return disputesAPI{s} }
-func (s *Service) Escrows() Escrows                 { return escrowsAPI{s} }
-func (s *Service) Operations() Operations           { return operationsAPI{s} }
+// Accounts returns the Accounts namespace.
+func (s *Service) Accounts() Accounts { return accountsAPI{s} }
+
+// Customers returns the Customers namespace.
+func (s *Service) Customers() Customers { return customersAPI{s} }
+
+// Payments returns the Payments namespace.
+func (s *Service) Payments() Payments { return paymentsAPI{s} }
+
+// Pending returns the Pending namespace.
+func (s *Service) Pending() Pending { return pendingAPI{s} }
+
+// Transactions returns the Transactions namespace.
+func (s *Service) Transactions() Transactions { return transactionsAPI{s} }
+
+// Disputes returns the Disputes namespace.
+func (s *Service) Disputes() Disputes { return disputesAPI{s} }
+
+// Escrows returns the Escrows namespace.
+func (s *Service) Escrows() Escrows { return escrowsAPI{s} }
+
+// Operations returns the Operations namespace.
+func (s *Service) Operations() Operations { return operationsAPI{s} }
+
+// Reconciliations returns the Reconciliations namespace.
 func (s *Service) Reconciliations() Reconciliations { return reconciliationsAPI{s} }
 
 var _ Ledger = (*Service)(nil)

@@ -3,6 +3,7 @@ package ledger
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -37,6 +38,8 @@ type RecurringInput struct {
 func (s paymentsAPI) Schedule(ctx context.Context, in RecurringInput) ([]*Receipt, error) {
 	const op = "ledger.Payments.Schedule"
 	switch {
+	case strings.TrimSpace(in.Transfer.Reference) == "":
+		return nil, invalid(op, "reference (idempotency key) is required")
 	case in.Count < 1 || in.Count > 120:
 		return nil, invalid(op, "count must be between 1 and 120")
 	case in.Every.Months < 0 || in.Every.Days < 0 || in.Every == (Interval{}):
