@@ -432,6 +432,10 @@ nav.side {{ position: sticky; top: 0; height: 100vh; overflow-y: auto; border-ri
 .brand {{ font: 700 20px var(--display); letter-spacing: -.01em }}
 nav.side summary {{ display: none; cursor: pointer; margin-top: 14px; font: 600 14px var(--body); color: var(--accent) }}
 .brand small {{ display: block; font: 400 13px var(--body); color: var(--muted); margin-top: 2px }}
+.brand small.by {{ margin-top: 6px; font-size: 13px }}
+header.hero p.byline {{ margin-top: 12px; font-size: 15px }}
+footer.foot {{ margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 15px }}
+footer.foot p {{ margin: 4px 0 }}
 .navgroup {{ margin-top: 22px; display: grid; gap: 2px }}
 .navgroup p {{ margin: 0 0 4px; font: 600 11.5px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }}
 .navgroup a {{ color: var(--ink); text-decoration: none; font-size: 15px; padding: 3px 8px; border-radius: 4px }}
@@ -489,15 +493,20 @@ ul.limits li {{ margin: 10px 0 }}
 <body>
 <div class="shell">
 <nav class="side" aria-label="Contents">
-  <div class="brand">humanblnk<small>Wallet operations on Blnk, in Go</small></div>
+  <div class="brand">humanblnk<small>Wallet operations on Blnk, in Go</small><small class="by">by <a href="https://github.com/otyang">Otyang</a></small></div>
   <details id="toc" open><summary>Contents</summary>{navhtml}</details>
 </nav>
 <main>
 <header class="hero">
   <h1>Build a wallet on Blnk</h1>
   <p>A practical guide to the <code>ledger</code> package, told through Oja, a wallet app serving customers in Nigeria: naira, dollars and bitcoin, from signup to month-end close.</p>
+  <p class="byline">By <a href="https://github.com/otyang">Otyang</a> · <a href="https://github.com/otyang/humanblnk">github.com/otyang/humanblnk</a></p>
 </header>
 {''.join(sections)}
+<footer class="foot">
+  <p><strong>humanblnk</strong> is created and maintained by <a href="https://github.com/otyang">Otyang</a>. Source: <a href="https://github.com/otyang/humanblnk">github.com/otyang/humanblnk</a>.</p>
+  <p>An independent project, not affiliated with or endorsed by Blnk Finance.</p>
+</footer>
 </main>
 </div>
 <script>

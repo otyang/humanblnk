@@ -1,6 +1,8 @@
-# blnkledger
+# humanblnk
 
-A Go interface layer over the [Blnk](https://docs.blnkfinance.com/reference/overview) double-entry ledger: accounts, deposits, withdrawals, transfers, holds, refunds, bulk payouts and history.
+Unofficial Go library that makes [Blnk](https://docs.blnkfinance.com), the open-source double-entry ledger, simple to use: accounts, deposits, withdrawals, transfers, fees, holds, refunds, escrow, FX, statements and webhooks. Exact decimal money for fiat and crypto, plus an in-memory Blnk emulator for tests.
+
+**Author:** [Otyang](https://github.com/otyang) · Not affiliated with Blnk Finance.
 
 ```
 blnk/     thin typed HTTP client — one method per Blnk Core endpoint, structured errors, retries
@@ -266,4 +268,9 @@ BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -v
 | 0.15.3 | `Config.CoreDryRun`; refund descriptions. **Older Core ignores `dry_run` and posts the transaction**, so leave `CoreDryRun` off there |
 
 Blnk quirks this module works around: balance monitors only match `==` (not `=`), and their threshold goes through float math, so `Operations().WatchBalance` sends it in the smallest unit with precision 1. Filters reset a `limit` over 100 to 20, so this module never asks for more than 100.
-# humanblnk
+
+## Author
+
+Created and maintained by **[Otyang](https://github.com/otyang)**.
+
+humanblnk is an independent project and is not affiliated with or endorsed by Blnk Finance. Blnk is a trademark of its owners.

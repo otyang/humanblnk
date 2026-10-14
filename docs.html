@@ -35,6 +35,10 @@ nav.side { position: sticky; top: 0; height: 100vh; overflow-y: auto; border-rig
 .brand { font: 700 20px var(--display); letter-spacing: -.01em }
 nav.side summary { display: none; cursor: pointer; margin-top: 14px; font: 600 14px var(--body); color: var(--accent) }
 .brand small { display: block; font: 400 13px var(--body); color: var(--muted); margin-top: 2px }
+.brand small.by { margin-top: 6px; font-size: 13px }
+header.hero p.byline { margin-top: 12px; font-size: 15px }
+footer.foot { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 15px }
+footer.foot p { margin: 4px 0 }
 .navgroup { margin-top: 22px; display: grid; gap: 2px }
 .navgroup p { margin: 0 0 4px; font: 600 11.5px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
 .navgroup a { color: var(--ink); text-decoration: none; font-size: 15px; padding: 3px 8px; border-radius: 4px }
@@ -92,13 +96,14 @@ ul.limits li { margin: 10px 0 }
 <body>
 <div class="shell">
 <nav class="side" aria-label="Contents">
-  <div class="brand">humanblnk<small>Wallet operations on Blnk, in Go</small></div>
+  <div class="brand">humanblnk<small>Wallet operations on Blnk, in Go</small><small class="by">by <a href="https://github.com/otyang">Otyang</a></small></div>
   <details id="toc" open><summary>Contents</summary><div class="navgroup"><p>Getting started</p><a href="#overview">Overview</a><a href="#install">Install and run Blnk</a><a href="#setup">Set up the service</a></div><div class="navgroup"><p>Concepts</p><a href="#money">Money</a><a href="#references">References and retries</a><a href="#accounts-model">Accounts and the chart of accounts</a><a href="#status">Transaction status</a><a href="#errors">Errors</a></div><div class="navgroup"><p>Customers and accounts</p><a href="#onboard">Onboard a customer</a><a href="#balance">Read a balance</a><a href="#freeze">Freeze, unfreeze and close</a></div><div class="navgroup"><p>Money in and out</p><a href="#topup">Top up through Paystack</a><a href="#p2p">Send money to a friend</a><a href="#withdraw">Withdraw to a bank account</a><a href="#card">Card payments</a><a href="#fx">Exchange currency</a><a href="#crypto">Crypto</a></div><div class="navgroup"><p>Commerce</p><a href="#marketplace">Marketplace orders</a><a href="#escrow">Escrow (buyer protection)</a><a href="#dispute">Disputes and chargebacks</a><a href="#refund">Refunds</a></div><div class="navgroup"><p>Savings and payroll</p><a href="#pots">Savings pots and standing orders</a><a href="#payroll">Payroll</a></div><div class="navgroup"><p>Controls</p><a href="#fees">Fees</a><a href="#limits">Limits and KYC tiers</a></div><div class="navgroup"><p>Reporting</p><a href="#statement">Statements</a><a href="#trial">Trial balance</a></div><div class="navgroup"><p>Back office</p><a href="#settlement">Provider settlement</a><a href="#suspense">Unidentified money</a><a href="#adjust">Manual corrections</a><a href="#watch">Balance alerts</a><a href="#reconcile">Reconciliation</a></div><div class="navgroup"><p>Integration</p><a href="#webhooks">Webhooks</a><a href="#observe">Logging, metrics and tracing</a><a href="#testing">Testing your app</a></div><div class="navgroup"><p>Reference</p><a href="#versions">Blnk versions and known limits</a></div></details>
 </nav>
 <main>
 <header class="hero">
   <h1>Build a wallet on Blnk</h1>
   <p>A practical guide to the <code>ledger</code> package, told through Oja, a wallet app serving customers in Nigeria: naira, dollars and bitcoin, from signup to month-end close.</p>
+  <p class="byline">By <a href="https://github.com/otyang">Otyang</a> · <a href="https://github.com/otyang/humanblnk">github.com/otyang/humanblnk</a></p>
 </header>
 <section id="overview"><h2><a href="#overview">Overview</a></h2>
 <p><strong>humanblnk</strong> is an unofficial Go library over <a href="https://docs.blnkfinance.com">Blnk</a>, the open-source double-entry ledger. Blnk gives you balances, transactions and a strict accounting core; this library turns them into the operations a wallet product actually has: top-ups, transfers, withdrawals, card holds, marketplace splits, escrow, currency exchange, statements and the back-office work behind them.</p>
@@ -590,6 +595,10 @@ http.<span class="t">Handle</span>(<span class="s">&quot;/webhooks/blnk&quot;</s
 </ul>
 <p>Full signatures and types: <a href="CONTRACT.md">CONTRACT.md</a>. Behaviour notes: <a href="README.md">README.md</a>.</p>
 </section>
+<footer class="foot">
+  <p><strong>humanblnk</strong> is created and maintained by <a href="https://github.com/otyang">Otyang</a>. Source: <a href="https://github.com/otyang/humanblnk">github.com/otyang/humanblnk</a>.</p>
+  <p>An independent project, not affiliated with or endorsed by Blnk Finance.</p>
+</footer>
 </main>
 </div>
 <script>
