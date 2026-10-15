@@ -96,15 +96,18 @@ section('overview', 'Overview', f'''
   <div><span>Blnk Core</span><small>Postgres-backed ledger (or <code>ledgertest</code> in tests)</small></div>
 </div>
 <p>Calls are grouped into namespaces so they read like the product:</p>
-{raw("""l.Accounts()        // Open, Get, GetSystem, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+{raw("""l.Ledgers()         // Create, Get, List, Freeze, Unfreeze
+l.Accounts()        // Open, Get, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+l.System()          // Get, List, History, BalanceAt, Statement
 l.Customers()       // Open, Get, OpenPot, ListPots
 l.Payments()        // Deposit, Withdraw, Transfer, Split, Exchange, Bulk, Schedule, QuoteDeposit, QuoteWithdraw, QuoteTransfer
 l.Pending()         // Hold, Confirm, Cancel, ConfirmMany, CancelMany
 l.Transactions()    // Get, GetByReference, Refund, RefundPartial
 l.Disputes()        // Open, Resolve
 l.Escrows()         // Open, Get, Release, Refund
-l.Operations()      // RecordSettlement, ParkInSuspense, AllocateSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
+l.Operations()      // RecordSettlement, ParkInSuspense, AllocateSuspense, ReturnSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
 l.Reconciliations() // CreateRule, Start, Get""", 'go')}
+<p><code>Ledgers()</code>, <code>Accounts()</code> and <code>System()</code> each work on one kind of object only, and each takes its own id type: <code>LedgerID</code>, <code>AccountID</code> and <code>SystemRef</code>. Passing a ledger id to <code>Accounts().Freeze</code> doesn’t compile; a plain string converted to the wrong type is refused at run time with <code>ErrWrongKind</code>, before anything is written.</p>
 ''')
 
 section('install', 'Install and run Blnk', f'''
@@ -124,10 +127,11 @@ section('setup', 'Set up the service', f'''
 <p>Create one <code>Service</code> at startup and share it; it is safe for concurrent use. Depend on the <code>ledger.Ledger</code> interface (or a single namespace) in the rest of your code.</p>
 {code('setup', 'main.go')}
 {table(['Setting', 'What it does'], [
- ['<code>LedgerID</code>', 'The Blnk ledger customer accounts are opened in.'],
+ ['<code>LedgerID</code>', 'The Blnk ledger customer accounts are opened in. It must exist: call <code>svc.Check(ctx)</code> at startup to find out now. See <a href="#ledgers">Ledgers</a>.'],
  ['<code>Fees</code>', 'Prices every chargeable call that doesn’t set <code>Fee</code> itself. See <a href="#fees">Fees</a>.'],
  ['<code>Limits</code>, <code>Location</code>', 'Per-tier spending caps and the time zone their days reset in. See <a href="#limits">Limits</a>.'],
- ['<code>EnforceAccountStatus</code>', 'Refuses movements touching frozen, blocked or closed accounts (one extra read per account).'],
+ ['<code>EnforceAccountStatus</code>', 'Refuses movements touching frozen, blocked or closed accounts (one extra read per account), and money leaving an account whose ledger is frozen.'],
+ ['<code>LedgerStatusTTL</code>', 'How long a ledger’s frozen/active status is cached (default 30s). A freeze made by another process applies here within this time.'],
  ['<code>Display</code>', 'How amounts are shown per currency. See <a href="#money">Money</a>.'],
  ['<code>Precisions</code>', 'Smallest unit per currency. Built in for fiat and major crypto; never change once money has moved.'],
  ['<code>WithdrawalHoldTTL</code>', 'Pending withdrawals cancel themselves after this (default 24h).'],
@@ -183,7 +187,8 @@ section('accounts-model', 'Accounts and the chart of accounts', f'''
  ['<code>@Suspense</code>', 'Suspense', 'Money that arrived but can’t be matched to a customer yet'],
  ['<code>@Adjustments</code>', 'Equity / expense', 'Counterparty of approved manual corrections'],
 ])}
-<p>Blnk debits the source and credits the destination, so asset and expense accounts run negative and liability and income accounts run positive. Account <code>Kind</code> tells them apart: <code>customer</code>, <code>system</code>, <code>pot</code> or <code>escrow</code>.</p>
+<p>Blnk debits the source and credits the destination, so asset and expense accounts run negative and liability and income accounts run positive. System accounts are their own type, <code>SystemAccount</code>, read through <code>System()</code>: it carries the account’s <code>Type</code> and <code>Normal</code> side from <code>ledger.Chart</code>, and <code>Natural</code>, the balance on its normal side, so an asset that is owed to you reads positive. Provider clearing accounts default to assets; add a payout-only provider to <code>Chart</code> as a liability if you prefer. Customer accounts are <code>Account</code>, whose <code>Kind</code> is <code>customer</code>, <code>pot</code> or <code>escrow</code>.</p>
+{code('system')}
 ''')
 
 section('status', 'Transaction status', f'''
@@ -203,6 +208,9 @@ section('errors', 'Errors', f'''
  ['<code>ErrInsufficientFunds</code>', 'Not enough available balance', '“Not enough money for this.”'],
  ['<code>ErrLimitExceeded</code>', 'Over a per-transaction, daily or monthly limit', 'Offer a KYC upgrade'],
  ['<code>ErrAccountFrozen</code>, <code>ErrAccountClosed</code>', 'Account status blocks it', 'Route to support'],
+ ['<code>ErrLedgerFrozen</code>', 'The account’s ledger is frozen: nothing can leave it', 'Route to support'],
+ ['<code>ErrWrongKind</code>', 'An id of another kind: a ledger id or system account passed to <code>Accounts()</code>, a balance id to <code>Ledgers()</code>…', 'A bug in the caller'],
+ ['<code>ErrLedgerNotFound</code>', 'Opening an account in a ledger that doesn’t exist (also matches <code>ErrNotFound</code>)', 'Fix the configuration'],
  ['<code>ErrInvalidInput</code>', 'Bad amount, missing fee or reference, wrong currency…', 'A bug in the caller'],
  ['<code>ErrDuplicateReference</code>', 'Reference reused for a different movement', 'Investigate; don’t retry'],
  ['<code>ErrNotPending</code>, <code>ErrAlreadyFinalized</code>', 'Confirm/Cancel on something already finished', 'Usually safe to ignore'],
@@ -215,6 +223,12 @@ section('errors', 'Errors', f'''
 
 # --- Customers
 group('Customers and accounts')
+section('ledgers', 'Ledgers', f'''
+{code('ledgers')}
+<p>Blnk has no idempotency for ledgers and doesn’t require unique names, so <code>Ledgers().Create</code> provides it: it looks for a ledger carrying your <code>Key</code> first and returns that one with <code>Replayed</code> set. The same key with a different name is <code>ErrDuplicateReference</code>. Calls in one process with the same key run one at a time; if two processes still race and both create, the oldest ledger wins everywhere and the other is marked <code>duplicate</code>, which <code>Accounts().Open</code> refuses. Create ledgers when you provision, not on the request path.</p>
+<p><code>Accounts().Open</code> checks the ledger exists before opening anything (<code>ErrLedgerNotFound</code> otherwise), and never opens customer accounts in Blnk’s general ledger, where system accounts live.</p>
+''', 'One ledger per market, created once however many times provisioning runs.')
+
 section('onboard', 'Onboard a customer', f'''
 {code('onboard')}
 <p>This creates a Blnk identity and one account per currency. With <code>ExternalID</code> set (your own user id), calling it again after a timeout returns the same accounts and opens any new currencies, so signup is safe to retry. The <code>tier</code> metadata drives limits and pricing.</p>
@@ -227,6 +241,8 @@ section('balance', 'Read a balance', f'''
 
 section('freeze', 'Freeze, unfreeze and close', f'''
 {code('freeze')}
+<p>A whole ledger can be frozen too. Then no money can leave any of its customer accounts, while deposits into them and postings to system accounts carry on:</p>
+{code('freezeledger')}
 <p><code>Accounts().Close</code> refuses while anything is pending, moves any remaining balance to <code>SweepTo</code>, then marks the account closed for good. A frozen account can still be closed.</p>
 ''')
 
@@ -343,7 +359,7 @@ section('settlement', 'Provider settlement', f'''
 <p>Each provider has its own clearing account, so after recording settlements its balance is exactly what that provider still owes you (or you owe it) and can be ticked off against its report. Use <code>SettlementPayout</code> for payout providers you prefund.</p>
 ''', 'Clear Paystack’s receivable when the money reaches your bank.')
 
-section('suspense', 'Unidentified money', code('suspense'), 'Park money you can’t match yet; allocate it once support knows whose it is.')
+section('suspense', 'Unidentified money', code('suspense'), 'Park money you can’t match yet; allocate it once support knows whose it is, or return it to the provider.')
 section('adjust', 'Manual corrections', f'''
 {code('adjust')}
 <p>Every adjustment records its reason, requester and approver in metadata, and the same person can’t do both.</p>
@@ -381,7 +397,7 @@ section('versions', 'Blnk versions and known limits', f'''
 {table(['Needs Core', 'Feature'], [
  ['0.8.4', 'Historical balances (<code>BalanceAt</code>, <code>Statement</code>), global webhooks'],
  ['0.10.0', 'Inline reconciliation'],
- ['0.13.2', 'Filters: history, account search, limits, trial balance, <code>ExternalID</code>'],
+ ['0.13.2', 'Filters: history, account search, limits, trial balance, <code>System().List</code>, <code>Ledgers().Create</code>, <code>ExternalID</code>'],
  ['0.14.1', 'Auto-capture with <code>CaptureAt</code> (inflight commit queue enabled)'],
  ['0.14.2', '<code>ConfirmMany</code> / <code>CancelMany</code>'],
  ['0.15.0', 'Structured error codes (older versions fall back to HTTP status)'],

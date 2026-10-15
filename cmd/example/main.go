@@ -37,12 +37,15 @@ func main() {
 	}
 	client := blnk.New(url, blnk.WithAPIKey(os.Getenv("BLNK_API_KEY")))
 
-	ledgerID := os.Getenv("BLNK_LEDGER_ID")
+	ledgerID := ledger.LedgerID(os.Getenv("BLNK_LEDGER_ID"))
 	if ledgerID == "" {
-		l, err := client.CreateLedger(ctx, blnk.CreateLedgerRequest{Name: "Customer Accounts"})
+		// Create is idempotent by Key: running this again returns the same ledger.
+		l, err := ledger.New(client, ledger.Config{}).Ledgers().Create(ctx, ledger.CreateLedgerInput{
+			Key: "customer-accounts", Name: "Customer Accounts",
+		})
 		must(err)
-		ledgerID = l.LedgerID
-		fmt.Println("created ledger", ledgerID)
+		ledgerID = l.ID
+		fmt.Println("ledger", ledgerID, "replayed:", l.Replayed)
 	}
 
 	service := ledger.New(client, ledger.Config{
@@ -50,6 +53,7 @@ func main() {
 		Precisions:           map[string]int64{"NGN": 100, "USD": 100, "BTC": 100_000_000},
 		EnforceAccountStatus: true,
 	})
+	must(service.Check(ctx))        // fails now if Config.LedgerID doesn't exist
 	var svc ledger.Ledger = service // depend on the interface; Service adds helpers like ComputeFee
 	run := time.Now().UnixNano()    // unique references for this demo run
 
@@ -112,7 +116,7 @@ func main() {
 	must(err)
 
 	// 6. Balances and history.
-	for _, id := range []string{alice.ID, bob.ID} {
+	for _, id := range []ledger.AccountID{alice.ID, bob.ID} {
 		w, err := svc.Accounts().Get(ctx, id)
 		must(err)
 		fmt.Printf("%s balance=%s %s available=%s %s\n", w.MetaData["owner"], w.Balance.Display, w.Currency, w.Available.Display, w.Currency)

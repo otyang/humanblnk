@@ -48,18 +48,74 @@ const (
 	ProviderFeesAccount = "@ProviderFees"
 )
 
-// AccountKind tells customer accounts (the sub-ledger) from system (GL) accounts.
+// AccountKind tells customer accounts from the sub-accounts opened under them.
+// System (GL) accounts are a separate type, SystemAccount, read through System().
 type AccountKind string
 
 const (
 	CustomerAccount AccountKind = "customer" // opened with Accounts().Open
-	SystemAccount   AccountKind = "system"   // "@" indicator, e.g. @FeeIncome, @PaystackClearing
 	PotAccount      AccountKind = "pot"      // savings pot under a customer account (OpenPot)
 	EscrowAccount   AccountKind = "escrow"   // one per escrow agreement (Escrows().Open)
 )
 
-// metaKind is the meta_data key that marks pots and escrow accounts.
+// metaKind is the meta_data key that marks pots and escrow accounts. Callers
+// can't set it: Accounts().Open drops it from their metadata.
 const metaKind = "account_kind"
+
+// GLType is the accounting type of a system account.
+type GLType string
+
+const (
+	GLAsset     GLType = "asset"
+	GLLiability GLType = "liability"
+	GLEquity    GLType = "equity"
+	GLIncome    GLType = "income"
+	GLExpense   GLType = "expense"
+	GLUnknown   GLType = "" // an indicator not in the chart
+)
+
+// NormalSide is the side a system account normally carries its balance on.
+// Blnk debits the source and credits the destination, so a debit-normal
+// account runs negative in Blnk and a credit-normal one positive.
+type NormalSide string
+
+const (
+	DebitNormal  NormalSide = "debit"
+	CreditNormal NormalSide = "credit"
+)
+
+// GLDef describes a system account in the chart.
+type GLDef struct {
+	Type   GLType
+	Normal NormalSide
+}
+
+// Chart is the chart of accounts: what each system account is. Provider
+// clearing accounts ("@<Provider>Clearing") are assets (money the provider
+// owes you) unless listed here. Add your own indicators to it at start-up.
+var Chart = map[string]GLDef{
+	FeeIncomeAccount:       {GLIncome, CreditNormal},
+	DepositClearingAccount: {GLAsset, DebitNormal},
+	PayoutClearingAccount:  {GLLiability, CreditNormal},
+	MerchantPayableAccount: {GLLiability, CreditNormal},
+	SuspenseAccount:        {GLLiability, CreditNormal},
+	FXPoolAccount:          {GLAsset, DebitNormal},
+	AdjustmentsAccount:     {GLEquity, CreditNormal},
+	BankOperatingAccount:   {GLAsset, DebitNormal},
+	ProviderFeesAccount:    {GLExpense, DebitNormal},
+}
+
+// ChartEntry returns what indicator is: its Chart entry, else an asset for a
+// provider clearing account, else GLUnknown.
+func ChartEntry(indicator string) GLDef {
+	if d, ok := Chart[indicator]; ok {
+		return d
+	}
+	if strings.HasPrefix(indicator, "@") && strings.HasSuffix(indicator, "Clearing") {
+		return GLDef{GLAsset, DebitNormal}
+	}
+	return GLDef{}
+}
 
 // ClearingAccount returns the per-provider clearing account:
 // ClearingAccount("paystack") == "@PaystackClearing". It also accepts "@Paystack"

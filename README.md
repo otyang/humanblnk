@@ -95,27 +95,35 @@ Display is **cut, never rounded up**, so a displayed balance can always be spent
 Methods are grouped into namespaces, each its own interface:
 
 ```go
-l.Accounts()        // Open, Get, GetSystem, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+l.Ledgers()         // Create, Get, List, Freeze, Unfreeze
+l.Accounts()        // Open, Get, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+l.System()          // Get, List, History, BalanceAt, Statement
 l.Customers()       // Open, Get, OpenPot, ListPots
 l.Payments()        // Deposit, Withdraw, Transfer, Split, Exchange, Bulk, Schedule, QuoteDeposit, QuoteWithdraw, QuoteTransfer
 l.Pending()         // Hold, Confirm, Cancel, ConfirmMany, CancelMany
 l.Transactions()    // Get, GetByReference, Refund, RefundPartial
 l.Disputes()        // Open, Resolve
 l.Escrows()         // Open, Get, Release, Refund
-l.Operations()      // RecordSettlement, ParkInSuspense, AllocateSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
+l.Operations()      // RecordSettlement, ParkInSuspense, AllocateSuspense, ReturnSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
 l.Reconciliations() // CreateRule, Start, Get
 ```
 
+`Ledgers()`, `Accounts()` and `System()` each work on one kind of object only and take their own id type (`LedgerID`, `AccountID`, `SystemRef`), so a ledger id can't be passed to `Accounts().Freeze`, nor a system account to `Accounts().Close`. A plain string converted to the wrong type is refused at run time with `ErrWrongKind` before anything is written.
+
 A component that only needs one area can depend on that interface alone, e.g. a payout worker on `ledger.Pending`. Helpers that don't call Blnk stay on `Service`: `ComputeFee` (also a package function), `Precision`, `Parse`, and the webhook functions.
 
-### Accounts and customers
+### Ledgers, accounts and customers
 
 | Method | What it does in Blnk |
 |---|---|
-| `Accounts().Open` / `Accounts().Get` | `POST /balances` / `GET /balances/{id}`. An account exposes `Balance`, `Available` (balance − pending debits), pending in/out and `Kind` (`customer`, `system`, `pot`, `escrow`). Set `ExternalID` (your user id) and retries return the same account |
-| `Accounts().GetSystem` | `GET /balances/indicator/{@X}/currency/{CUR}`, e.g. `@FeeIncome` |
-| `Accounts().Find` | `POST /balances/filter` by identity, currency, kind, status or any `meta_data` key |
+| `Ledgers().Create` | `POST /ledgers`, made idempotent by a required `Key` (stored as `meta_data.ledger_key`): an existing ledger with the key is returned with `Replayed`, so a ledger is never created twice. If two processes race, the oldest wins and the other is marked `duplicate` |
+| `Ledgers().Get` / `Ledgers().List` | `GET /ledgers/{id}` / `GET /ledgers` |
+| `Ledgers().Freeze` / `Ledgers().Unfreeze` | status in the ledger's `meta_data`. With `EnforceAccountStatus` on, no money can leave its customer accounts (`ErrLedgerFrozen`); money can still come in. Status is cached for `LedgerStatusTTL` (30s) |
+| `Accounts().Open` / `Accounts().Get` | `POST /balances` / `GET /balances/{id}`. Open first checks the ledger exists (`ErrLedgerNotFound`). An account exposes `Balance`, `Available` (balance − pending debits), pending in/out and `Kind` (`customer`, `pot`, `escrow`). Set `ExternalID` (your user id) and retries return the same account |
+| `Accounts().Find` | `POST /balances/filter` by identity, currency, kind, status or any `meta_data` key. System accounts are never listed |
 | `Accounts().Freeze` / `Accounts().Unfreeze` / `Accounts().Close` | status in `meta_data`, enforced when `EnforceAccountStatus` is on. Closing refuses while anything is pending, sweeps the balance to `SweepTo`, then marks it `closed` |
+| `System().Get` / `System().List` | `GET /balances/indicator/{@X}/currency/{CUR}`, e.g. `@FeeIncome`, as a `SystemAccount` with its `Type`, `Normal` side and `Natural` balance from `ledger.Chart`. `History`, `BalanceAt` and `Statement` work as for accounts |
+| `Service.Check` | verifies `Config.LedgerID` exists; call it at startup |
 | `Customers().Open` / `Customers().Get` | Blnk identity + one account per currency in one call; safe to retry with `ExternalID` |
 | `Customers().OpenPot` / `Customers().ListPots` | savings pots under a customer account (same currency and identity), optional goal |
 
@@ -186,7 +194,7 @@ With neither, the call fails with `ErrInvalidInput` before anything reaches Blnk
 | Method | Entries |
 |---|---|
 | `Operations().RecordSettlement` | clears a provider clearing account against `@BankOperating`, with provider fees to `@ProviderFees`; atomic |
-| `Operations().ParkInSuspense` / `Operations().AllocateSuspense` | unidentified money → `@Suspense` → its owner once known |
+| `Operations().ParkInSuspense` / `Operations().AllocateSuspense` / `Operations().ReturnSuspense` | unidentified money → `@Suspense` → its owner once known, or back to the provider's clearing account |
 | `Operations().Adjust` | manual correction against `@Adjustments`; reason and an approver (not the requester) are required |
 | `Reconciliations().CreateRule` / `Reconciliations().Start` / `Reconciliations().Get` | Blnk reconciliation: records inline (≤ 10,000) or a CSV/JSON upload |
 | `Operations().WatchBalance` / `Operations().Unwatch` | Blnk balance monitors → `balance.monitor` webhook |
@@ -292,7 +300,7 @@ BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -v
 | 0.10.0 | instant reconciliation (`Reconciliations().Start` with `Records`) |
 | 0.10.1 | `from_source` historical balances (used for exact statements) |
 | 0.13.0 | signed webhooks |
-| 0.13.2 | filters (`Accounts().History`, `Accounts().Find`, `Operations().TrialBalance`, limits, `ExternalID`) |
+| 0.13.2 | filters (`Accounts().History`, `Accounts().Find`, `Operations().TrialBalance`, `System().List`, `Ledgers().Create`, limits, `ExternalID`) |
 | 0.14.1 | auto-capture `CaptureAt` (with `BLNK_QUEUE_INFLIGHT_COMMIT` / `inflight_commit_queue`) |
 | 0.14.2 | `Pending().ConfirmMany` / `Pending().CancelMany` |
 | 0.15.0 | structured error codes (older versions fall back to HTTP status) |

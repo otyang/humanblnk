@@ -17,7 +17,7 @@ func Example() {
 	core := ledgertest.NewServer() // in-memory Blnk, for this example
 	defer core.Close()
 	ledgerID := core.CreateLedger("Wallets")
-	l := humanblnk.New(core.URL(), humanblnk.Config{LedgerID: ledgerID})
+	l := humanblnk.New(core.URL(), humanblnk.Config{LedgerID: humanblnk.LedgerID(ledgerID)})
 
 	ada, _ := l.Accounts().Open(ctx, humanblnk.OpenAccountInput{Currency: "NGN"})
 	tunde, _ := l.Accounts().Open(ctx, humanblnk.OpenAccountInput{Currency: "NGN"})

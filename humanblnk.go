@@ -55,6 +55,7 @@ const Version = blnk.Version
 // Types. Each is documented in package ledger.
 type (
 	Account             = ledger.Account
+	AccountID           = ledger.AccountID
 	AccountKind         = ledger.AccountKind
 	AccountPage         = ledger.AccountPage
 	AccountQuery        = ledger.AccountQuery
@@ -62,6 +63,7 @@ type (
 	AdjustInput         = ledger.AdjustInput
 	AdjustmentType      = ledger.AdjustmentType
 	AllocateInput       = ledger.AllocateInput
+	Balances            = ledger.Balances
 	BatchResult         = ledger.BatchResult
 	BulkEvent           = ledger.BulkEvent
 	BulkReceipt         = ledger.BulkReceipt
@@ -69,6 +71,7 @@ type (
 	CloseInput          = ledger.CloseInput
 	Config              = ledger.Config
 	ConfirmItem         = ledger.ConfirmItem
+	CreateLedgerInput   = ledger.CreateLedgerInput
 	Customer            = ledger.Customer
 	CustomerInput       = ledger.CustomerInput
 	Customers           = ledger.Customers
@@ -92,17 +95,25 @@ type (
 	FeeRequest          = ledger.FeeRequest
 	FeeRule             = ledger.FeeRule
 	FeeTier             = ledger.FeeTier
+	GLDef               = ledger.GLDef
+	GLType              = ledger.GLType
 	HistoryPage         = ledger.HistoryPage
 	HistoryQuery        = ledger.HistoryQuery
 	HoldInput           = ledger.HoldInput
 	Interval            = ledger.Interval
 	Ledger              = ledger.Ledger
+	LedgerID            = ledger.LedgerID
+	LedgerInfo          = ledger.LedgerInfo
+	LedgerPage          = ledger.LedgerPage
+	LedgerQuery         = ledger.LedgerQuery
+	Ledgers             = ledger.Ledgers
 	Leg                 = ledger.Leg
 	Limit               = ledger.Limit
 	LimitUsage          = ledger.LimitUsage
 	MatchingCriterion   = ledger.MatchingCriterion
 	MatchingRule        = ledger.MatchingRule
 	Money               = ledger.Money
+	NormalSide          = ledger.NormalSide
 	Observer            = ledger.Observer
 	ObserverFunc        = ledger.ObserverFunc
 	OpError             = ledger.OpError
@@ -120,6 +131,7 @@ type (
 	Reconciliations     = ledger.Reconciliations
 	RecurringInput      = ledger.RecurringInput
 	RefundInput         = ledger.RefundInput
+	ReturnSuspenseInput = ledger.ReturnSuspenseInput
 	Rounding            = ledger.Rounding
 	Service             = ledger.Service
 	SettlementDirection = ledger.SettlementDirection
@@ -130,6 +142,9 @@ type (
 	Statement           = ledger.Statement
 	StatementLine       = ledger.StatementLine
 	SuspenseInput       = ledger.SuspenseInput
+	System              = ledger.System
+	SystemAccount       = ledger.SystemAccount
+	SystemRef           = ledger.SystemRef
 	Transactions        = ledger.Transactions
 	TransferInput       = ledger.TransferInput
 	TrialBalance        = ledger.TrialBalance
@@ -142,6 +157,7 @@ type (
 // Functions.
 var (
 	Amount          = ledger.Amount
+	ChartEntry      = ledger.ChartEntry
 	ClearingAccount = ledger.ClearingAccount
 	ComputeFee      = ledger.ComputeFee
 	EntryStatusOf   = ledger.EntryStatusOf
@@ -164,6 +180,8 @@ var (
 	ErrFeePricing         = ledger.ErrFeePricing
 	ErrInsufficientFunds  = ledger.ErrInsufficientFunds
 	ErrInvalidInput       = ledger.ErrInvalidInput
+	ErrLedgerFrozen       = ledger.ErrLedgerFrozen
+	ErrLedgerNotFound     = ledger.ErrLedgerNotFound
 	ErrLimitExceeded      = ledger.ErrLimitExceeded
 	ErrNotFound           = ledger.ErrNotFound
 	ErrNotPending         = ledger.ErrNotPending
@@ -171,12 +189,14 @@ var (
 	ErrSignature          = ledger.ErrSignature
 	ErrUnauthorized       = ledger.ErrUnauthorized
 	ErrUnavailable        = ledger.ErrUnavailable
+	ErrWrongKind          = ledger.ErrWrongKind
 )
 
 // Values.
 var (
 	BuiltinDisplay    = ledger.BuiltinDisplay
 	BuiltinPrecisions = ledger.BuiltinPrecisions
+	Chart             = ledger.Chart
 	Daily             = ledger.Daily
 	Monthly           = ledger.Monthly
 	NoFee             = ledger.NoFee
@@ -190,7 +210,9 @@ const (
 	AdjustmentsAccount        = ledger.AdjustmentsAccount
 	All                       = ledger.All
 	BankOperatingAccount      = ledger.BankOperatingAccount
+	CreditNormal              = ledger.CreditNormal
 	CustomerAccount           = ledger.CustomerAccount
+	DebitNormal               = ledger.DebitNormal
 	DepositClearingAccount    = ledger.DepositClearingAccount
 	DisputeRejected           = ledger.DisputeRejected
 	DisputeUpheld             = ledger.DisputeUpheld
@@ -221,6 +243,13 @@ const (
 	FeeIncomeAccount          = ledger.FeeIncomeAccount
 	FeeTransfer               = ledger.FeeTransfer
 	FeeWithdrawal             = ledger.FeeWithdrawal
+	GLAsset                   = ledger.GLAsset
+	GLEquity                  = ledger.GLEquity
+	GLExpense                 = ledger.GLExpense
+	GLIncome                  = ledger.GLIncome
+	GLLiability               = ledger.GLLiability
+	GLUnknown                 = ledger.GLUnknown
+	GeneralLedgerID           = ledger.GeneralLedgerID
 	Incoming                  = ledger.Incoming
 	MerchantPayableAccount    = ledger.MerchantPayableAccount
 	Outgoing                  = ledger.Outgoing
@@ -233,5 +262,4 @@ const (
 	SettlementCollection      = ledger.SettlementCollection
 	SettlementPayout          = ledger.SettlementPayout
 	SuspenseAccount           = ledger.SuspenseAccount
-	SystemAccount             = ledger.SystemAccount
 )

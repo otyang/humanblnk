@@ -30,9 +30,9 @@ func docSetup() (*ledger.Service, error) {
 		blnk.WithAPIKey(os.Getenv("BLNK_API_KEY")))
 
 	svc := ledger.New(client, ledger.Config{
-		LedgerID:             os.Getenv("BLNK_LEDGER_ID"), // customer accounts live here
-		EnforceAccountStatus: true,                        // frozen/closed accounts can't move money
-		Fees:                 pricing,                     // central fee pricing (see Fees)
+		LedgerID:             ledger.LedgerID(os.Getenv("BLNK_LEDGER_ID")), // customer accounts live here
+		EnforceAccountStatus: true,                                         // frozen/closed accounts can't move money
+		Fees:                 pricing,                                      // central fee pricing (see Fees)
 		Limits: []ledger.Limit{ // KYC tiers (see Limits)
 			{Tier: "tier1", Currency: "NGN", PerTransaction: "50000", Daily: "200000"},
 			{Tier: "tier2", Currency: "NGN", PerTransaction: "100000", Daily: "500000"},
@@ -96,6 +96,24 @@ func TestDocsSamples(t *testing.T) {
 		}
 	}()
 
+	// doc:ledgers
+	// Provisioning, at deploy time: Create is idempotent by Key, so running the
+	// job twice never makes a second ledger.
+	ng, err := l.Ledgers().Create(ctx, ledger.CreateLedgerInput{Key: "oja-ng", Name: "Oja Nigeria"})
+	if err != nil {
+		return
+	}
+	same, _ := l.Ledgers().Create(ctx, ledger.CreateLedgerInput{Key: "oja-ng", Name: "Oja Nigeria"})
+	fmt.Println(same.ID == ng.ID, same.Replayed) // true true
+
+	// At start-up: fail now, not on the first signup, if Config.LedgerID is wrong.
+	err = svc.Check(ctx)
+	// enddoc
+	check(err)
+	if same.ID != ng.ID || !same.Replayed {
+		t.Fatalf("ledger replay: %+v", same)
+	}
+
 	// doc:onboard
 	ada, err := l.Customers().Open(ctx, ledger.CustomerInput{
 		FirstName: "Ada", LastName: "Obi",
@@ -116,6 +134,8 @@ func TestDocsSamples(t *testing.T) {
 		Currencies: []string{"NGN"}, ExternalID: "user_9034", MetaData: map[string]any{"tier": "tier1"}})
 	check(err)
 	tundeNGN := tunde.Accounts["NGN"]
+	ngWallet, err := l.Accounts().Open(ctx, ledger.OpenAccountInput{Currency: "NGN", LedgerID: ng.ID})
+	check(err)
 
 	// doc:topup
 	// Paystack's charge.success webhook told you ₦150,000 arrived.
@@ -140,10 +160,11 @@ func TestDocsSamples(t *testing.T) {
 	if !again.Replayed {
 		t.Fatal("replay")
 	}
-	fund := func(id, amount, cur, ref string) {
+	fund := func(id ledger.AccountID, amount, cur, ref string) {
 		_, err := l.Payments().Deposit(ctx, ledger.DepositInput{AccountID: id, Amount: ledger.Amount(amount, cur), Fee: ledger.NoFee, Reference: ref, Provider: "paystack"})
 		check(err)
 	}
+	fund(ngWallet.ID, "1000", "NGN", "ng_wallet_in")
 	fund(adaUSD.ID, "300", "USD", "usd_wire_1")
 
 	// doc:balance
@@ -281,7 +302,7 @@ func TestDocsSamples(t *testing.T) {
 	// A ₦25,000 order paid by card through Paystack: the seller gets the rest
 	// after Oja's 5% commission and a fixed ₦1,500 delivery fee for the rider.
 	order, err := l.Payments().Split(ctx, ledger.SplitInput{
-		From:           ledger.ClearingAccount("paystack"), // money arriving from outside
+		From:           ledger.AccountID(ledger.ClearingAccount("paystack")), // money arriving from outside
 		AllowOverdraft: true,
 		Amount:         ledger.Amount("25000", "NGN"),
 		Reference:      "order_10442",
@@ -379,12 +400,12 @@ func TestDocsSamples(t *testing.T) {
 
 	// doc:payroll
 	// Chidi Stores pays its staff on the 25th: all or nothing.
-	staff := map[string]string{tundeNGN.ID: "85000", adaNGN.ID: "120000"}
+	staff := map[ledger.AccountID]string{tundeNGN.ID: "85000", adaNGN.ID: "120000"}
 	var items []ledger.TransferInput
 	for accountID, salary := range staff {
 		items = append(items, ledger.TransferInput{
 			From: chidi.ID, To: accountID, Amount: ledger.Amount(salary, "NGN"),
-			Fee: ledger.NoFee, Reference: "payroll_2026_09_" + accountID,
+			Fee: ledger.NoFee, Reference: "payroll_2026_09_" + string(accountID),
 		})
 	}
 	batch, err := l.Payments().Bulk(ctx, ledger.BulkTransferInput{Items: items, Atomic: true})
@@ -438,6 +459,19 @@ func TestDocsSamples(t *testing.T) {
 		t.Fatalf("freeze: %v", err)
 	}
 
+	// doc:freezeledger
+	// The regulator orders a hold on everything in the Nigeria ledger.
+	_ = l.Ledgers().Freeze(ctx, ng.ID, "CBN directive 2026/114")
+	_, err = l.Payments().Transfer(ctx, ledger.TransferInput{From: ngWallet.ID, To: adaNGN.ID,
+		Amount: ledger.Amount("100", "NGN"), Reference: "p2p_x2"})
+	// errors.Is(err, ledger.ErrLedgerFrozen) == true: nothing can leave its accounts,
+	// but deposits into them still post.
+	_ = l.Ledgers().Unfreeze(ctx, ng.ID)
+	// enddoc
+	if !errors.Is(err, ledger.ErrLedgerFrozen) {
+		t.Fatalf("ledger freeze: %v", err)
+	}
+
 	// doc:settlement
 	// Paystack's settlement report: ₦4,880,000 collected yesterday, ₦73,200
 	// in fees, ₦4,806,800 paid into your bank.
@@ -467,6 +501,8 @@ func TestDocsSamples(t *testing.T) {
 		AccountID: tundeNGN.ID, Amount: ledger.Amount("15000", "NGN"),
 		Reference: "alloc_7700011", SuspenseReference: "paystack_T7700011",
 	})
+	// Had Paystack reversed it instead, send it back with
+	// l.Operations().ReturnSuspense(ctx, ledger.ReturnSuspenseInput{Provider: "paystack", ...}).
 	// enddoc
 	check(err)
 
@@ -491,16 +527,28 @@ func TestDocsSamples(t *testing.T) {
 	}
 	fmt.Println("customers hold", tb.CustomerFunds.Display) // what you owe customers
 	for _, a := range tb.System {
-		fmt.Println(a.Indicator, a.Balance.Display) // @FeeIncome, @PaystackClearing, …
+		// Natural is the balance on the account's normal side, so an asset
+		// like @PaystackClearing reads positive when Paystack owes you.
+		fmt.Println(a.Indicator, a.Type, a.Natural.Display) // @FeeIncome income 3330.00, …
 	}
 	// enddoc
 	check(err)
 	say("trial: balanced=%v customers=%s", tb.Balanced, tb.CustomerFunds.Display)
 
+	// doc:system
+	// System accounts are read through System(), never Accounts().
+	fees, err := l.System().Get(ctx, ledger.SystemRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	if err != nil {
+		return
+	}
+	fmt.Println(fees.Type, fees.Normal, fees.Natural.Display) // income credit 3330.00
+	// l.Accounts().Get(ctx, ledger.AccountID(fees.ID)) fails with ErrWrongKind.
+	// enddoc
+	check(err)
+
 	// doc:watch
-	payout, _ := l.Accounts().GetSystem(ctx, "@FlutterwaveClearing", "NGN")
 	_, err = l.Operations().WatchBalance(ctx, ledger.WatchInput{
-		AccountID: payout.ID,
+		System:    ledger.SystemRef{Indicator: "@FlutterwaveClearing", Currency: "NGN"},
 		Operator:  ">",
 		Threshold: ledger.Amount("10000000", ""), // ₦10m of payouts not yet settled
 	})

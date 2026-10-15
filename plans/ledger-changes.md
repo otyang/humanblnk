@@ -6,7 +6,7 @@ Blnk object: `Ledgers()` on ledgers, `Accounts()` on customer balances,
 no deprecation wrappers, released as v0.2.0 (allowed pre-1.0 per CHANGELOG).
 
 - **Branch:** `feature-refactor/ledger-count-status-field`
-- **Status:** planned, not started
+- **Status:** implemented on `feature-refactor/ledger-count-status-field` (v0.2.0)
 
 ## Problem (as of v0.1.0)
 
@@ -29,7 +29,7 @@ no deprecation wrappers, released as v0.2.0 (allowed pre-1.0 per CHANGELOG).
 | # | Question | Decision |
 |---|---|---|
 | 1 | What does a frozen ledger block? | **Outgoing money only** from its customer accounts, same as account freeze. Incoming money and internal postings to `@` system accounts still post. |
-| 2 | Operations that legitimately target either kind of account (e.g. `AllocateSuspense` returning money to a clearing account) | **Yes, handle explicitly.** Proposed: split into separate methods/fields so each stays strictly typed (e.g. `AllocateSuspense` → customer `AccountID`; `ReturnSuspense` → `SystemRef`). Confirm split vs. union field before step 5. |
+| 2 | Operations that legitimately target either kind of account (e.g. `AllocateSuspense` returning money to a clearing account) | **Yes, handle explicitly: split.** `AllocateSuspense` takes a customer `AccountID`; new `ReturnSuspense` sends money back to a provider's clearing account. |
 | 3 | Include `Ledgers().Create`? | **Yes.** |
 | 4 | Ledger creation | **Idempotent: no duplicate ledgers.** Required `Key`; same key returns the existing ledger. |
 | 5 | Opening an account | **Validate the ledger exists first**; missing ledger → `ErrLedgerNotFound`. |
@@ -97,57 +97,57 @@ type Ledger interface {
 ## Steps
 
 ### 1. Types — `ledger/ids.go`, `ledger/accounts.go`
-- [ ] `type LedgerID string`, `type AccountID string`,
+- [x] `type LedgerID string`, `type AccountID string`,
       `type SystemRef struct{ Indicator, Currency string }`, each with `Valid()`.
-- [ ] `Ledger` result type (id, key, name, status — active/frozen/duplicate —
+- [x] `Ledger` result type (id, key, name, status — active/frozen/duplicate —
       metadata, created at, `Replayed`).
-- [ ] `CreateLedgerInput` with required `Key`; new error kind `ErrLedgerNotFound`.
-- [ ] `SystemAccount` type with `Type` (Asset/Liability/Income/Expense) and
+- [x] `CreateLedgerInput` with required `Key`; new error kind `ErrLedgerNotFound`.
+- [x] `SystemAccount` type with `Type` (Asset/Liability/Income/Expense) and
       `Normal` (Debit/Credit); shared `Balances` struct embedded in both
       `Account` and `SystemAccount`.
-- [ ] Chart of accounts becomes a `Chart` registry (indicator → type/normal side);
+- [x] Chart of accounts becomes a `Chart` registry (indicator → type/normal side);
       clearing accounts typed by naming rule; `Config` overrides map onto it.
-- [ ] Remove `SystemAccount` from `AccountKind` (customer, pot, escrow only).
+- [x] Remove `SystemAccount` from `AccountKind` (customer, pot, escrow only).
 
 ### 2. Guards — `ledger/guard.go`
-- [ ] `loadAccount(ctx, op, AccountID)`: prefix check, fetch, reject `@` indicator.
-- [ ] `loadLedger(ctx, op, LedgerID)`: prefix check, fetch.
-- [ ] `loadSystem(ctx, op, SystemRef)`: require `@`, fetch by indicator.
-- [ ] Every namespace method loads through its guard; remove the ad-hoc `@`
+- [x] `loadAccount(ctx, op, AccountID)`: prefix check, fetch, reject `@` indicator.
+- [x] `loadLedger(ctx, op, LedgerID)`: prefix check, fetch.
+- [x] `loadSystem(ctx, op, SystemRef)`: require `@`, fetch by indicator.
+- [x] Every namespace method loads through its guard; remove the ad-hoc `@`
       check in `Close`.
 
 ### 3. Namespaces
-- [ ] `Accounts()`: all methods take `AccountID` and use `loadAccount`;
+- [x] `Accounts()`: all methods take `AccountID` and use `loadAccount`;
       `Find` always excludes indicator balances; `Open` strips `account_kind`
       and `status` from caller metadata; remove `GetSystem`.
-- [ ] `System()`: new; `History`/`BalanceAt`/`Statement` share private helpers
+- [x] `System()`: new; `History`/`BalanceAt`/`Statement` share private helpers
       (keyed by balance id) with `Accounts()`.
-- [ ] `Ledgers()`: new; `Get` on existing client call; add `ListLedgers` and
+- [x] `Ledgers()`: new; `Get` on existing client call; add `ListLedgers` and
       `FilterLedgers` to `blnk/api.go`; `Freeze`/`Unfreeze` write ledger metadata.
-- [ ] `Ledgers().Create`: idempotent by `Key` — lookup, create, re-lookup
+- [x] `Ledgers().Create`: idempotent by `Key` — lookup, create, re-lookup
       (oldest wins, others tagged duplicate), `singleflight` per key.
-- [ ] `Accounts().Open`: validate ledger via `loadLedger` (existence cache).
-- [ ] `Service.Check(ctx)`: verify `Config.LedgerID` at startup.
+- [x] `Accounts().Open`: validate ledger via `loadLedger` (existence cache).
+- [x] `Service.Check(ctx)`: verify `Config.LedgerID` at startup.
 
 ### 4. Ledger freeze enforcement
-- [ ] `checkActive` also checks the status of each **source** customer
+- [x] `checkActive` also checks the status of each **source** customer
       balance's ledger (outgoing only, per decision 1).
-- [ ] Short-lived cache of ledger status keyed by ledger id; document the
+- [x] Short-lived cache of ledger status keyed by ledger id; document the
       staleness window.
-- [ ] `@` system accounts are never blocked by ledger status.
+- [x] `@` system accounts are never blocked by ledger status.
 
 ### 5. Callers
-- [ ] `Customers`, `Escrows`, pots, `Payments`, `Pending`, `Disputes`,
+- [x] `Customers`, `Escrows`, pots, `Payments`, `Pending`, `Disputes`,
       `Operations` inputs take `AccountID` where they now take `string`.
-- [ ] Mixed-target operations per decision 2 (split `AllocateSuspense` etc.).
-- [ ] `TrialBalance.System` → `[]*SystemAccount`.
-- [ ] Events: add `Ledger` / `SystemAccount` payloads where relevant.
-- [ ] `instrument.go`: Observer wrappers for `Ledgers()` and `System()`.
+- [x] Mixed-target operations per decision 2 (split `AllocateSuspense` etc.).
+- [x] `TrialBalance.System` → `[]*SystemAccount`.
+- [x] Events: add `Ledger` / `SystemAccount` payloads where relevant.
+- [x] `instrument.go`: Observer wrappers for `Ledgers()` and `System()`.
 
 ### 6. Fake server and tests
-- [ ] `ledgertest`: ledger endpoints (create, get, list, metadata).
-- [ ] Update the existing test suite to the new types.
-- [ ] New tests:
+- [x] `ledgertest`: ledger endpoints (create, get, list, metadata).
+- [x] Update the existing test suite to the new types.
+- [x] New tests:
   - ledger id → `Accounts().Freeze` rejected
   - system balance id → `Accounts().Get/Close/Statement/LimitUsage` rejected
   - `Find` excludes system balances
@@ -164,8 +164,19 @@ type Ledger interface {
   - `Check` with bad `Config.LedgerID` → error
 
 ### 7. Docs and release
-- [ ] Update `cmd/example`, README, `docs.html`; regenerate `CONTRACT.md`
+- [x] Update `cmd/example`, README, `docs.html`; regenerate `CONTRACT.md`
       (`scripts/gencontract.py`) and docs (`scripts/gendocs.sh`).
-- [ ] `blnk/version.go` → `0.2.0`; CHANGELOG entry listing every breaking
+- [x] `blnk/version.go` → `0.2.0`; CHANGELOG entry listing every breaking
       change under **Changed**.
-- [ ] `go vet`, tests and Makefile CI targets pass before pushing.
+- [x] `go vet`, tests and Makefile CI targets pass before pushing.
+
+## Notes from implementation
+
+- Movement inputs that legitimately accept a system account (transfer, split,
+  hold destination, escrow beneficiary, close sweep) keep `AccountID` and take
+  it as `AccountID("@Name")`; the customer-only ones (deposit, withdraw, hold
+  account, exchange, adjust, allocate, escrow payer, pot parent) refuse it.
+- `WatchInput` takes either `AccountID` or `System SystemRef`.
+- Ledger freeze also blocks `Accounts().Close` from sweeping money out.
+- `Ledgers().Create` relies on `POST /ledgers/filter` (Core 0.13.2+ filters);
+  not yet verified against a live Core.

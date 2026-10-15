@@ -13,9 +13,10 @@ import (
 
 // CloseInput closes an account (Accounts().Close).
 type CloseInput struct {
-	// SweepTo receives any remaining balance (e.g. the customer's bank payout
-	// account, or another of their accounts). Required when the balance isn't zero.
-	SweepTo   string
+	// SweepTo receives any remaining balance: another customer account, or a
+	// system account such as AccountID("@PayoutClearing"). Required when the
+	// balance isn't zero.
+	SweepTo   AccountID
 	Reference string // REQUIRED when there is a balance to sweep
 	Reason    string
 }
@@ -24,14 +25,11 @@ type CloseInput struct {
 // closed. It refuses while anything is pending (INFLIGHT) or the balance is
 // negative. Closed accounts are rejected by every movement when
 // Config.EnforceAccountStatus is on. Closing a frozen account is allowed.
-func (s accountsAPI) Close(ctx context.Context, accountID string, in CloseInput) (*Account, error) {
+func (s accountsAPI) Close(ctx context.Context, accountID AccountID, in CloseInput) (*Account, error) {
 	const op = "ledger.Accounts.Close"
-	if accountID == "" || strings.HasPrefix(accountID, "@") {
-		return nil, invalid(op, "a customer account id is required")
-	}
-	b, err := s.c.GetBalance(ctx, accountID)
+	b, err := s.loadAccount(ctx, op, accountID)
 	if err != nil {
-		return nil, mapErr(op, err)
+		return nil, err
 	}
 	if str(b.MetaData["status"]) == "closed" {
 		return s.toAccount(b), nil
@@ -47,6 +45,20 @@ func (s accountsAPI) Close(ctx context.Context, accountID string, in CloseInput)
 		if in.SweepTo == "" || strings.TrimSpace(in.Reference) == "" {
 			return nil, invalid(op, "account has a balance: SweepTo and Reference are required")
 		}
+		if in.SweepTo == accountID {
+			return nil, invalid(op, "cannot sweep an account into itself")
+		}
+		// A frozen account can still be swept on closure; a frozen ledger can't:
+		// nothing leaves it.
+		if s.cfg.EnforceAccountStatus {
+			lg, err := s.ledgerFor(ctx, op, LedgerID(b.LedgerID), false)
+			if err != nil {
+				return nil, err
+			}
+			if lg.Status == "frozen" {
+				return nil, &OpError{Op: op, Kind: ErrLedgerFrozen, Cause: fmt.Errorf("ledger %s of account %s is frozen", b.LedgerID, accountID)}
+			}
+		}
 		amount := s.money(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
 		// Built directly so a frozen account can still be swept on closure.
 		req, err := s.transferReq(TransferInput{
@@ -60,7 +72,7 @@ func (s accountsAPI) Close(ctx context.Context, accountID string, in CloseInput)
 			return nil, err
 		}
 	}
-	if _, err := s.c.UpdateMetadata(ctx, accountID, blnk.MetaData{
+	if _, err := s.c.UpdateMetadata(ctx, string(accountID), blnk.MetaData{
 		"status": "closed", "status_reason": in.Reason,
 		"status_changed_at": s.cfg.Now().UTC().Format(time.RFC3339),
 	}); err != nil {
@@ -88,15 +100,16 @@ func (s operationsAPI) ParkInSuspense(ctx context.Context, in SuspenseInput) (*R
 		md[k] = v
 	}
 	return s.move(ctx, "ledger.Operations.ParkInSuspense", TransferInput{
-		From: s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount), To: SuspenseAccount,
+		From: AccountID(s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount)), To: SuspenseAccount,
 		Amount: in.Amount, Reference: in.Reference, AllowOverdraft: true,
 		Description: firstNonEmpty(in.Note, "Unidentified funds"), MetaData: md,
 	}, "suspense_in")
 }
 
-// AllocateInput moves money out of suspense once its owner is known.
+// AllocateInput moves money out of suspense to the customer it belongs to.
+// To send it back to the provider instead, use ReturnSuspense.
 type AllocateInput struct {
-	AccountID string // the customer account, or a clearing account to send it back
+	AccountID AccountID // the customer account
 	Amount    Money
 	Reference string // REQUIRED
 	// SuspenseReference links the allocation to the ParkInSuspense reference.
@@ -104,14 +117,45 @@ type AllocateInput struct {
 	Note              string
 }
 
-// AllocateSuspense moves parked money to its owner: @Suspense → account. It
-// can't allocate more than suspense holds.
+// AllocateSuspense moves parked money to its owner: @Suspense → customer
+// account. It can't allocate more than suspense holds.
 func (s operationsAPI) AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error) {
-	return s.move(ctx, "ledger.Operations.AllocateSuspense", TransferInput{
+	const op = "ledger.Operations.AllocateSuspense"
+	if err := customerOnly(op, in.AccountID); err != nil {
+		return nil, err
+	}
+	return s.move(ctx, op, TransferInput{
 		From: SuspenseAccount, To: in.AccountID, Amount: in.Amount, Reference: in.Reference,
 		Description: firstNonEmpty(in.Note, "Suspense allocation"),
 		MetaData:    map[string]any{"suspense_reference": in.SuspenseReference},
 	}, "suspense_out")
+}
+
+// ReturnSuspenseInput sends parked money back to the provider it came through.
+type ReturnSuspenseInput struct {
+	Provider        string // e.g. "paystack" → @PaystackClearing
+	ClearingAccount string // or an exact clearing account; default Config.DepositClearingAccount
+	Amount          Money
+	Reference       string // REQUIRED
+	// SuspenseReference links the return to the ParkInSuspense reference.
+	SuspenseReference string
+	Note              string
+}
+
+// ReturnSuspense sends parked money back where it came from: @Suspense → the
+// provider's clearing account, e.g. when the provider reverses the payment.
+// It can't return more than suspense holds.
+func (s operationsAPI) ReturnSuspense(ctx context.Context, in ReturnSuspenseInput) (*Receipt, error) {
+	const op = "ledger.Operations.ReturnSuspense"
+	clearing := s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount)
+	if !strings.HasPrefix(clearing, "@") {
+		return nil, invalid(op, "clearing account must be a system account (\"@Name\")")
+	}
+	return s.move(ctx, op, TransferInput{
+		From: SuspenseAccount, To: AccountID(clearing), Amount: in.Amount, Reference: in.Reference,
+		Description: firstNonEmpty(in.Note, "Suspense return"),
+		MetaData:    map[string]any{"suspense_reference": in.SuspenseReference},
+	}, "suspense_return")
 }
 
 // ----- Adjustments -------------------------------------------------------------
@@ -126,14 +170,14 @@ const (
 
 // AdjustInput is a manual correction, with who asked for it and who approved it.
 type AdjustInput struct {
-	AccountID   string
+	AccountID   AccountID // the customer account corrected
 	Type        AdjustmentType
 	Amount      Money
 	Reason      string // REQUIRED
 	RequestedBy string
 	ApprovedBy  string // REQUIRED; must differ from RequestedBy when both are set
 	Reference   string // REQUIRED
-	// Counterparty is the other side of the entry; default @Adjustments.
+	// Counterparty is the other side of the entry, a system account; default @Adjustments.
 	Counterparty string
 	// AllowOverdraft lets a debit take the account below zero.
 	AllowOverdraft bool
@@ -152,7 +196,13 @@ func (s operationsAPI) Adjust(ctx context.Context, in AdjustInput) (*Receipt, er
 	if in.RequestedBy != "" && strings.EqualFold(in.RequestedBy, in.ApprovedBy) {
 		return nil, &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("requester cannot approve their own adjustment")}
 	}
-	other := firstNonEmpty(in.Counterparty, AdjustmentsAccount)
+	if err := customerOnly(op, in.AccountID); err != nil {
+		return nil, err
+	}
+	other := AccountID(firstNonEmpty(in.Counterparty, AdjustmentsAccount))
+	if !other.isIndicator() {
+		return nil, invalid(op, "counterparty must be a system account (\"@Name\")")
+	}
 	t := TransferInput{
 		Amount: in.Amount, Reference: in.Reference, Description: "Adjustment: " + in.Reason,
 		MetaData: map[string]any{
@@ -166,9 +216,6 @@ func (s operationsAPI) Adjust(ctx context.Context, in AdjustInput) (*Receipt, er
 		t.From, t.To, t.AllowOverdraft = in.AccountID, other, in.AllowOverdraft
 	default:
 		return nil, invalid(op, "type must be AdjustCredit or AdjustDebit")
-	}
-	if in.AccountID == "" {
-		return nil, invalid(op, "account id is required")
 	}
 	return s.move(ctx, op, t, "adjustment")
 }
@@ -222,7 +269,7 @@ func (s operationsAPI) RecordSettlement(ctx context.Context, in SettlementInput)
 	clearing := s.clearing(in.ClearingAccount, in.Provider, "")
 	bank := firstNonEmpty(in.BankAccount, BankOperatingAccount)
 	feeAcct := firstNonEmpty(in.FeeAccount, ProviderFeesAccount)
-	amount, fee, err := s.prepare(op, clearing, in.Amount, in.Fee, in.Reference)
+	amount, fee, err := s.prepare(op, AccountID(clearing), in.Amount, in.Fee, in.Reference)
 	if err != nil {
 		return nil, err
 	}
@@ -236,11 +283,11 @@ func (s operationsAPI) RecordSettlement(ctx context.Context, in SettlementInput)
 		if fee.cmp(amount) >= 0 {
 			return nil, invalid(op, "fee must be less than the settled amount")
 		}
-		main = TransferInput{From: bank, To: clearing, Amount: amount.add(neg(fee))}
-		feeLeg = TransferInput{From: feeAcct, To: clearing, Amount: fee}
+		main = TransferInput{From: AccountID(bank), To: AccountID(clearing), Amount: amount.add(neg(fee))}
+		feeLeg = TransferInput{From: AccountID(feeAcct), To: AccountID(clearing), Amount: fee}
 	case SettlementPayout:
-		main = TransferInput{From: clearing, To: bank, Amount: amount}
-		feeLeg = TransferInput{From: feeAcct, To: bank, Amount: fee}
+		main = TransferInput{From: AccountID(clearing), To: AccountID(bank), Amount: amount}
+		feeLeg = TransferInput{From: AccountID(feeAcct), To: AccountID(bank), Amount: fee}
 	default:
 		return nil, invalid(op, "unknown settlement direction")
 	}

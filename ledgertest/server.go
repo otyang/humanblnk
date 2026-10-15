@@ -9,7 +9,8 @@
 // The real Service code runs unchanged against the emulator, so tests exercise
 // the same requests production sends. It implements the Blnk behaviour this
 // module relies on (balances, inflight, splits, refunds, bulk, filters,
-// metadata, identities, balance monitors, historical balances, dry run,
+// ledgers (create, get, list, filter), metadata, identities, balance
+// monitors, historical balances, dry run,
 // instant reconciliation and signed webhooks) and behaves like Blnk Core 0.15
 // where that matters: a split is stored only as its legs ("<ref>-1", …, in
 // reverse order, since Blnk doesn't keep request order), "@" accounts are
@@ -98,7 +99,7 @@ func New(t testing.TB, cfg ledger.Config) (*ledger.Service, *Server) {
 	s := NewServer()
 	t.Cleanup(s.Close)
 	if cfg.LedgerID == "" {
-		cfg.LedgerID = s.CreateLedger("Test Ledger")
+		cfg.LedgerID = ledger.LedgerID(s.CreateLedger("Test Ledger"))
 	}
 	if cfg.Now == nil {
 		cfg.Now = s.Now
@@ -262,6 +263,18 @@ func (s *Server) route(method, path string, q map[string][]string, body []byte) 
 		l := &blnk.Ledger{LedgerID: id, Name: in.Name, MetaData: in.MetaData, CreatedAt: blnk.Time{Time: s.now}}
 		s.ledgers[id] = l
 		return l, 201, nil
+	case method == "GET" && path == "/ledgers":
+		return s.listLedgers(q), 200, nil
+	case method == "POST" && path == "/ledgers/filter":
+		rows := make([]any, 0, len(s.ledgers))
+		for _, l := range s.sortedLedgers() {
+			rows = append(rows, *l)
+		}
+		var in blnk.FilterRequest
+		if err := decode(&in); err != nil {
+			return nil, 0, err
+		}
+		return applyFilter(in, rows)
 	case method == "GET" && seg(0) == "ledgers" && n == 2:
 		l, ok := s.ledgers[seg(1)]
 		if !ok {
@@ -453,6 +466,41 @@ func (s *Server) route(method, path string, q map[string][]string, body []byte) 
 		return map[string]any{"meta_data": md}, 200, nil
 	}
 	return nil, 0, fail(404, blnk.CodeNotFound, "emulator: no route for %s %s", method, path)
+}
+
+// sortedLedgers returns every ledger, oldest first.
+func (s *Server) sortedLedgers() []*blnk.Ledger {
+	out := make([]*blnk.Ledger, 0, len(s.ledgers))
+	for _, l := range s.ledgers {
+		out = append(out, l)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if !out[i].CreatedAt.Equal(out[j].CreatedAt.Time) {
+			return out[i].CreatedAt.Before(out[j].CreatedAt.Time)
+		}
+		return out[i].LedgerID < out[j].LedgerID
+	})
+	return out
+}
+
+// listLedgers serves GET /ledgers?limit=&offset= (Blnk's default limit is 20).
+func (s *Server) listLedgers(q map[string][]string) []blnk.Ledger {
+	num := func(k string, def int) int {
+		if v := q[k]; len(v) > 0 {
+			var n int
+			if _, err := fmt.Sscan(v[0], &n); err == nil && n >= 0 {
+				return n
+			}
+		}
+		return def
+	}
+	limit, offset := num("limit", 20), num("offset", 0)
+	all := s.sortedLedgers()
+	out := []blnk.Ledger{}
+	for i := offset; i < len(all) && len(out) < limit; i++ {
+		out = append(out, *all[i])
+	}
+	return out
 }
 
 func (s *Server) updateMetadata(id string, md blnk.MetaData) (blnk.MetaData, error) {

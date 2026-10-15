@@ -19,7 +19,9 @@ import (
 // WatchInput sets up an alert on an account's balance, e.g. "tell me when
 // @PayoutClearing's float drops below 1,000,000".
 type WatchInput struct {
-	AccountID string // balance id (for a system account, use Accounts().GetSystem(...).ID)
+	// Set exactly one: the customer account, or the system account, to watch.
+	AccountID AccountID
+	System    SystemRef
 	Field     string // balance (default), credit_balance, debit_balance, inflight_balance, inflight_debit_balance, inflight_credit_balance
 	Operator  string // <, <=, >, >=, ==, !=  ("=" is accepted and sent as "==")
 	Threshold Money
@@ -31,7 +33,7 @@ type WatchInput struct {
 // first time), so debounce alerts on your side.
 type Watch struct {
 	ID        string
-	AccountID string
+	AccountID string // Blnk balance id of the watched account (customer or system)
 	Field     string
 	Operator  string
 	Threshold Money
@@ -41,8 +43,20 @@ type Watch struct {
 // global webhook as EventBalanceAlert (see Service.ParseWebhook).
 func (s operationsAPI) WatchBalance(ctx context.Context, in WatchInput) (*Watch, error) {
 	const op = "ledger.Operations.WatchBalance"
-	if in.AccountID == "" {
-		return nil, invalid(op, "account id is required")
+	var b *blnk.Balance
+	var err error
+	switch {
+	case in.AccountID != "" && in.System != (SystemRef{}):
+		return nil, invalid(op, "set AccountID or System, not both")
+	case in.AccountID != "":
+		b, err = s.loadAccount(ctx, op, in.AccountID)
+	case in.System != (SystemRef{}):
+		b, err = s.loadSystem(ctx, op, in.System)
+	default:
+		return nil, invalid(op, "account id or system account is required")
+	}
+	if err != nil {
+		return nil, err
 	}
 	field := firstNonEmpty(in.Field, "balance")
 	switch field {
@@ -59,10 +73,6 @@ func (s operationsAPI) WatchBalance(ctx context.Context, in WatchInput) (*Watch,
 	default:
 		return nil, invalid(op, "operator must be one of < <= > >= == !=")
 	}
-	b, err := s.c.GetBalance(ctx, in.AccountID)
-	if err != nil {
-		return nil, mapErr(op, err)
-	}
 	th := in.Threshold
 	if th.Currency != "" && !strings.EqualFold(th.Currency, b.Currency) {
 		return nil, invalid(op, "threshold currency %s differs from account currency %s", th.Currency, b.Currency)
@@ -73,7 +83,7 @@ func (s operationsAPI) WatchBalance(ctx context.Context, in WatchInput) (*Watch,
 	// Blnk stores int64(value × precision) via float math; sending the
 	// smallest-unit integer with precision 1 keeps the threshold exact.
 	m, err := s.c.CreateBalanceMonitor(ctx, blnk.BalanceMonitor{
-		BalanceID: in.AccountID, MetaData: in.MetaData,
+		BalanceID: b.BalanceID, MetaData: in.MetaData,
 		Condition: blnk.MonitorCondition{
 			Field: field, Operator: operator, Value: json.Number(th.PreciseAmount.String()), Precision: 1,
 		},
@@ -81,7 +91,7 @@ func (s operationsAPI) WatchBalance(ctx context.Context, in WatchInput) (*Watch,
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
-	return &Watch{ID: m.MonitorID, AccountID: in.AccountID, Field: field, Operator: operator, Threshold: th}, nil
+	return &Watch{ID: m.MonitorID, AccountID: b.BalanceID, Field: field, Operator: operator, Threshold: th}, nil
 }
 
 // Unwatch deletes a balance monitor.
@@ -117,10 +127,11 @@ const (
 type Event struct {
 	Name string
 
-	Receipt *Receipt   // transaction.* events
-	Bulk    *BulkEvent // bulk_transaction.*
-	Alert   *Watch     // balance.monitor
-	Account *Account   // balance.created
+	Receipt *Receipt       // transaction.* events
+	Bulk    *BulkEvent     // bulk_transaction.*
+	Alert   *Watch         // balance.monitor
+	Account *Account       // balance.created, for a customer account (or pot or escrow)
+	System  *SystemAccount // balance.created, for a system ("@") account
 
 	Data json.RawMessage
 }
@@ -224,7 +235,11 @@ func (s *Service) DecodeEvent(body []byte) (*Event, error) {
 		if err := json.Unmarshal(env.Data, &b); err != nil {
 			return nil, invalid(op, "%s payload: %v", env.Event, err)
 		}
-		e.Account = s.toAccount(&b)
+		if strings.HasPrefix(b.Indicator, "@") {
+			e.System = s.toSystemAccount(&b)
+		} else {
+			e.Account = s.toAccount(&b)
+		}
 	}
 	return e, nil
 }

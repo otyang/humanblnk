@@ -15,8 +15,8 @@ type TrialBalance struct {
 	Currency string
 
 	// System lists every system account (fee income, clearing, suspense, ...)
-	// with its balance: the figures finance reconciles.
-	System []*Account
+	// with its balance and its type from Chart: the figures finance reconciles.
+	System []*SystemAccount
 
 	// CustomerFunds is what customer accounts (including pots and escrows)
 	// hold in total: the money you owe your customers.
@@ -37,27 +37,17 @@ func (s operationsAPI) TrialBalance(ctx context.Context, currency string) (*Tria
 	prec := s.Precision(cur)
 	customers, net := new(big.Int), new(big.Int)
 	tb := &TrialBalance{Currency: cur}
-	for offset := 0; ; offset += 100 {
-		bs, _, err := s.c.FilterBalances(ctx, blnk.FilterRequest{
-			Filters: []blnk.Filter{{Field: "currency", Operator: "eq", Value: cur}},
-			SortBy:  "created_at", SortOrder: "asc", Limit: 100, Offset: offset,
-		})
-		if err != nil {
-			return nil, mapErr(op, err)
+	err := s.eachBalance(ctx, op, cur, func(b *blnk.Balance) {
+		net.Add(net, &b.Balance.Int)
+		if strings.HasPrefix(b.Indicator, "@") {
+			tb.System = append(tb.System, s.toSystemAccount(b))
+			return
 		}
-		for i := range bs {
-			b := &bs[i]
-			net.Add(net, &b.Balance.Int)
-			if strings.HasPrefix(b.Indicator, "@") {
-				tb.System = append(tb.System, s.toAccount(b))
-				continue
-			}
-			customers.Add(customers, &b.Balance.Int)
-			tb.CustomerAccounts++
-		}
-		if len(bs) < 100 {
-			break
-		}
+		customers.Add(customers, &b.Balance.Int)
+		tb.CustomerAccounts++
+	})
+	if err != nil {
+		return nil, err
 	}
 	tb.CustomerFunds = s.money(customers, prec, cur)
 	tb.Net = s.money(net, prec, cur)

@@ -48,8 +48,11 @@ interface = ns[ns.index('// Ledger is the interface'):ns.index('// The namespace
 
 groups = [
     ('Money and display', ['Money', 'DisplayRule', 'Rounding']),
-    ('Accounts and customers', ['OpenAccountInput', 'Account', 'AccountKind', 'AccountQuery', 'AccountPage',
+    ('Ids', ['AccountID', 'LedgerID', 'SystemRef']),
+    ('Ledgers', ['CreateLedgerInput', 'LedgerInfo', 'LedgerQuery', 'LedgerPage']),
+    ('Accounts and customers', ['OpenAccountInput', 'Account', 'Balances', 'AccountKind', 'AccountQuery', 'AccountPage',
                                 'CloseInput', 'CustomerInput', 'Customer', 'PotInput', 'Pot']),
+    ('System accounts', ['SystemAccount', 'GLType', 'NormalSide', 'GLDef']),
     ('Moving money', ['DepositInput', 'WithdrawInput', 'TransferInput', 'SplitInput', 'SplitPart',
                       'ExchangeInput', 'ExchangeReceipt', 'HoldInput', 'BulkTransferInput', 'BulkReceipt',
                       'RecurringInput', 'Interval', 'ConfirmItem', 'BatchResult']),
@@ -58,13 +61,13 @@ groups = [
     ('Fees, quotes, limits', ['FeeFunc', 'FeeRequest', 'FeeKind', 'FeeRule', 'FeeTier', 'Quote', 'Limit', 'LimitUsage']),
     ('Results and reads', ['Receipt', 'Leg', 'EntryStatus', 'HistoryQuery', 'Direction', 'HistoryPage',
                            'Statement', 'StatementLine', 'TrialBalance']),
-    ('Back office', ['SettlementInput', 'SettlementDirection', 'SettlementReceipt', 'SuspenseInput', 'AllocateInput',
+    ('Back office', ['SettlementInput', 'SettlementDirection', 'SettlementReceipt', 'SuspenseInput', 'AllocateInput', 'ReturnSuspenseInput',
                      'AdjustInput', 'AdjustmentType', 'WatchInput', 'Watch', 'ReconcileInput', 'ExternalRecord',
                      'Reconciliation', 'MatchingRule', 'MatchingCriterion']),
     ('Webhooks and observability', ['Event', 'BulkEvent', 'WebhookConfig', 'Observer', 'ObserverFunc']),
     ('Service and configuration', ['Service', 'Config', 'OpError']),
 ]
-namespace_types = {'Ledger', 'Accounts', 'Customers', 'Payments', 'Pending', 'Transactions', 'Disputes',
+namespace_types = {'Ledger', 'Ledgers', 'System', 'Accounts', 'Customers', 'Payments', 'Pending', 'Transactions', 'Disputes',
                    'Escrows', 'Operations', 'Reconciliations'}
 all_types = set(re.findall(r'^type ([A-Z]\w*)', src, re.M))
 covered = {n for _, names in groups for n in names} | namespace_types

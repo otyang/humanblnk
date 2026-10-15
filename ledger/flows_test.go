@@ -27,14 +27,14 @@ func open(t *testing.T, svc *ledger.Service, cur string) *ledger.Account {
 	return a
 }
 
-func fund(t *testing.T, svc *ledger.Service, id, amount, cur, ref string) {
+func fund(t *testing.T, svc *ledger.Service, id ledger.AccountID, amount, cur, ref string) {
 	t.Helper()
 	if _, err := svc.Payments().Deposit(ctx, ledger.DepositInput{Fee: ledger.NoFee, AccountID: id, Amount: ledger.Amount(amount, cur), Reference: ref, Provider: "paystack"}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func bal(t *testing.T, svc *ledger.Service, id string) string {
+func bal(t *testing.T, svc *ledger.Service, id ledger.AccountID) string {
 	t.Helper()
 	a, err := svc.Accounts().Get(ctx, id)
 	if err != nil {
@@ -45,7 +45,7 @@ func bal(t *testing.T, svc *ledger.Service, id string) string {
 
 func sys(t *testing.T, svc *ledger.Service, ind, cur string) string {
 	t.Helper()
-	a, err := svc.Accounts().GetSystem(ctx, ind, cur)
+	a, err := svc.System().Get(ctx, ledger.SystemRef{Indicator: ind, Currency: cur})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestSplitMarketplacePayment(t *testing.T) {
 	svc, _ := ledgertest.New(t, ledger.Config{})
 	seller, rider := open(t, svc, "NGN"), open(t, svc, "NGN")
 	r, err := svc.Payments().Split(ctx, ledger.SplitInput{
-		From: ledger.ClearingAccount("paystack"), AllowOverdraft: true,
+		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
 		Amount: ledger.Amount("10000.01", "NGN"), Reference: "order-1",
 		Parts: []ledger.SplitPart{
 			{To: rider.ID, Amount: ledger.Amount("500", "")},
@@ -535,7 +535,7 @@ func TestWatchAndWebhooks(t *testing.T) {
 	for _, e := range got {
 		switch e.Name {
 		case ledger.EventBalanceAlert:
-			alert = e.Alert.AccountID == a.ID && e.Alert.Threshold.Value == "100.5" && e.Alert.Threshold.Currency == "NGN"
+			alert = e.Alert.AccountID == string(a.ID) && e.Alert.Threshold.Value == "100.5" && e.Alert.Threshold.Currency == "NGN"
 		case ledger.EventTransactionApplied:
 			applied = applied || (e.Receipt.Reference == "w1" && e.Receipt.Amount.Value == "950")
 		}

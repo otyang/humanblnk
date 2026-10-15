@@ -5,14 +5,16 @@
 //
 // Application code depends on the Ledger interface, grouped into namespaces:
 //
-//	l.Accounts()        Open, Get, GetSystem, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+//	l.Ledgers()         Create, Get, List, Freeze, Unfreeze
+//	l.Accounts()        Open, Get, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+//	l.System()          Get, List, History, BalanceAt, Statement
 //	l.Customers()       Open, Get, OpenPot, ListPots
 //	l.Payments()        Deposit, Withdraw, Transfer, Split, Exchange, Bulk, Schedule, QuoteDeposit, QuoteWithdraw, QuoteTransfer
 //	l.Pending()         Hold, Confirm, Cancel, ConfirmMany, CancelMany
 //	l.Transactions()    Get, GetByReference, Refund, RefundPartial
 //	l.Disputes()        Open, Resolve
 //	l.Escrows()         Open, Get, Release, Refund
-//	l.Operations()      RecordSettlement, ParkInSuspense, AllocateSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
+//	l.Operations()      RecordSettlement, ParkInSuspense, AllocateSuspense, ReturnSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
 //	l.Reconciliations() CreateRule, Start, Get
 //
 // Service implements it on a Blnk Core instance; package ledgertest provides an
@@ -48,8 +50,10 @@ import (
 
 // Config controls how the Service maps domain operations onto Blnk.
 type Config struct {
-	// LedgerID that customer accounts are created in (required for Accounts().Open).
-	LedgerID string
+	// LedgerID that customer accounts are created in (required for
+	// Accounts().Open unless OpenAccountInput.LedgerID is set). Service.Check
+	// verifies it exists.
+	LedgerID LedgerID
 
 	// Display sets how amounts are shown to people per currency (Money.Display),
 	// e.g. {"ETH": {Decimals: 4, TrimZeros: true}}. Unlisted currencies use
@@ -96,8 +100,14 @@ type Config struct {
 	CoreDryRun bool
 
 	// EnforceAccountStatus rejects movements touching accounts whose
-	// meta_data.status is "frozen" or "blocked" (one extra GET per account).
+	// meta_data.status is "frozen" or "blocked" (one extra GET per account),
+	// and movements out of accounts whose ledger is frozen (Ledgers().Freeze).
 	EnforceAccountStatus bool
+
+	// LedgerStatusTTL is how long a ledger's frozen/active status is cached
+	// for EnforceAccountStatus. Default 30s; negative reads it every time.
+	// Another process's Ledgers().Freeze takes up to this long to apply here.
+	LedgerStatusTTL time.Duration
 
 	Now func() time.Time
 }
@@ -115,6 +125,9 @@ func (c *Config) defaults() {
 	if c.PayoutClearingAccount == "" {
 		c.PayoutClearingAccount = PayoutClearingAccount
 	}
+	if c.LedgerStatusTTL == 0 {
+		c.LedgerStatusTTL = 30 * time.Second
+	}
 	if c.WithdrawalHoldTTL == 0 {
 		c.WithdrawalHoldTTL = 24 * time.Hour
 	}
@@ -130,44 +143,52 @@ func (c *Config) defaults() {
 // OpenAccountInput opens a customer account.
 type OpenAccountInput struct {
 	Currency   string
-	IdentityID string // optional: link to a Blnk identity
-	LedgerID   string // optional: overrides Config.LedgerID
+	IdentityID string   // optional: link to a Blnk identity
+	LedgerID   LedgerID // optional: overrides Config.LedgerID; must exist
 
 	// ExternalID is your own id for this account (e.g. your user id). With it,
 	// Accounts().Open is safe to retry: an account already opened with the same
 	// ExternalID and currency is returned instead of a second one being created.
 	ExternalID string
-	MetaData   map[string]any
+	// MetaData is stored on the account. The keys this package manages
+	// ("status", "account_kind", "external_id") are ignored here: use Freeze,
+	// Close and ExternalID instead.
+	MetaData map[string]any
 }
 
-// Account is a Blnk balance as the wallet sees it, amounts in both forms.
+// Account is a customer account (or pot or escrow) as the wallet sees it,
+// amounts in both forms. System accounts are SystemAccount.
 type Account struct {
-	ID         string      `json:"id"`
-	LedgerID   string      `json:"ledger_id"`
+	ID         AccountID   `json:"id"`
+	LedgerID   LedgerID    `json:"ledger_id"`
 	IdentityID string      `json:"identity_id,omitempty"`
-	Indicator  string      `json:"indicator,omitempty"`
-	Kind       AccountKind `json:"kind"` // customer, or system for "@" indicator accounts such as @FeeIncome
+	Kind       AccountKind `json:"kind"` // customer, pot or escrow
 	Currency   string      `json:"currency"`
 	Precision  int64       `json:"precision"`
 
-	Balance    Money `json:"balance"`     // settled balance
-	Available  Money `json:"available"`   // balance - pending debits (what can be spent now)
-	PendingIn  Money `json:"pending_in"`  // inflight credits
-	PendingOut Money `json:"pending_out"` // inflight debits
-	Credits    Money `json:"credits"`     // lifetime credits
-	Debits     Money `json:"debits"`      // lifetime debits
+	Balances
+	Available Money `json:"available"` // balance - pending debits (what can be spent now)
 
 	Status    string         `json:"status"` // from meta_data.status ("active" if unset)
 	CreatedAt time.Time      `json:"created_at"`
 	MetaData  map[string]any `json:"meta_data,omitempty"`
 }
 
+// Balances are the figures every Blnk balance carries, customer or system.
+type Balances struct {
+	Balance    Money `json:"balance"`     // settled balance
+	PendingIn  Money `json:"pending_in"`  // inflight credits
+	PendingOut Money `json:"pending_out"` // inflight debits
+	Credits    Money `json:"credits"`     // lifetime credits
+	Debits     Money `json:"debits"`      // lifetime debits
+}
+
 // DepositInput records money received from outside through a provider.
 type DepositInput struct {
-	AccountID string
-	Amount    Money  // gross amount received from the provider
-	Fee       Money  // deducted from Amount, credited to the fee income account; required unless Config.Fees is set (NoFee for free)
-	Reference string // REQUIRED idempotency key, e.g. the provider's payment id
+	AccountID AccountID // customer account credited
+	Amount    Money     // gross amount received from the provider
+	Fee       Money     // deducted from Amount, credited to the fee income account; required unless Config.Fees is set (NoFee for free)
+	Reference string    // REQUIRED idempotency key, e.g. the provider's payment id
 
 	// Provider that collected the money, e.g. "paystack" → debits @PaystackClearing.
 	// Empty uses Config.DepositClearingAccount. ClearingAccount overrides with an exact indicator.
@@ -182,10 +203,10 @@ type DepositInput struct {
 
 // WithdrawInput sends money out through a provider.
 type WithdrawInput struct {
-	AccountID string
-	Amount    Money  // amount the customer receives
-	Fee       Money  // charged on top of Amount; required unless Config.Fees is set (NoFee for free)
-	Reference string // REQUIRED idempotency key
+	AccountID AccountID // customer account debited
+	Amount    Money     // amount the customer receives
+	Fee       Money     // charged on top of Amount; required unless Config.Fees is set (NoFee for free)
+	Reference string    // REQUIRED idempotency key
 	// Provider that pays out, e.g. "flutterwave" → credits @FlutterwaveClearing.
 	// Empty uses Config.PayoutClearingAccount. ClearingAccount overrides with an exact indicator.
 	Provider        string
@@ -201,10 +222,10 @@ type WithdrawInput struct {
 
 // TransferInput moves money between accounts.
 type TransferInput struct {
-	From           string // account / balance id or indicator
-	To             string
-	Amount         Money // amount the recipient receives
-	Fee            Money // charged to sender on top of Amount; required unless Config.Fees is set (NoFee for free)
+	From           AccountID // customer account, or a system account as AccountID("@Name")
+	To             AccountID // customer account, or a system account as AccountID("@Name")
+	Amount         Money     // amount the recipient receives
+	Fee            Money     // charged to sender on top of Amount; required unless Config.Fees is set (NoFee for free)
 	Reference      string
 	AllowOverdraft bool
 	Pending        bool // create INFLIGHT; Confirm/Cancel later
@@ -215,8 +236,8 @@ type TransferInput struct {
 
 // HoldInput reserves money on an account (Pending().Hold).
 type HoldInput struct {
-	AccountID   string
-	Destination string // where captured funds go, e.g. merchant account or "@CardSettlement"
+	AccountID   AccountID // customer account the money is held on
+	Destination AccountID // where captured funds go: a merchant account, or e.g. AccountID("@CardSettlement")
 	Amount      Money
 	Reference   string
 	ExpiresAt   time.Time // optional auto-release
@@ -327,6 +348,8 @@ type Service struct {
 	ruleID string // default reconciliation matching rule, created on first use
 
 	indicators sync.Map // "@Name|CUR" → balance id; indicator balances never move
+	ledgers    sync.Map // LedgerID → *ledgerEntry; ledgers are never deleted
+	ledgerKeys sync.Map // CreateLedgerInput.Key → *sync.Mutex, one Create per key at a time
 }
 
 // New builds a Service. The client is shared and safe for concurrent use.
@@ -402,7 +425,7 @@ func (s *Service) resolveAt(op string, m Money, currency string, precision int64
 }
 
 // prepare validates a movement and resolves amount and fee to the same precision.
-func (s *Service) prepare(op, account string, amount, fee Money, ref string) (Money, Money, error) {
+func (s *Service) prepare(op string, account AccountID, amount, fee Money, ref string) (Money, Money, error) {
 	if err := s.validateMove(op, account, ref); err != nil {
 		return Money{}, Money{}, err
 	}
@@ -433,10 +456,27 @@ func (s *Service) prepare(op, account string, amount, fee Money, ref string) (Mo
 
 // ----- Accounts --------------------------------------------------------------
 
+// managedMeta are the metadata keys this package owns on accounts. Callers
+// can't set them through OpenAccountInput.MetaData.
+var managedMeta = []string{"status", "status_reason", "status_changed_at", metaKind, "external_id"}
+
 // Open creates a customer account (a Blnk balance) in Config.LedgerID or
-// in.LedgerID, marked active. With ExternalID it is safe to retry.
+// in.LedgerID, marked active. The ledger must exist. With ExternalID it is
+// safe to retry.
 func (s accountsAPI) Open(ctx context.Context, in OpenAccountInput) (*Account, error) {
-	const op = "ledger.Accounts.Open"
+	md := blnk.MetaData{}
+	for k, v := range in.MetaData {
+		md[k] = v
+	}
+	for _, k := range managedMeta {
+		delete(md, k)
+	}
+	return s.openAccount(ctx, "ledger.Accounts.Open", in, md)
+}
+
+// openAccount opens an account with md as its metadata as given, so pots and
+// escrows can set their account_kind.
+func (s *Service) openAccount(ctx context.Context, op string, in OpenAccountInput, md blnk.MetaData) (*Account, error) {
 	ledgerID := in.LedgerID
 	if ledgerID == "" {
 		ledgerID = s.cfg.LedgerID
@@ -447,6 +487,12 @@ func (s accountsAPI) Open(ctx context.Context, in OpenAccountInput) (*Account, e
 	if strings.TrimSpace(in.Currency) == "" {
 		return nil, invalid(op, "currency is required")
 	}
+	if ledgerID == GeneralLedgerID {
+		return nil, &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf("%s holds system accounts; open customer accounts in your own ledger", ledgerID)}
+	}
+	if _, err := s.ledgerFor(ctx, op, ledgerID, true); err != nil {
+		return nil, err
+	}
 	if in.ExternalID != "" {
 		existing, err := s.findOne(ctx, AccountQuery{Currency: in.Currency, MetaData: map[string]string{"external_id": in.ExternalID}})
 		if err != nil {
@@ -456,18 +502,15 @@ func (s accountsAPI) Open(ctx context.Context, in OpenAccountInput) (*Account, e
 			return existing, nil
 		}
 	}
-	md := blnk.MetaData{}
-	for k, v := range in.MetaData {
-		md[k] = v
+	if md == nil {
+		md = blnk.MetaData{}
 	}
-	if _, ok := md["status"]; !ok {
-		md["status"] = "active"
-	}
+	md["status"] = "active"
 	if in.ExternalID != "" {
 		md["external_id"] = in.ExternalID
 	}
 	b, err := s.c.CreateBalance(ctx, blnk.CreateBalanceRequest{
-		LedgerID:   ledgerID,
+		LedgerID:   string(ledgerID),
 		Currency:   strings.ToUpper(in.Currency),
 		IdentityID: in.IdentityID,
 		MetaData:   md,
@@ -480,48 +523,38 @@ func (s accountsAPI) Open(ctx context.Context, in OpenAccountInput) (*Account, e
 
 // Get returns an account with its balance, available balance (balance minus
 // pending debits) and pending amounts.
-func (s accountsAPI) Get(ctx context.Context, accountID string) (*Account, error) {
-	const op = "ledger.Accounts.Get"
-	if accountID == "" {
-		return nil, invalid(op, "account id is required")
-	}
-	b, err := s.c.GetBalance(ctx, accountID)
+func (s accountsAPI) Get(ctx context.Context, id AccountID) (*Account, error) {
+	b, err := s.loadAccount(ctx, "ledger.Accounts.Get", id)
 	if err != nil {
-		return nil, mapErr(op, err)
-	}
-	return s.toAccount(b), nil
-}
-
-// GetSystem returns a system account such as "@FeeIncome" or "@PaystackClearing".
-func (s accountsAPI) GetSystem(ctx context.Context, indicator, currency string) (*Account, error) {
-	const op = "ledger.Accounts.GetSystem"
-	if !strings.HasPrefix(indicator, "@") {
-		return nil, invalid(op, "indicator must start with @")
-	}
-	b, err := s.c.GetBalanceByIndicator(ctx, indicator, strings.ToUpper(currency))
-	if err != nil {
-		return nil, mapErr(op, err)
+		return nil, err
 	}
 	return s.toAccount(b), nil
 }
 
 // Freeze marks the account frozen in metadata. Enforced by this layer when
 // Config.EnforceAccountStatus is true (Blnk itself does not block on metadata).
-func (s accountsAPI) Freeze(ctx context.Context, accountID, reason string) error {
-	_, err := s.c.UpdateMetadata(ctx, accountID, blnk.MetaData{
-		"status": "frozen", "status_reason": reason,
-		"status_changed_at": s.cfg.Now().UTC().Format(time.RFC3339),
-	})
-	return mapErr("ledger.Accounts.Freeze", err)
+func (s accountsAPI) Freeze(ctx context.Context, id AccountID, reason string) error {
+	return s.setAccountStatus(ctx, "ledger.Accounts.Freeze", id, "frozen", reason)
 }
 
 // Unfreeze marks a frozen account active again.
-func (s accountsAPI) Unfreeze(ctx context.Context, accountID string) error {
-	_, err := s.c.UpdateMetadata(ctx, accountID, blnk.MetaData{
-		"status": "active", "status_reason": "",
+func (s accountsAPI) Unfreeze(ctx context.Context, id AccountID) error {
+	return s.setAccountStatus(ctx, "ledger.Accounts.Unfreeze", id, "active", "")
+}
+
+func (s *Service) setAccountStatus(ctx context.Context, op string, id AccountID, status, reason string) error {
+	b, err := s.loadAccount(ctx, op, id)
+	if err != nil {
+		return err
+	}
+	if str(b.MetaData["status"]) == "closed" {
+		return &OpError{Op: op, Kind: ErrAccountClosed, Cause: fmt.Errorf("account %s is closed", id)}
+	}
+	_, err = s.c.UpdateMetadata(ctx, string(id), blnk.MetaData{
+		"status": status, "status_reason": reason,
 		"status_changed_at": s.cfg.Now().UTC().Format(time.RFC3339),
 	})
-	return mapErr("ledger.Accounts.Unfreeze", err)
+	return mapErr(op, err)
 }
 
 // ----- Money movement -------------------------------------------------------
@@ -541,6 +574,9 @@ func (s paymentsAPI) Deposit(ctx context.Context, in DepositInput) (*Receipt, er
 
 func (s *Service) depositReq(ctx context.Context, op string, in DepositInput) (blnk.CreateTransactionRequest, error) {
 	var none blnk.CreateTransactionRequest
+	if err := customerOnly(op, in.AccountID); err != nil {
+		return none, err
+	}
 	fee, err := s.feeFor(ctx, op, in.Fee, FeeRequest{Kind: FeeDeposit, Amount: in.Amount, Provider: in.Provider}, in.AccountID, nil)
 	if err != nil {
 		return none, err
@@ -552,7 +588,7 @@ func (s *Service) depositReq(ctx context.Context, op string, in DepositInput) (b
 	if fee.cmp(amount) >= 0 {
 		return none, invalid(op, "fee must be less than the deposit amount")
 	}
-	if err := s.checkActive(ctx, op, in.AccountID); err != nil {
+	if err := s.checkActive(ctx, op, nil, in.AccountID); err != nil {
 		return none, err
 	}
 
@@ -564,11 +600,11 @@ func (s *Service) depositReq(ctx context.Context, op string, in DepositInput) (b
 		// Gross amount leaves the clearing account; fee goes to fee income, the rest to the account.
 		req.Destinations = []blnk.Distribution{
 			{Identifier: s.cfg.FeeIncomeAccount, PreciseDistribution: fee.PreciseAmount.String(), Narration: "Deposit fee"},
-			{Identifier: in.AccountID, Distribution: "left", Narration: firstNonEmpty(in.Description, "Deposit")},
+			{Identifier: string(in.AccountID), Distribution: "left", Narration: firstNonEmpty(in.Description, "Deposit")},
 		}
 		feeMeta(req.MetaData, fee, amount.add(neg(fee)))
 	} else {
-		req.Destination = in.AccountID
+		req.Destination = string(in.AccountID)
 	}
 	return req, nil
 }
@@ -588,6 +624,9 @@ func (s paymentsAPI) Withdraw(ctx context.Context, in WithdrawInput) (*Receipt, 
 
 func (s *Service) withdrawReq(ctx context.Context, op string, in WithdrawInput) (blnk.CreateTransactionRequest, error) {
 	var none blnk.CreateTransactionRequest
+	if err := customerOnly(op, in.AccountID); err != nil {
+		return none, err
+	}
 	fee, err := s.feeFor(ctx, op, in.Fee, FeeRequest{Kind: FeeWithdrawal, Amount: in.Amount, Provider: in.Provider}, in.AccountID, nil)
 	if err != nil {
 		return none, err
@@ -596,7 +635,7 @@ func (s *Service) withdrawReq(ctx context.Context, op string, in WithdrawInput) 
 	if err != nil {
 		return none, err
 	}
-	if err := s.checkActive(ctx, op, in.AccountID); err != nil {
+	if err := s.checkActive(ctx, op, []AccountID{in.AccountID}); err != nil {
 		return none, err
 	}
 	if err := s.checkLimits(ctx, op, in.AccountID, amount.add(fee).PreciseAmount); err != nil {
@@ -605,7 +644,7 @@ func (s *Service) withdrawReq(ctx context.Context, op string, in WithdrawInput) 
 	sink := s.clearing(in.ClearingAccount, in.Provider, s.cfg.PayoutClearingAccount)
 
 	req := s.baseReq(amount.add(fee), in.Reference, in.Description, in.MetaData, "withdrawal")
-	req.Source = in.AccountID
+	req.Source = string(in.AccountID)
 	if fee.IsPositive() {
 		req.Destinations = []blnk.Distribution{
 			{Identifier: sink, PreciseDistribution: amount.PreciseAmount.String(), Narration: firstNonEmpty(in.Description, "Withdrawal")},
@@ -670,7 +709,7 @@ func (s *Service) moveReq(ctx context.Context, op string, in TransferInput, kind
 	if in.From == in.To {
 		return none, invalid(op, "cannot transfer to the same account")
 	}
-	if err := s.checkActive(ctx, op, in.From, in.To); err != nil {
+	if err := s.checkActive(ctx, op, []AccountID{in.From}, in.To); err != nil {
 		return none, err
 	}
 	if limited(kind) {
@@ -689,7 +728,11 @@ func (s *Service) moveReq(ctx context.Context, op string, in TransferInput, kind
 // authorisation. Pending().Confirm captures all or part of it; Cancel releases
 // it. ExpiresAt releases it automatically, CaptureAt captures it.
 func (s pendingAPI) Hold(ctx context.Context, in HoldInput) (*Receipt, error) {
-	return s.hold(ctx, "ledger.Pending.Hold", in, "hold")
+	const op = "ledger.Pending.Hold"
+	if err := customerOnly(op, in.AccountID); err != nil {
+		return nil, err
+	}
+	return s.hold(ctx, op, in, "hold")
 }
 
 func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string) (*Receipt, error) {
@@ -703,7 +746,7 @@ func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string
 	if !in.CaptureAt.IsZero() && !in.ExpiresAt.IsZero() && !in.CaptureAt.Before(in.ExpiresAt) {
 		return nil, invalid(op, "CaptureAt must be before ExpiresAt or the hold is released first")
 	}
-	if err := s.checkActive(ctx, op, in.AccountID); err != nil {
+	if err := s.checkActive(ctx, op, []AccountID{in.AccountID}); err != nil {
 		return nil, err
 	}
 	if limited(kind) {
@@ -712,8 +755,8 @@ func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string
 		}
 	}
 	req := s.baseReq(amount, in.Reference, in.Description, in.MetaData, kind)
-	req.Source = in.AccountID
-	req.Destination = in.Destination
+	req.Source = string(in.AccountID)
+	req.Destination = string(in.Destination)
 	req.Inflight = true
 	if !in.ExpiresAt.IsZero() {
 		req.InflightExpiryDate = in.ExpiresAt.Format(time.RFC3339)
@@ -815,11 +858,12 @@ func (s paymentsAPI) Bulk(ctx context.Context, in BulkTransferInput) (*BulkRecei
 	}
 	seen := make(map[string]struct{}, len(in.Items))
 	reqs := make([]blnk.CreateTransactionRequest, 0, len(in.Items))
-	ids := make([]string, 0, 2*len(in.Items))
-	senders := map[string]*blnk.Balance{} // one lookup per sender when Config.Fees prices items
+	from := make([]AccountID, 0, len(in.Items))
+	to := make([]AccountID, 0, len(in.Items))
+	senders := map[AccountID]*blnk.Balance{} // one lookup per sender when Config.Fees prices items
 	for i, it := range in.Items {
-		if !it.Fee.isSet() && s.cfg.Fees != nil && it.From != "" && !strings.HasPrefix(it.From, "@") && senders[it.From] == nil {
-			b, err := s.c.GetBalance(ctx, it.From)
+		if !it.Fee.isSet() && s.cfg.Fees != nil && it.From != "" && !it.From.isIndicator() && senders[it.From] == nil {
+			b, err := s.c.GetBalance(ctx, string(it.From))
 			if err != nil {
 				return nil, mapErr(op, err)
 			}
@@ -846,9 +890,9 @@ func (s paymentsAPI) Bulk(ctx context.Context, in BulkTransferInput) (*BulkRecei
 		}
 		r.SkipQueue, r.Inflight = false, false // controlled at batch level
 		reqs = append(reqs, r)
-		ids = append(ids, it.From, it.To)
+		from, to = append(from, it.From), append(to, it.To)
 	}
-	if err := s.checkActive(ctx, op, ids...); err != nil {
+	if err := s.checkActive(ctx, op, from, to...); err != nil {
 		return nil, err
 	}
 	resp, err := s.c.CreateBulkTransactions(ctx, blnk.BulkTransactionRequest{
@@ -884,11 +928,16 @@ func (s transactionsAPI) GetByReference(ctx context.Context, reference string) (
 }
 
 // History lists an account's transactions, newest first.
-func (s accountsAPI) History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error) {
+func (s accountsAPI) History(ctx context.Context, id AccountID, q HistoryQuery) (*HistoryPage, error) {
 	const op = "ledger.Accounts.History"
-	if accountID == "" {
-		return nil, invalid(op, "account id is required")
+	if _, err := s.loadAccount(ctx, op, id); err != nil {
+		return nil, err
 	}
+	return s.history(ctx, op, string(id), q)
+}
+
+// history lists the transactions of a balance (customer or system) by its id.
+func (s *Service) history(ctx context.Context, op, balanceID string, q HistoryQuery) (*HistoryPage, error) {
 	if q.Limit <= 0 {
 		q.Limit = 20
 	}
@@ -907,7 +956,7 @@ func (s accountsAPI) History(ctx context.Context, accountID string, q HistoryQue
 	case Outgoing:
 		field = "source"
 	}
-	fs := append([]blnk.Filter{{Field: field, Operator: "eq", Value: accountID}}, s.historyFilters(q)...)
+	fs := append([]blnk.Filter{{Field: field, Operator: "eq", Value: balanceID}}, s.historyFilters(q)...)
 	txs, total, err := s.c.FilterTransactions(ctx, blnk.FilterRequest{
 		Filters: fs, SortBy: "created_at", SortOrder: "desc",
 		IncludeCount: true, Limit: q.Limit, Offset: q.Offset,
@@ -922,7 +971,7 @@ func (s accountsAPI) History(ctx context.Context, accountID string, q HistoryQue
 // internals
 // ---------------------------------------------------------------------------
 
-func (s *Service) validateMove(op, account, ref string) error {
+func (s *Service) validateMove(op string, account AccountID, ref string) error {
 	switch {
 	case account == "":
 		return invalid(op, "account id is required")
@@ -976,7 +1025,7 @@ func neg(m Money) Money {
 
 func (s *Service) transferReq(in TransferInput, amount, fee Money, kind string) (blnk.CreateTransactionRequest, error) {
 	req := s.baseReq(amount.add(fee), in.Reference, in.Description, in.MetaData, kind)
-	req.Source = in.From
+	req.Source = string(in.From)
 	req.AllowOverdraft = in.AllowOverdraft
 	req.Inflight = in.Pending
 	if !in.ScheduledFor.IsZero() {
@@ -987,12 +1036,12 @@ func (s *Service) transferReq(in TransferInput, amount, fee Money, kind string) 
 	}
 	if fee.IsPositive() {
 		req.Destinations = []blnk.Distribution{
-			{Identifier: in.To, PreciseDistribution: amount.PreciseAmount.String(), Narration: firstNonEmpty(in.Description, "Transfer")},
+			{Identifier: string(in.To), PreciseDistribution: amount.PreciseAmount.String(), Narration: firstNonEmpty(in.Description, "Transfer")},
 			{Identifier: s.cfg.FeeIncomeAccount, PreciseDistribution: fee.PreciseAmount.String(), Narration: "Transfer fee"},
 		}
 		feeMeta(req.MetaData, fee, amount)
 	} else {
-		req.Destination = in.To
+		req.Destination = string(in.To)
 	}
 	return req, nil
 }
@@ -1019,25 +1068,46 @@ func (s *Service) post(ctx context.Context, op string, req blnk.CreateTransactio
 	return r, nil
 }
 
-func (s *Service) checkActive(ctx context.Context, op string, ids ...string) error {
+// checkActive rejects a movement touching a frozen, blocked or closed
+// customer account, or taking money out of an account whose ledger is frozen.
+// from are the accounts money leaves, to the ones it reaches. System accounts
+// are never blocked.
+func (s *Service) checkActive(ctx context.Context, op string, from []AccountID, to ...AccountID) error {
 	if !s.cfg.EnforceAccountStatus {
 		return nil
 	}
-	checked := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		if strings.HasPrefix(id, "@") || checked[id] {
+	sending := make(map[AccountID]bool, len(from))
+	for _, id := range from {
+		sending[id] = true
+	}
+	checked := make(map[AccountID]bool, len(from)+len(to))
+	for _, id := range append(append([]AccountID(nil), from...), to...) {
+		if id.isIndicator() || checked[id] {
 			continue // system accounts, or already checked
 		}
 		checked[id] = true
-		b, err := s.c.GetBalance(ctx, id)
+		b, err := s.c.GetBalance(ctx, string(id))
 		if err != nil {
 			return mapErr(op, err)
+		}
+		if strings.HasPrefix(b.Indicator, "@") {
+			continue // a system account given by its balance id
 		}
 		switch st, _ := b.MetaData["status"].(string); st {
 		case "frozen", "blocked":
 			return &OpError{Op: op, Kind: ErrAccountFrozen, Cause: fmt.Errorf("account %s is %s", id, st)}
 		case "closed":
 			return &OpError{Op: op, Kind: ErrAccountClosed, Cause: fmt.Errorf("account %s is closed", id)}
+		}
+		if !sending[id] || b.LedgerID == "" {
+			continue
+		}
+		lg, err := s.ledgerFor(ctx, op, LedgerID(b.LedgerID), false)
+		if err != nil {
+			return err
+		}
+		if lg.Status == "frozen" {
+			return &OpError{Op: op, Kind: ErrLedgerFrozen, Cause: fmt.Errorf("ledger %s of account %s is frozen", b.LedgerID, id)}
 		}
 	}
 	return nil
@@ -1132,31 +1202,35 @@ func (s *Service) toReceipt(t *blnk.Transaction) *Receipt {
 func (s *Service) toAccount(b *blnk.Balance) *Account {
 	cur := b.Currency
 	precision := s.Precision(cur)
-	m := func(v *big.Int) Money { return s.money(v, precision, cur) }
 	w := &Account{
-		ID: b.BalanceID, LedgerID: b.LedgerID, IdentityID: b.IdentityID,
-		Indicator: b.Indicator, Currency: cur, Precision: precision,
-		Balance:    m(&b.Balance.Int),
-		Available:  m(b.Available()),
-		PendingIn:  m(&b.InflightCreditBalance.Int),
-		PendingOut: m(&b.InflightDebitBalance.Int),
-		Credits:    m(&b.CreditBalance.Int),
-		Debits:     m(&b.DebitBalance.Int),
-		Status:     "active",
-		Kind:       CustomerAccount,
-		CreatedAt:  b.CreatedAt.Time,
-		MetaData:   b.MetaData,
+		ID: AccountID(b.BalanceID), LedgerID: LedgerID(b.LedgerID), IdentityID: b.IdentityID,
+		Currency: cur, Precision: precision,
+		Balances:  s.balances(b, precision),
+		Available: s.money(b.Available(), precision, cur),
+		Status:    "active",
+		Kind:      CustomerAccount,
+		CreatedAt: b.CreatedAt.Time,
+		MetaData:  b.MetaData,
 	}
 	if st, ok := b.MetaData["status"].(string); ok && st != "" {
 		w.Status = st
 	}
-	if k, _ := b.MetaData[metaKind].(string); k != "" {
-		w.Kind = AccountKind(k)
-	}
-	if strings.HasPrefix(b.Indicator, "@") {
-		w.Kind = SystemAccount
+	if k := AccountKind(str(b.MetaData[metaKind])); k == PotAccount || k == EscrowAccount {
+		w.Kind = k
 	}
 	return w
+}
+
+// balances reads a Blnk balance's figures at precision.
+func (s *Service) balances(b *blnk.Balance, precision int64) Balances {
+	m := func(v *big.Int) Money { return s.money(v, precision, b.Currency) }
+	return Balances{
+		Balance:    m(&b.Balance.Int),
+		PendingIn:  m(&b.InflightCreditBalance.Int),
+		PendingOut: m(&b.InflightDebitBalance.Int),
+		Credits:    m(&b.CreditBalance.Int),
+		Debits:     m(&b.DebitBalance.Int),
+	}
 }
 
 // clearing resolves the GL account for a deposit/withdrawal: explicit account,
