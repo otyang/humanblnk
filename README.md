@@ -37,6 +37,10 @@ import "github.com/otyang/humanblnk"
 l := humanblnk.New("http://localhost:5001", humanblnk.Config{LedgerID: "ldg_..."},
 	humanblnk.WithAPIKey(os.Getenv("BLNK_API_KEY")))
 
+if err := l.Check(ctx); err != nil { // fails now if Config.LedgerID doesn't exist
+	log.Fatal(err)
+}
+
 ada, err := l.Accounts().Open(ctx, humanblnk.OpenAccountInput{Currency: "NGN"})
 
 // Paystack confirmed ₦50,000; their reference makes a repeated webhook harmless.
@@ -52,6 +56,13 @@ _, err = l.Payments().Transfer(ctx, humanblnk.TransferInput{
 if errors.Is(err, humanblnk.ErrInsufficientFunds) {
 	// tell Ada she doesn't have enough
 }
+```
+
+Create the ledger itself once, when you provision; `Create` is idempotent by `Key`, so running it again returns the same ledger instead of a second one:
+
+```go
+ng, err := l.Ledgers().Create(ctx, humanblnk.CreateLedgerInput{Key: "wallets-ng", Name: "Wallets Nigeria"})
+// ng.ID is the LedgerID to put in Config.LedgerID; ng.Replayed is true on a re-run
 ```
 
 The root package re-exports package `ledger`, so `humanblnk.Money` and `ledger.Money` are the same type; import whichever reads better. The examples below use `ledger`.
@@ -95,27 +106,35 @@ Display is **cut, never rounded up**, so a displayed balance can always be spent
 Methods are grouped into namespaces, each its own interface:
 
 ```go
-l.Accounts()        // Open, Get, GetSystem, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+l.Ledgers()         // Create, Get, List, Freeze, Unfreeze
+l.Accounts()        // Open, Get, Find, Freeze, Unfreeze, Close, History, BalanceAt, Statement, LimitUsage
+l.System()          // Get, List, History, BalanceAt, Statement
 l.Customers()       // Open, Get, OpenPot, ListPots
 l.Payments()        // Deposit, Withdraw, Transfer, Split, Exchange, Bulk, Schedule, QuoteDeposit, QuoteWithdraw, QuoteTransfer
 l.Pending()         // Hold, Confirm, Cancel, ConfirmMany, CancelMany
 l.Transactions()    // Get, GetByReference, Refund, RefundPartial
 l.Disputes()        // Open, Resolve
 l.Escrows()         // Open, Get, Release, Refund
-l.Operations()      // RecordSettlement, ParkInSuspense, AllocateSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
+l.Operations()      // RecordSettlement, ParkInSuspense, AllocateSuspense, ReturnSuspense, Adjust, TrialBalance, WatchBalance, Unwatch
 l.Reconciliations() // CreateRule, Start, Get
 ```
 
+`Ledgers()`, `Accounts()` and `System()` each work on one kind of object only and take their own id type (`LedgerID`, `AccountID`, `SystemRef`), so a ledger id can't be passed to `Accounts().Freeze`, nor a system account to `Accounts().Close`. A plain string converted to the wrong type is refused at run time with `ErrWrongKind` before anything is written.
+
 A component that only needs one area can depend on that interface alone, e.g. a payout worker on `ledger.Pending`. Helpers that don't call Blnk stay on `Service`: `ComputeFee` (also a package function), `Precision`, `Parse`, and the webhook functions.
 
-### Accounts and customers
+### Ledgers, accounts and customers
 
 | Method | What it does in Blnk |
 |---|---|
-| `Accounts().Open` / `Accounts().Get` | `POST /balances` / `GET /balances/{id}`. An account exposes `Balance`, `Available` (balance − pending debits), pending in/out and `Kind` (`customer`, `system`, `pot`, `escrow`). Set `ExternalID` (your user id) and retries return the same account |
-| `Accounts().GetSystem` | `GET /balances/indicator/{@X}/currency/{CUR}`, e.g. `@FeeIncome` |
-| `Accounts().Find` | `POST /balances/filter` by identity, currency, kind, status or any `meta_data` key |
-| `Accounts().Freeze` / `Accounts().Unfreeze` / `Accounts().Close` | status in `meta_data`, enforced when `EnforceAccountStatus` is on. Closing refuses while anything is pending, sweeps the balance to `SweepTo`, then marks it `closed` |
+| `Ledgers().Create` | `POST /ledgers`, made idempotent by a required `Key` (stored as `meta_data.ledger_key`): an existing ledger with the key is returned with `Replayed`, so a ledger is never created twice. If two processes race, the oldest wins and the other is marked `duplicate` |
+| `Ledgers().Get` / `Ledgers().List` | `GET /ledgers/{id}` / `GET /ledgers` |
+| `Ledgers().Freeze` / `Ledgers().Unfreeze` | status in the ledger's `meta_data`. With `EnforceAccountStatus` on, no money can leave its customer accounts (`ErrLedgerFrozen`); money can still come in. Status is cached for `LedgerStatusTTL` (30s) |
+| `Accounts().Open` / `Accounts().Get` | `POST /balances` / `GET /balances/{id}`. Open first checks the ledger exists (`ErrLedgerNotFound`). An account exposes `Balance`, `Available` (balance − pending debits), pending in/out and `Kind` (`customer`, `pot`, `escrow`). Set `ExternalID` (your user id) and retries return the same account |
+| `Accounts().Find` | `POST /balances/filter` by identity, currency, kind, status or any `meta_data` key. System accounts are never listed |
+| `Accounts().Freeze` / `Accounts().Unfreeze` / `Accounts().Close` | status in `meta_data`, enforced when `EnforceAccountStatus` is on; a closed account can't be frozen or unfrozen. Closing refuses while anything is pending, sweeps the balance to `SweepTo` (not out of a frozen ledger), then marks it `closed` |
+| `System().Get` / `System().List` | `GET /balances/indicator/{@X}/currency/{CUR}`, e.g. `@FeeIncome`, as a `SystemAccount` with its `Type`, `Normal` side and `Natural` balance from `ledger.Chart`. `History`, `BalanceAt` and `Statement` work as for accounts |
+| `Service.Check` | verifies `Config.LedgerID` exists; call it at startup |
 | `Customers().Open` / `Customers().Get` | Blnk identity + one account per currency in one call; safe to retry with `ExternalID` |
 | `Customers().OpenPot` / `Customers().ListPots` | savings pots under a customer account (same currency and identity), optional goal |
 
@@ -132,6 +151,8 @@ A component that only needs one area can depend on that interface alone, e.g. a 
 | `Pending().Confirm` / `Pending().Cancel` (+ `Pending().ConfirmMany` / `Pending().CancelMany`, ≤ 100) | finish pending transactions, fully or partially (a transaction with a fee only in full, or leg by leg) |
 | `Payments().Bulk` | `POST /transactions/bulk`; atomic, pending and async options, ≤ 10,000 |
 | `Payments().Schedule` | creates every occurrence as a scheduled transfer (Blnk has no recurrence); references `ref_1 … ref_N` |
+
+Account fields take an `AccountID`. Where a system account is also allowed (`TransferInput.From`/`To`, `SplitInput.From`, `SplitPart.To`, `HoldInput.Destination`, `EscrowInput.Beneficiary`, `CloseInput.SweepTo`), pass it as `ledger.AccountID("@Name")`, e.g. `ledger.AccountID(ledger.ClearingAccount("paystack"))`. The customer-only fields (`DepositInput.AccountID`, `WithdrawInput.AccountID`, `HoldInput.AccountID`, `ExchangeInput.From`/`To`, `AdjustInput.AccountID`, `AllocateInput.AccountID`, `EscrowInput.Payer`, `PotInput.ParentID`) refuse it with `ErrWrongKind`.
 
 ### Refunds, disputes, escrow
 
@@ -177,19 +198,19 @@ With neither, the call fails with `ErrInvalidInput` before anything reaches Blnk
 
 ### Statements and reports
 
-- `Accounts().Statement(account, from, to)`: opening balance, every posted entry with running balance, closing balance; `WriteCSV`. Entries are dated by when they took effect (`effective_date`), so a standing order appears on the day it posted, and a fee is listed right after the payment it belongs to. The total is checked against Blnk's historical balance at `to`.
-- `Accounts().BalanceAt(account, t)`: posted balance at any moment (`GET /balances/{id}/at`).
-- `Operations().TrialBalance(currency)`: every balance summed. Double entry means it nets to zero; also returns system account balances and total customer funds.
+- `Accounts().Statement(account, from, to)` (and `System().Statement(ref, from, to)` for a system account): opening balance, every posted entry with running balance, closing balance; `WriteCSV`. Entries are dated by when they took effect (`effective_date`), so a standing order appears on the day it posted, and a fee is listed right after the payment it belongs to. The total is checked against Blnk's historical balance at `to`.
+- `Accounts().BalanceAt(account, t)` / `System().BalanceAt(ref, t)`: posted balance at any moment (`GET /balances/{id}/at`).
+- `Operations().TrialBalance(currency)`: every balance summed. Double entry means it nets to zero; also returns every system account (as `SystemAccount`, with its type and `Natural` balance) and total customer funds.
 
 ### Back office
 
 | Method | Entries |
 |---|---|
 | `Operations().RecordSettlement` | clears a provider clearing account against `@BankOperating`, with provider fees to `@ProviderFees`; atomic |
-| `Operations().ParkInSuspense` / `Operations().AllocateSuspense` | unidentified money → `@Suspense` → its owner once known |
+| `Operations().ParkInSuspense` / `Operations().AllocateSuspense` / `Operations().ReturnSuspense` | unidentified money → `@Suspense` → its owner once known, or back to the provider's clearing account |
 | `Operations().Adjust` | manual correction against `@Adjustments`; reason and an approver (not the requester) are required |
 | `Reconciliations().CreateRule` / `Reconciliations().Start` / `Reconciliations().Get` | Blnk reconciliation: records inline (≤ 10,000) or a CSV/JSON upload |
-| `Operations().WatchBalance` / `Operations().Unwatch` | Blnk balance monitors → `balance.monitor` webhook |
+| `Operations().WatchBalance` / `Operations().Unwatch` | Blnk balance monitors → `balance.monitor` webhook. Watch a customer account with `AccountID`, or a system account with `System: ledger.SystemRef{...}` |
 
 ### Webhooks
 
@@ -201,6 +222,7 @@ http.Handle("/webhooks/blnk", svc.WebhookHandler(ledger.WebhookConfig{Secret: os
         case ledger.EventTransactionVoid:    // also sent when a hold expires
         case ledger.EventBalanceAlert:       // e.Alert
         case ledger.EventBulkApplied:        // e.Bulk
+        case ledger.EventBalanceCreated:     // e.Account, or e.System for an "@" account
         }
         return nil // an error answers 500 and Blnk retries
     }))
@@ -225,30 +247,32 @@ core.Advance(25 * time.Hour)        // expire holds, run scheduled transfers
 for _, e := range core.Events() { … } // webhooks Blnk would have sent
 ```
 
-An in-memory Blnk emulator: your tests run the real `Service` code, so they exercise the same requests production sends. It covers the behaviour this module uses (balances, inflight, splits, refunds, bulk, filters, metadata, identities, monitors, historical balances, dry run, instant reconciliation, signed webhooks); it is not a full Blnk.
+An in-memory Blnk emulator: your tests run the real `Service` code, so they exercise the same requests production sends. It covers the behaviour this module uses (ledgers, balances, inflight, splits, refunds, bulk, filters, metadata, identities, monitors, historical balances, dry run, instant reconciliation, signed webhooks); it is not a full Blnk.
 
 ## Naming: fintech methods, accounting accounts
 
 Method names stay in product language (`Payments().Deposit`, `Payments().Withdraw`, `Payments().Transfer`, `Pending().Hold`, `Pending().Confirm`, `Pending().Cancel`, `Transactions().Refund`) so they match your app and specs. The system accounts use accounting names, because that is what finance reads and reconciles.
 
-**Chart of accounts** (constants in `ledger/accounts.go`; Blnk creates each on first use):
+**Chart of accounts** (constants and `ledger.Chart` in `ledger/accounts.go`; Blnk creates each on first use, in its general ledger):
 
-| Account | Type | Role |
-|---|---|---|
-| `@FeeIncome` | Income | Every fee leg is credited here |
-| `@<Provider>Clearing`, e.g. `@PaystackClearing` | Asset (receivable) | Debited on deposits collected by that provider; cleared by `Operations().RecordSettlement` |
-| `@<Provider>Clearing`, e.g. `@FlutterwaveClearing` | Liability (payable) | Credited on withdrawals paid out by that provider; cleared by `Operations().RecordSettlement` |
-| `@DepositClearing` / `@PayoutClearing` | Asset / Liability | Defaults when no provider is given |
-| `@BankOperating` | Asset | Your bank account |
-| `@ProviderFees` | Expense | Fees providers deduct at settlement |
-| `@FXPool` | Position | Open currency position from `Payments().Exchange`, one balance per currency |
-| `@MerchantPayable` | Liability | Captured holds owed to merchants |
-| `@Suspense` | Suspense | Unidentified or unmatched funds |
-| `@Adjustments` | Equity / expense | Counterparty of manual corrections |
+| Account | `Type` | `Normal` | Role |
+|---|---|---|---|
+| `@FeeIncome` | income | credit | Every fee leg is credited here |
+| `@<Provider>Clearing`, e.g. `@PaystackClearing` | asset | debit | Debited on deposits collected by that provider, credited on withdrawals it pays out; cleared by `Operations().RecordSettlement`. Not in `Chart`: any `@…Clearing` is an asset unless you add it |
+| `@DepositClearing` | asset | debit | Default deposit source when no provider is given |
+| `@PayoutClearing` | liability | credit | Default withdrawal destination when no provider is given |
+| `@BankOperating` | asset | debit | Your bank account |
+| `@ProviderFees` | expense | debit | Fees providers deduct at settlement |
+| `@FXPool` | asset | debit | Open currency position from `Payments().Exchange`, one balance per currency |
+| `@MerchantPayable` | liability | credit | Captured holds owed to merchants |
+| `@Suspense` | liability | credit | Unidentified or unmatched funds |
+| `@Adjustments` | equity | credit | Counterparty of manual corrections |
+
+`System().Get` returns these as `SystemAccount`, with `Type` and `Normal` from `Chart` (`ChartEntry` looks one up) and `Natural`, the balance on the normal side. A payout-only provider whose clearing account you'd rather read as a payable can be added: `ledger.Chart["@FlutterwaveClearing"] = ledger.GLDef{Type: ledger.GLLiability, Normal: ledger.CreditNormal}`.
 
 Pass `Provider: "paystack"` on a deposit or withdrawal and the right clearing account is used (`ledger.ClearingAccount("paystack")` == `"@PaystackClearing"`). `ClearingAccount: "@Exact"` overrides it.
 
-Blnk debits the source and credits the destination, so debit-normal accounts (assets, expenses) run negative and credit-normal ones (liabilities, income) run positive.
+Blnk debits the source and credits the destination, so debit-normal accounts (assets, expenses) run negative in `Balance` and credit-normal ones (liabilities, income, equity) run positive; `Natural` flips debit-normal ones so both read positive in their usual state.
 
 **Entry status.** Each receipt has Blnk's `Status` plus `EntryStatus`: `posted` (APPLIED), `pending` (INFLIGHT), `voided` (VOID), `queued`, `scheduled`, `rejected`. `HistoryQuery.Statuses` accepts either vocabulary.
 
@@ -259,12 +283,14 @@ Blnk debits the source and credits the destination, so debit-normal accounts (as
 - **Idempotency.** Every movement needs a `Reference`. If Blnk returns `TXN_DUPLICATE_REFERENCE` and the stored transaction has the same amount, currency, source, destination(s) and type, you get the original back with `Replayed: true`. A different payload under the same reference returns `ErrDuplicateReference`. Use the provider's payment id as the reference for deposits.
 - **Synchronous by default.** `skip_queue: true` is sent so you get `APPLIED`/`INFLIGHT` or a definite error (e.g. `ErrInsufficientFunds`) in the response. Set `Config.UseQueue` for high-throughput hot balances; you then get `Queued: true` receipts and must confirm via webhooks. Atomic flows (`Payments().Exchange`, `Operations().RecordSettlement`) always run synchronously.
 - **Overdraft.** Only external sources (deposits, settlements, system counterparties) are sent with `allow_overdraft`; customer accounts never overdraft unless you set `AllowOverdraft`.
-- **Errors.** Check with `errors.Is(err, ledger.ErrInsufficientFunds)` etc. — mapped from Blnk's stable `error_detail.code` (Core 0.15.0+). The raw `*blnk.APIError` stays reachable with `errors.As` for logging.
+- **Errors.** Check with `errors.Is(err, ledger.ErrInsufficientFunds)` etc. — mapped from Blnk's stable `error_detail.code` (Core 0.15.0+). The raw `*blnk.APIError` stays reachable with `errors.As` for logging. `ErrWrongKind` (an id of the wrong kind of object) also matches `ErrInvalidInput`; `ErrLedgerNotFound` also matches `ErrNotFound`.
+- **Ledger freeze** (`Ledgers().Freeze`, with `EnforceAccountStatus`) stops money leaving the ledger's customer accounts, including closure sweeps; deposits in and system postings carry on. Each `Service` caches a ledger's status for `Config.LedgerStatusTTL` (default 30s), so a freeze made by another process applies within that time. Pending transactions created before the freeze can still be confirmed.
+- **Ledger keys.** `Ledgers().Create` finds ledgers by `meta_data.ledger_key`. Calls with the same key run one at a time in one process; across processes, a race can create two ledgers, after which every caller gets the oldest and the other is marked `duplicate` (`DuplicateOf` names the one to use) and refused by `Accounts().Open`. Create ledgers at provisioning time to avoid it.
 - **Retries.** The client retries 423 (lock contention), 429, 502/503/504 and network errors with jittered backoff. Retrying a transaction POST is safe because of reference idempotency. Confirming a pending transaction has no reference, so a commit is retried only when Blnk refused it (423, 429, 503), never after a network error or gateway timeout that it may have acted on: look the transaction up before confirming again.
 - **History** filters on Blnk's `balance_id` (source or destination), so every query is one exactly paginated request.
 - **Split transactions** (anything with a fee) are stored by Blnk only as their legs, `<ref>-1`, `<ref>-2`, … (`_1` on newer Core), each pointing at a parent id that has no record of its own. `Transactions().Get`, `GetByReference` and retries rebuild the parent from its legs, and `Pending().Confirm`/`Cancel` on the parent id act on every leg. Statements list each leg, so a fee shows as its own line. `Disputes().Open` and `Transactions().RefundPartial` given a payment with a fee act on the recipient's leg automatically; a split paying several recipients needs the leg's own transaction id. Blnk doesn't keep legs in request order; the library never relies on it.
 - **Reconciling payments with a fee** one-to-one doesn't match a provider's line, because Blnk stores the legs separately. Try `Strategy: "one_to_many"` with `GroupingCriteria: "parent_transaction"` and check the counts against your Core version; Blnk reports counts, not matched lines.
-- **System accounts** (`@FeeIncome`, …) are stored by Blnk under their balance id. Receipts and history show that id; statements show the `@Name`.
+- **System accounts** (`@FeeIncome`, …) are stored by Blnk under their balance id. Receipts and history show that id; statements show the `@Name`. Read them with `System()`, by `SystemRef{Indicator, Currency}`; `Accounts()` refuses them even by balance id.
 - **Descriptions** are required by Blnk; when you don't give one, the movement's type is used ("Deposit", "Escrow release", …).
 - **Partial refunds racing** each other on the same transaction can both pass the remaining-amount check; serialise refunds per transaction if they can run concurrently.
 - **Partial confirms of a transaction with a fee** are refused: Blnk would apply the amount to every leg in turn and stop part-way. Confirm it in full, or confirm one leg by its transaction id.
@@ -292,7 +318,7 @@ BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -v
 | 0.10.0 | instant reconciliation (`Reconciliations().Start` with `Records`) |
 | 0.10.1 | `from_source` historical balances (used for exact statements) |
 | 0.13.0 | signed webhooks |
-| 0.13.2 | filters (`Accounts().History`, `Accounts().Find`, `Operations().TrialBalance`, limits, `ExternalID`) |
+| 0.13.2 | filters (`Accounts().History`, `Accounts().Find`, `Operations().TrialBalance`, `System().List`, `Ledgers().Create`, limits, `ExternalID`) |
 | 0.14.1 | auto-capture `CaptureAt` (with `BLNK_QUEUE_INFLIGHT_COMMIT` / `inflight_commit_queue`) |
 | 0.14.2 | `Pending().ConfirmMany` / `Pending().CancelMany` |
 | 0.15.0 | structured error codes (older versions fall back to HTTP status) |

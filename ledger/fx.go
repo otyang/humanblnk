@@ -11,8 +11,8 @@ import (
 // ExchangeInput converts money between two accounts in different currencies,
 // e.g. a customer's USD account to their NGN account.
 type ExchangeInput struct {
-	From string // account debited, in the sell currency
-	To   string // account credited, in the buy currency
+	From AccountID // customer account debited, in the sell currency
+	To   AccountID // customer account credited, in the buy currency
 
 	// Set Sell (how much leaves From) or Buy (how much must arrive in To).
 	Sell Money
@@ -49,6 +49,11 @@ func (s paymentsAPI) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeR
 	if err := s.validateMove(op, in.From, in.Reference); err != nil {
 		return nil, err
 	}
+	for _, id := range []AccountID{in.From, in.To} {
+		if err := customerOnly(op, id); err != nil {
+			return nil, err
+		}
+	}
 	if in.To == "" || in.To == in.From {
 		return nil, invalid(op, "a different destination account is required")
 	}
@@ -59,11 +64,11 @@ func (s paymentsAPI) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeR
 	if in.Sell.isSet() == in.Buy.isSet() {
 		return nil, invalid(op, "set exactly one of Sell or Buy")
 	}
-	from, err := s.c.GetBalance(ctx, in.From)
+	from, err := s.c.GetBalance(ctx, string(in.From))
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
-	to, err := s.c.GetBalance(ctx, in.To)
+	to, err := s.c.GetBalance(ctx, string(in.To))
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
@@ -93,7 +98,7 @@ func (s paymentsAPI) Exchange(ctx context.Context, in ExchangeInput) (*ExchangeR
 		return nil, invalid(op, "amount is too small to exchange at rate %s", in.Rate)
 	}
 
-	pool := firstNonEmpty(in.Pool, FXPoolAccount)
+	pool := AccountID(firstNonEmpty(in.Pool, FXPoolAccount))
 	md := map[string]any{
 		"fx_pair": sellCur + "/" + buyCur, "fx_rate": in.Rate, "fx_reference": in.Reference,
 		"fx_sell": sell.Value, "fx_buy": buy.Value,

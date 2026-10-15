@@ -16,7 +16,7 @@ import (
 type AccountQuery struct {
 	IdentityID string
 	Currency   string
-	Kind       AccountKind       // CustomerAccount, PotAccount, EscrowAccount (system accounts: use Accounts().GetSystem)
+	Kind       AccountKind       // CustomerAccount, PotAccount or EscrowAccount; empty = all three
 	Status     string            // "active", "frozen", "closed", ...
 	MetaData   map[string]string // exact matches on meta_data keys, e.g. {"owner": "alice"}
 	Limit      int               // default 20, max 100
@@ -37,7 +37,8 @@ var metaKey = regexp.MustCompile(`^[a-zA-Z][a-zA-Z0-9_]*$`)
 // metaField is the filter field name for a meta_data key.
 func metaField(key string) string { return "meta_data." + key }
 
-// Find lists accounts matching q, oldest first.
+// Find lists accounts matching q, oldest first. System accounts are never
+// listed (read them with System().List).
 func (s accountsAPI) Find(ctx context.Context, q AccountQuery) (*AccountPage, error) {
 	const op = "ledger.Accounts.Find"
 	if q.Limit <= 0 {
@@ -51,6 +52,11 @@ func (s accountsAPI) Find(ctx context.Context, q AccountQuery) (*AccountPage, er
 		if value != "" {
 			fs = append(fs, blnk.Filter{Field: field, Operator: "eq", Value: value})
 		}
+	}
+	switch q.Kind {
+	case "", CustomerAccount, PotAccount, EscrowAccount:
+	default:
+		return nil, invalid(op, "kind must be customer, pot or escrow (system accounts: System().List)")
 	}
 	add("identity_id", q.IdentityID)
 	add("currency", strings.ToUpper(q.Currency))
@@ -81,6 +87,10 @@ func (s accountsAPI) Find(ctx context.Context, q AccountQuery) (*AccountPage, er
 	}
 	p := &AccountPage{Limit: q.Limit, Offset: q.Offset, Total: total}
 	for i := range bs {
+		if strings.HasPrefix(bs[i].Indicator, "@") {
+			p.Total-- // a system account: never listed here
+			continue
+		}
 		a := s.toAccount(&bs[i])
 		if q.Kind == CustomerAccount && a.Kind != CustomerAccount {
 			p.Total--
@@ -215,16 +225,16 @@ func (s customersAPI) Get(ctx context.Context, identityID string) (*Customer, er
 
 // PotInput opens a savings pot under a customer account.
 type PotInput struct {
-	ParentID string // the customer's main account
-	Name     string // e.g. "Rent", unique per parent
-	Goal     Money  // optional target
+	ParentID AccountID // the customer's main account
+	Name     string    // e.g. "Rent", unique per parent
+	Goal     Money     // optional target
 }
 
 // Pot is a savings sub-account. Move money in and out with Transfer.
 type Pot struct {
 	*Account
 	Name   string
-	Parent string
+	Parent AccountID
 	Goal   Money // zero when no goal was set
 }
 
@@ -235,11 +245,11 @@ func (s customersAPI) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
 	if in.ParentID == "" || strings.TrimSpace(in.Name) == "" {
 		return nil, invalid(op, "parent account and name are required")
 	}
-	parent, err := s.c.GetBalance(ctx, in.ParentID)
+	parent, err := s.loadAccount(ctx, op, in.ParentID)
 	if err != nil {
-		return nil, mapErr(op, err)
+		return nil, err
 	}
-	md := map[string]any{metaKind: string(PotAccount), "parent_account": in.ParentID, "pot_name": in.Name}
+	md := blnk.MetaData{metaKind: string(PotAccount), "parent_account": string(in.ParentID), "pot_name": in.Name}
 	if in.Goal.isSet() {
 		goal, err := s.resolveIn(op, in.Goal, parent.Currency)
 		if err != nil {
@@ -247,10 +257,10 @@ func (s customersAPI) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
 		}
 		md["pot_goal"] = goal.Value
 	}
-	a, err := s.Accounts().Open(ctx, OpenAccountInput{
-		Currency: parent.Currency, IdentityID: parent.IdentityID, LedgerID: parent.LedgerID,
-		ExternalID: "pot:" + in.ParentID + ":" + in.Name, MetaData: md,
-	})
+	a, err := s.openAccount(ctx, op, OpenAccountInput{
+		Currency: parent.Currency, IdentityID: parent.IdentityID, LedgerID: LedgerID(parent.LedgerID),
+		ExternalID: "pot:" + string(in.ParentID) + ":" + in.Name,
+	}, md)
 	if err != nil {
 		return nil, err
 	}
@@ -258,11 +268,11 @@ func (s customersAPI) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
 }
 
 // ListPots lists the pots under a parent account.
-func (s customersAPI) ListPots(ctx context.Context, parentID string) ([]*Pot, error) {
-	if parentID == "" {
-		return nil, invalid("ledger.Customers.ListPots", "parent account is required")
+func (s customersAPI) ListPots(ctx context.Context, parentID AccountID) ([]*Pot, error) {
+	if _, err := s.loadAccount(ctx, "ledger.Customers.ListPots", parentID); err != nil {
+		return nil, err
 	}
-	p, err := s.Accounts().Find(ctx, AccountQuery{Kind: PotAccount, MetaData: map[string]string{"parent_account": parentID}, Limit: 100})
+	p, err := s.Accounts().Find(ctx, AccountQuery{Kind: PotAccount, MetaData: map[string]string{"parent_account": string(parentID)}, Limit: 100})
 	if err != nil {
 		return nil, err
 	}
@@ -274,7 +284,7 @@ func (s customersAPI) ListPots(ctx context.Context, parentID string) ([]*Pot, er
 }
 
 func (s *Service) toPot(a *Account) *Pot {
-	p := &Pot{Account: a, Name: str(a.MetaData["pot_name"]), Parent: str(a.MetaData["parent_account"])}
+	p := &Pot{Account: a, Name: str(a.MetaData["pot_name"]), Parent: AccountID(str(a.MetaData["parent_account"]))}
 	if g := str(a.MetaData["pot_goal"]); g != "" {
 		p.Goal, _ = ParseDecimal(g, a.Currency, a.Precision)
 	}

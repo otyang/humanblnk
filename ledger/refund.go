@@ -73,7 +73,7 @@ func (s transactionsAPI) RefundPartial(ctx context.Context, txID string, in Part
 	names := map[string]string{}
 	from := s.indicatorOf(ctx, orig.Destination, names) // "@Name" for system accounts
 	r, err := s.move(ctx, op, TransferInput{
-		From: from, To: s.indicatorOf(ctx, orig.Source, names), Amount: amt, Reference: in.Reference,
+		From: AccountID(from), To: AccountID(s.indicatorOf(ctx, orig.Source, names)), Amount: amt, Reference: in.Reference,
 		AllowOverdraft: strings.HasPrefix(from, "@"), // reversing out of a system account
 		Description:    firstNonEmpty(in.Description, "Refund of "+orig.Reference), MetaData: md,
 	}, "refund")

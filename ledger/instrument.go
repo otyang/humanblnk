@@ -54,7 +54,9 @@ type instrumented struct {
 
 var _ Ledger = (*instrumented)(nil)
 
+func (i *instrumented) Ledgers() Ledgers           { return obsLedgers{i.l.Ledgers(), i.o} }
 func (i *instrumented) Accounts() Accounts         { return obsAccounts{i.l.Accounts(), i.o} }
+func (i *instrumented) System() System             { return obsSystem{i.l.System(), i.o} }
 func (i *instrumented) Customers() Customers       { return obsCustomers{i.l.Customers(), i.o} }
 func (i *instrumented) Payments() Payments         { return obsPayments{i.l.Payments(), i.o} }
 func (i *instrumented) Pending() Pending           { return obsPending{i.l.Pending(), i.o} }
@@ -64,6 +66,90 @@ func (i *instrumented) Escrows() Escrows           { return obsEscrows{i.l.Escro
 func (i *instrumented) Operations() Operations     { return obsOperations{i.l.Operations(), i.o} }
 func (i *instrumented) Reconciliations() Reconciliations {
 	return obsReconciliations{i.l.Reconciliations(), i.o}
+}
+
+type obsLedgers struct {
+	n Ledgers
+	o Observer
+}
+
+var _ Ledgers = obsLedgers{}
+
+func (i obsLedgers) Create(ctx context.Context, in CreateLedgerInput) (*LedgerInfo, error) {
+	ctx, done := i.o.Start(ctx, "Ledgers.Create")
+	res, err := i.n.Create(ctx, in)
+	done(err)
+	return res, err
+}
+
+func (i obsLedgers) Get(ctx context.Context, id LedgerID) (*LedgerInfo, error) {
+	ctx, done := i.o.Start(ctx, "Ledgers.Get")
+	res, err := i.n.Get(ctx, id)
+	done(err)
+	return res, err
+}
+
+func (i obsLedgers) List(ctx context.Context, q LedgerQuery) (*LedgerPage, error) {
+	ctx, done := i.o.Start(ctx, "Ledgers.List")
+	res, err := i.n.List(ctx, q)
+	done(err)
+	return res, err
+}
+
+func (i obsLedgers) Freeze(ctx context.Context, id LedgerID, reason string) error {
+	ctx, done := i.o.Start(ctx, "Ledgers.Freeze")
+	err := i.n.Freeze(ctx, id, reason)
+	done(err)
+	return err
+}
+
+func (i obsLedgers) Unfreeze(ctx context.Context, id LedgerID) error {
+	ctx, done := i.o.Start(ctx, "Ledgers.Unfreeze")
+	err := i.n.Unfreeze(ctx, id)
+	done(err)
+	return err
+}
+
+type obsSystem struct {
+	n System
+	o Observer
+}
+
+var _ System = obsSystem{}
+
+func (i obsSystem) Get(ctx context.Context, ref SystemRef) (*SystemAccount, error) {
+	ctx, done := i.o.Start(ctx, "System.Get")
+	res, err := i.n.Get(ctx, ref)
+	done(err)
+	return res, err
+}
+
+func (i obsSystem) List(ctx context.Context, currency string) ([]*SystemAccount, error) {
+	ctx, done := i.o.Start(ctx, "System.List")
+	res, err := i.n.List(ctx, currency)
+	done(err)
+	return res, err
+}
+
+func (i obsSystem) History(ctx context.Context, ref SystemRef, q HistoryQuery) (*HistoryPage, error) {
+	ctx, done := i.o.Start(ctx, "System.History")
+	res, err := i.n.History(ctx, ref, q)
+	done(err)
+	return res, err
+}
+
+func (i obsSystem) BalanceAt(ctx context.Context, ref SystemRef, t time.Time) (Money, error) {
+	ctx, done := i.o.Start(ctx, "System.BalanceAt")
+	res, err := i.n.BalanceAt(ctx, ref, t)
+	done(err)
+	return res, err
+}
+
+func (i obsSystem) Statement(ctx context.Context, ref SystemRef, from, to time.Time) (*Statement, error) {
+	ctx, done := i.o.Start(ctx, "System.Statement")
+	res, err := i.n.Statement(ctx, ref, from, to)
+	done(err)
+	return res, err
 }
 
 type obsAccounts struct {
@@ -80,16 +166,9 @@ func (i obsAccounts) Open(ctx context.Context, in OpenAccountInput) (*Account, e
 	return res, err
 }
 
-func (i obsAccounts) Get(ctx context.Context, accountID string) (*Account, error) {
+func (i obsAccounts) Get(ctx context.Context, accountID AccountID) (*Account, error) {
 	ctx, done := i.o.Start(ctx, "Accounts.Get")
 	res, err := i.n.Get(ctx, accountID)
-	done(err)
-	return res, err
-}
-
-func (i obsAccounts) GetSystem(ctx context.Context, indicator, currency string) (*Account, error) {
-	ctx, done := i.o.Start(ctx, "Accounts.GetSystem")
-	res, err := i.n.GetSystem(ctx, indicator, currency)
 	done(err)
 	return res, err
 }
@@ -101,49 +180,49 @@ func (i obsAccounts) Find(ctx context.Context, q AccountQuery) (*AccountPage, er
 	return res, err
 }
 
-func (i obsAccounts) Freeze(ctx context.Context, accountID, reason string) error {
+func (i obsAccounts) Freeze(ctx context.Context, accountID AccountID, reason string) error {
 	ctx, done := i.o.Start(ctx, "Accounts.Freeze")
 	err := i.n.Freeze(ctx, accountID, reason)
 	done(err)
 	return err
 }
 
-func (i obsAccounts) Unfreeze(ctx context.Context, accountID string) error {
+func (i obsAccounts) Unfreeze(ctx context.Context, accountID AccountID) error {
 	ctx, done := i.o.Start(ctx, "Accounts.Unfreeze")
 	err := i.n.Unfreeze(ctx, accountID)
 	done(err)
 	return err
 }
 
-func (i obsAccounts) Close(ctx context.Context, accountID string, in CloseInput) (*Account, error) {
+func (i obsAccounts) Close(ctx context.Context, accountID AccountID, in CloseInput) (*Account, error) {
 	ctx, done := i.o.Start(ctx, "Accounts.Close")
 	res, err := i.n.Close(ctx, accountID, in)
 	done(err)
 	return res, err
 }
 
-func (i obsAccounts) History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error) {
+func (i obsAccounts) History(ctx context.Context, accountID AccountID, q HistoryQuery) (*HistoryPage, error) {
 	ctx, done := i.o.Start(ctx, "Accounts.History")
 	res, err := i.n.History(ctx, accountID, q)
 	done(err)
 	return res, err
 }
 
-func (i obsAccounts) BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error) {
+func (i obsAccounts) BalanceAt(ctx context.Context, accountID AccountID, t time.Time) (Money, error) {
 	ctx, done := i.o.Start(ctx, "Accounts.BalanceAt")
 	res, err := i.n.BalanceAt(ctx, accountID, t)
 	done(err)
 	return res, err
 }
 
-func (i obsAccounts) Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error) {
+func (i obsAccounts) Statement(ctx context.Context, accountID AccountID, from, to time.Time) (*Statement, error) {
 	ctx, done := i.o.Start(ctx, "Accounts.Statement")
 	res, err := i.n.Statement(ctx, accountID, from, to)
 	done(err)
 	return res, err
 }
 
-func (i obsAccounts) LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error) {
+func (i obsAccounts) LimitUsage(ctx context.Context, accountID AccountID) (*LimitUsage, error) {
 	ctx, done := i.o.Start(ctx, "Accounts.LimitUsage")
 	res, err := i.n.LimitUsage(ctx, accountID)
 	done(err)
@@ -178,7 +257,7 @@ func (i obsCustomers) OpenPot(ctx context.Context, in PotInput) (*Pot, error) {
 	return res, err
 }
 
-func (i obsCustomers) ListPots(ctx context.Context, parentID string) ([]*Pot, error) {
+func (i obsCustomers) ListPots(ctx context.Context, parentID AccountID) ([]*Pot, error) {
 	ctx, done := i.o.Start(ctx, "Customers.ListPots")
 	res, err := i.n.ListPots(ctx, parentID)
 	done(err)
@@ -374,21 +453,21 @@ func (i obsEscrows) Open(ctx context.Context, in EscrowInput) (*Escrow, error) {
 	return res, err
 }
 
-func (i obsEscrows) Get(ctx context.Context, escrowID string) (*Escrow, error) {
+func (i obsEscrows) Get(ctx context.Context, escrowID AccountID) (*Escrow, error) {
 	ctx, done := i.o.Start(ctx, "Escrows.Get")
 	res, err := i.n.Get(ctx, escrowID)
 	done(err)
 	return res, err
 }
 
-func (i obsEscrows) Release(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
+func (i obsEscrows) Release(ctx context.Context, escrowID AccountID, in EscrowSettleInput) (*Receipt, error) {
 	ctx, done := i.o.Start(ctx, "Escrows.Release")
 	res, err := i.n.Release(ctx, escrowID, in)
 	done(err)
 	return res, err
 }
 
-func (i obsEscrows) Refund(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error) {
+func (i obsEscrows) Refund(ctx context.Context, escrowID AccountID, in EscrowSettleInput) (*Receipt, error) {
 	ctx, done := i.o.Start(ctx, "Escrows.Refund")
 	res, err := i.n.Refund(ctx, escrowID, in)
 	done(err)
@@ -419,6 +498,13 @@ func (i obsOperations) ParkInSuspense(ctx context.Context, in SuspenseInput) (*R
 func (i obsOperations) AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error) {
 	ctx, done := i.o.Start(ctx, "Operations.AllocateSuspense")
 	res, err := i.n.AllocateSuspense(ctx, in)
+	done(err)
+	return res, err
+}
+
+func (i obsOperations) ReturnSuspense(ctx context.Context, in ReturnSuspenseInput) (*Receipt, error) {
+	ctx, done := i.o.Start(ctx, "Operations.ReturnSuspense")
+	res, err := i.n.ReturnSuspense(ctx, in)
 	done(err)
 	return res, err
 }

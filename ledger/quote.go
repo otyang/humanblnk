@@ -17,7 +17,7 @@ type Quote struct {
 	Debit  Money // total leaving the paying account
 	Credit Money // total reaching the customer account (deposit: net of fee)
 
-	Account         string // the customer account the quote is about
+	Account         AccountID // the customer account the quote is about
 	AvailableBefore Money
 	AvailableAfter  Money
 	Allowed         bool
@@ -53,7 +53,7 @@ func (s paymentsAPI) QuoteDeposit(ctx context.Context, in DepositInput) (*Quote,
 // quote turns a built request into a Quote. Business-rule failures (funds,
 // limits, frozen accounts) become a quote with Allowed=false; malformed input
 // is returned as an error.
-func (s *Service) quote(ctx context.Context, op, account, payer string, req blnk.CreateTransactionRequest, buildErr error) (*Quote, error) {
+func (s *Service) quote(ctx context.Context, op string, account, payer AccountID, req blnk.CreateTransactionRequest, buildErr error) (*Quote, error) {
 	if buildErr != nil {
 		if !refusal(buildErr) {
 			return nil, buildErr
@@ -79,7 +79,7 @@ func (s *Service) quote(ctx context.Context, op, account, payer string, req blnk
 		q.Amount, q.Credit = m(new(big.Int).Sub(total, fee)), m(new(big.Int).Sub(total, fee))
 	}
 
-	b, err := s.c.GetBalance(ctx, account)
+	b, err := s.c.GetBalance(ctx, string(account))
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
@@ -117,7 +117,7 @@ func (s *Service) quote(ctx context.Context, op, account, payer string, req blnk
 
 // refusal reports whether err is a business-rule "no" rather than bad input.
 func refusal(err error) bool {
-	for _, k := range []error{ErrInsufficientFunds, ErrLimitExceeded, ErrAccountFrozen, ErrAccountClosed} {
+	for _, k := range []error{ErrInsufficientFunds, ErrLimitExceeded, ErrAccountFrozen, ErrAccountClosed, ErrLedgerFrozen} {
 		if errors.Is(err, k) {
 			return true
 		}

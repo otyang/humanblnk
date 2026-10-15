@@ -25,7 +25,7 @@ func TestLiveCore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := ledger.New(c, ledger.Config{LedgerID: l.LedgerID})
+	svc := ledger.New(c, ledger.Config{LedgerID: ledger.LedgerID(l.LedgerID)})
 	run := fmt.Sprint(time.Now().UnixNano())
 	a, _ := svc.Accounts().Open(ctx, ledger.OpenAccountInput{Currency: "NGN"})
 	b, _ := svc.Accounts().Open(ctx, ledger.OpenAccountInput{Currency: "NGN"})
@@ -74,7 +74,7 @@ func TestLiveCore(t *testing.T) {
 
 	// Limits count a confirmed withdrawal once and give a cancelled one back,
 	// although Core's filter results leave parent_transaction empty.
-	lim := ledger.New(c, ledger.Config{LedgerID: l.LedgerID, Limits: []ledger.Limit{{Tier: "*", Currency: "NGN", Daily: "100000"}}})
+	lim := ledger.New(c, ledger.Config{LedgerID: ledger.LedgerID(l.LedgerID), Limits: []ledger.Limit{{Tier: "*", Currency: "NGN", Daily: "100000"}}})
 	if _, err := lim.Payments().Deposit(ctx, ledger.DepositInput{AccountID: b.ID, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "lim_in_" + run}); err != nil {
 		t.Fatal(err)
 	}

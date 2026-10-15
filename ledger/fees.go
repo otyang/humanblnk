@@ -96,7 +96,7 @@ func ratOf(m Money) (*big.Rat, error) {
 // else Config.Fees, else an error. account is the customer account charged
 // (an "@" indicator gives a nil FeeRequest.Account); acct, when already
 // fetched, saves a request.
-func (s *Service) feeFor(ctx context.Context, op string, fee Money, r FeeRequest, account string, acct *blnk.Balance) (Money, error) {
+func (s *Service) feeFor(ctx context.Context, op string, fee Money, r FeeRequest, account AccountID, acct *blnk.Balance) (Money, error) {
 	if fee.isSet() {
 		return fee, nil
 	}
@@ -111,13 +111,15 @@ func (s *Service) feeFor(ctx context.Context, op string, fee Money, r FeeRequest
 		return Money{}, err
 	}
 	r.Amount = a
-	if account != "" && !strings.HasPrefix(account, "@") {
+	if account != "" && !account.isIndicator() {
 		if acct == nil {
-			if acct, err = s.c.GetBalance(ctx, account); err != nil {
+			if acct, err = s.c.GetBalance(ctx, string(account)); err != nil {
 				return Money{}, mapErr(op, err)
 			}
 		}
-		r.Account = s.toAccount(acct)
+		if !strings.HasPrefix(acct.Indicator, "@") {
+			r.Account = s.toAccount(acct)
+		}
 	}
 	f, err := s.cfg.Fees(ctx, r)
 	if err != nil {

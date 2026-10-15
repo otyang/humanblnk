@@ -11,8 +11,8 @@ import (
 // SplitInput pays one amount out to several accounts in a single transaction,
 // e.g. a marketplace order: seller 90%, platform 10%, delivery a fixed 500.
 type SplitInput struct {
-	From      string // account debited (a customer account, or e.g. "@PaystackClearing" when collecting)
-	Amount    Money  // total debited from From
+	From      AccountID // account debited: a customer account, or e.g. AccountID("@PaystackClearing") when collecting
+	Amount    Money     // total debited from From
 	Parts     []SplitPart
 	Reference string
 
@@ -26,10 +26,10 @@ type SplitInput struct {
 
 // SplitPart is one recipient. Set exactly one of Amount, Percent or Rest.
 type SplitPart struct {
-	To        string
-	Amount    Money  // fixed amount
-	Percent   string // share of the total, e.g. "10" for 10%
-	Rest      bool   // whatever is left after the other parts (at most one part)
+	To        AccountID // customer account, or a system account as AccountID("@Name")
+	Amount    Money     // fixed amount
+	Percent   string    // share of the total, e.g. "10" for 10%
+	Rest      bool      // whatever is left after the other parts (at most one part)
 	Narration string
 }
 
@@ -48,24 +48,24 @@ func (s paymentsAPI) Split(ctx context.Context, in SplitInput) (*Receipt, error)
 	if err != nil {
 		return nil, err
 	}
-	ids := []string{in.From}
+	to := make([]AccountID, 0, len(in.Parts))
 	dests := make([]blnk.Distribution, len(in.Parts))
 	for i, p := range in.Parts {
-		ids = append(ids, p.To)
+		to = append(to, p.To)
 		dests[i] = blnk.Distribution{
-			Identifier:          p.To,
+			Identifier:          string(p.To),
 			PreciseDistribution: amounts[i].String(),
 			Narration:           firstNonEmpty(p.Narration, in.Description),
 		}
 	}
-	if err := s.checkActive(ctx, op, ids...); err != nil {
+	if err := s.checkActive(ctx, op, []AccountID{in.From}, to...); err != nil {
 		return nil, err
 	}
 	if err := s.checkLimits(ctx, op, in.From, total.PreciseAmount); err != nil {
 		return nil, err
 	}
 	req := s.baseReq(total, in.Reference, in.Description, in.MetaData, "split")
-	req.Source = in.From
+	req.Source = string(in.From)
 	req.Destinations = dests
 	req.AllowOverdraft = in.AllowOverdraft
 	req.Inflight = in.Pending
@@ -80,7 +80,7 @@ func (s *Service) splitAmounts(op string, total Money, parts []SplitPart) ([]*bi
 	sum := new(big.Int)
 	rest, firstPct := -1, -1
 	for i, p := range parts {
-		if strings.TrimSpace(p.To) == "" {
+		if strings.TrimSpace(string(p.To)) == "" {
 			return nil, invalid(op, "part %d: recipient is required", i)
 		}
 		set := 0

@@ -230,6 +230,7 @@ func TestRetriesOnLockContention(t *testing.T) {
 
 func TestHistoryUsesBalanceIDFilter(t *testing.T) {
 	f, svc, _ := newFake(t)
+	f.on("GET /balances/bln_w", 200, `{"balance_id":"bln_w","currency":"NGN"}`)
 	f.on("POST /transactions/filter", 200, `{"data":[`+appliedTxn+`],"total_count":7}`)
 	p, err := svc.Accounts().History(context.Background(), "bln_w", ledger.HistoryQuery{Statuses: []string{"posted"}, Limit: 5})
 	if err != nil {
@@ -242,7 +243,7 @@ func TestHistoryUsesBalanceIDFilter(t *testing.T) {
 	fs := b["filters"].([]any)
 	first, status := fs[0].(map[string]any), fs[1].(map[string]any)
 	if first["field"] != "balance_id" || first["value"] != "bln_w" || status["value"] != "APPLIED" ||
-		b["limit"].(float64) != 5 || b["sort_order"] != "desc" || b["logical_operator"] != nil || len(f.reqs) != 1 {
+		b["limit"].(float64) != 5 || b["sort_order"] != "desc" || b["logical_operator"] != nil || len(f.reqs) != 2 {
 		t.Errorf("filter body wrong: %v (requests=%d)", b, len(f.reqs))
 	}
 
@@ -291,8 +292,8 @@ func TestGetAccountComputesAvailable(t *testing.T) {
 	}
 
 	f.on("GET /balances/indicator/@FeeIncome/currency/NGN", 200, `{"balance_id":"bln_fee","indicator":"@FeeIncome","currency":"NGN"}`)
-	fee, err := svc.Accounts().GetSystem(context.Background(), "@FeeIncome", "ngn")
-	if err != nil || fee.Kind != ledger.SystemAccount {
+	fee, err := svc.System().Get(context.Background(), ledger.SystemRef{Indicator: "@FeeIncome", Currency: "ngn"})
+	if err != nil || fee.Type != ledger.GLIncome || fee.Normal != ledger.CreditNormal {
 		t.Fatalf("system account: %+v %v", fee, err)
 	}
 }

@@ -43,11 +43,11 @@ type LimitUsage struct {
 
 // LimitUsage reports usage against the account's limit (for "you can send X
 // more today" in your app).
-func (s accountsAPI) LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error) {
+func (s accountsAPI) LimitUsage(ctx context.Context, id AccountID) (*LimitUsage, error) {
 	const op = "ledger.Accounts.LimitUsage"
-	b, err := s.c.GetBalance(ctx, accountID)
+	b, err := s.loadAccount(ctx, op, id)
 	if err != nil {
-		return nil, mapErr(op, err)
+		return nil, err
 	}
 	return s.usage(ctx, op, b)
 }
@@ -97,11 +97,11 @@ func (s *Service) usage(ctx context.Context, op string, b *blnk.Balance) (*Limit
 }
 
 // checkLimits rejects a debit of amount from accountID that would break its limit.
-func (s *Service) checkLimits(ctx context.Context, op, accountID string, amount *big.Int) error {
-	if len(s.cfg.Limits) == 0 || strings.HasPrefix(accountID, "@") {
+func (s *Service) checkLimits(ctx context.Context, op string, accountID AccountID, amount *big.Int) error {
+	if len(s.cfg.Limits) == 0 || accountID.isIndicator() {
 		return nil
 	}
-	b, err := s.c.GetBalance(ctx, accountID)
+	b, err := s.c.GetBalance(ctx, string(accountID))
 	if err != nil {
 		return mapErr(op, err)
 	}

@@ -28,6 +28,15 @@ var (
 	ErrConflict           = errors.New("ledger: conflicting operation in progress")
 	ErrUnavailable        = errors.New("ledger: ledger temporarily unavailable")
 	ErrUnauthorized       = errors.New("ledger: unauthorized")
+
+	// ErrLedgerNotFound: the ledger doesn't exist. errors.Is(err, ErrNotFound) also holds.
+	ErrLedgerNotFound = fmt.Errorf("ledger: ledger not found: %w", ErrNotFound)
+	// ErrLedgerFrozen: the account's ledger is frozen, so no money can leave it.
+	ErrLedgerFrozen = errors.New("ledger: ledger is frozen")
+	// ErrWrongKind: the id names another kind of object, e.g. a ledger id passed
+	// to Accounts(), or a system account to a customer-account method.
+	// errors.Is(err, ErrInvalidInput) also holds.
+	ErrWrongKind = fmt.Errorf("ledger: id names the wrong kind of object: %w", ErrInvalidInput)
 )
 
 // OpError carries the operation name, a domain sentinel, and the cause.

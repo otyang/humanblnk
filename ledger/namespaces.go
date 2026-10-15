@@ -10,8 +10,14 @@ import (
 // l.Pending().Confirm(...). Depend on a single namespace (e.g. ledger.Pending)
 // where that is all a component needs. Service implements it on Blnk;
 // Instrument wraps any Ledger with an Observer.
+//
+// Ledgers, Accounts and System each work on one kind of object only: Blnk
+// ledgers, customer accounts, and system ("@") accounts. Each takes its own id
+// type (LedgerID, AccountID, SystemRef) and refuses ids of another kind.
 type Ledger interface {
+	Ledgers() Ledgers
 	Accounts() Accounts
+	System() System
 	Customers() Customers
 	Payments() Payments
 	Pending() Pending
@@ -22,52 +28,102 @@ type Ledger interface {
 	Reconciliations() Reconciliations
 }
 
-// Accounts: open, read and manage accounts, and their history and statements.
+// Ledgers: create, read and freeze Blnk ledgers. Accounts are opened inside a ledger.
+type Ledgers interface {
+	// Create creates a ledger, or returns the one already created with the same
+	// Key (Replayed set), so it never makes two. The same Key with a different
+	// Name is refused with ErrDuplicateReference. Create ledgers when you
+	// provision, not on the request path.
+	Create(ctx context.Context, in CreateLedgerInput) (*LedgerInfo, error)
+
+	// Get returns a ledger. A ledger that doesn't exist is ErrLedgerNotFound.
+	Get(ctx context.Context, id LedgerID) (*LedgerInfo, error)
+
+	// List lists ledgers, oldest first.
+	List(ctx context.Context, q LedgerQuery) (*LedgerPage, error)
+
+	// Freeze marks the ledger frozen: no money can leave any of its customer
+	// accounts while Config.EnforceAccountStatus is on. Money can still come in,
+	// and system accounts are never blocked.
+	Freeze(ctx context.Context, id LedgerID, reason string) error
+
+	// Unfreeze marks a frozen ledger active again.
+	Unfreeze(ctx context.Context, id LedgerID) error
+}
+
+// Accounts: open, read and manage customer accounts (and pots and escrows),
+// and their history and statements. Every method refuses ledger ids and
+// system accounts with ErrWrongKind; system accounts are read through System().
 type Accounts interface {
 	// Open creates a customer account (a Blnk balance) in Config.LedgerID or
-	// in.LedgerID, marked active. With ExternalID it is safe to retry.
+	// in.LedgerID, marked active. The ledger must exist (ErrLedgerNotFound
+	// otherwise). With ExternalID it is safe to retry.
 	Open(ctx context.Context, in OpenAccountInput) (*Account, error)
 
 	// Get returns an account with its balance, available balance (balance minus
 	// pending debits) and pending amounts.
-	Get(ctx context.Context, accountID string) (*Account, error)
+	Get(ctx context.Context, id AccountID) (*Account, error)
 
-	// GetSystem returns a system account such as "@FeeIncome" or "@PaystackClearing".
-	GetSystem(ctx context.Context, indicator, currency string) (*Account, error)
-
-	// Find lists accounts matching q, oldest first.
+	// Find lists accounts matching q, oldest first. System accounts are never
+	// listed.
 	Find(ctx context.Context, q AccountQuery) (*AccountPage, error)
 
 	// Freeze marks the account frozen in metadata. Enforced by this layer when
 	// Config.EnforceAccountStatus is true (Blnk itself does not block on metadata).
-	Freeze(ctx context.Context, accountID, reason string) error
+	// A closed account can't be frozen (ErrAccountClosed).
+	Freeze(ctx context.Context, id AccountID, reason string) error
 
-	// Unfreeze marks a frozen account active again.
-	Unfreeze(ctx context.Context, accountID string) error
+	// Unfreeze marks a frozen account active again. A closed account stays
+	// closed (ErrAccountClosed).
+	Unfreeze(ctx context.Context, id AccountID) error
 
 	// Close moves any remaining balance to SweepTo and marks the account
 	// closed. It refuses while anything is pending (INFLIGHT) or the balance is
 	// negative. Closed accounts are rejected by every movement when
-	// Config.EnforceAccountStatus is on. Closing a frozen account is allowed.
-	Close(ctx context.Context, accountID string, in CloseInput) (*Account, error)
+	// Config.EnforceAccountStatus is on. Closing a frozen account is allowed;
+	// sweeping money out of an account whose ledger is frozen is not
+	// (ErrLedgerFrozen).
+	Close(ctx context.Context, id AccountID, in CloseInput) (*Account, error)
 
 	// History lists an account's transactions, newest first.
-	History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error)
+	History(ctx context.Context, id AccountID, q HistoryQuery) (*HistoryPage, error)
 
 	// BalanceAt returns the account's posted balance at t, e.g. a month-end
 	// balance. It uses Blnk's historical balance endpoint recomputed from
 	// transactions (Core 0.10.1+). Pending (INFLIGHT) amounts aren't included.
-	BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error)
+	BalanceAt(ctx context.Context, id AccountID, t time.Time) (Money, error)
 
 	// Statement builds a statement from posted (APPLIED) entries. Opening comes
 	// from Blnk's historical balance; the running balance is computed here and
 	// checked against the historical balance at To, so a statement that doesn't
 	// add up is an error rather than a wrong document.
-	Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error)
+	Statement(ctx context.Context, id AccountID, from, to time.Time) (*Statement, error)
 
 	// LimitUsage reports usage against the account's limit (for "you can send X
 	// more today" in your app).
-	LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error)
+	LimitUsage(ctx context.Context, id AccountID) (*LimitUsage, error)
+}
+
+// System: read system (GL) accounts such as "@FeeIncome" or
+// "@PaystackClearing". They are created by Blnk the first time a movement uses
+// them and change only through the ledger's own flows, so there is nothing to
+// open, freeze or close.
+type System interface {
+	// Get returns a system account in one currency.
+	Get(ctx context.Context, ref SystemRef) (*SystemAccount, error)
+
+	// List lists every system account in currency.
+	List(ctx context.Context, currency string) ([]*SystemAccount, error)
+
+	// History lists a system account's transactions, newest first.
+	History(ctx context.Context, ref SystemRef, q HistoryQuery) (*HistoryPage, error)
+
+	// BalanceAt returns the system account's posted balance at t, as Blnk
+	// stores it (debit-normal accounts run negative).
+	BalanceAt(ctx context.Context, ref SystemRef, t time.Time) (Money, error)
+
+	// Statement builds a statement for a system account, like Accounts().Statement.
+	Statement(ctx context.Context, ref SystemRef, from, to time.Time) (*Statement, error)
 }
 
 // Customers: onboard customers and their savings pots.
@@ -84,7 +140,7 @@ type Customers interface {
 	OpenPot(ctx context.Context, in PotInput) (*Pot, error)
 
 	// ListPots lists the pots under a parent account.
-	ListPots(ctx context.Context, parentID string) ([]*Pot, error)
+	ListPots(ctx context.Context, parentID AccountID) ([]*Pot, error)
 }
 
 // Payments: move money and quote it first.
@@ -213,13 +269,13 @@ type Escrows interface {
 	Open(ctx context.Context, in EscrowInput) (*Escrow, error)
 
 	// Get returns an escrow and how much of it is still held.
-	Get(ctx context.Context, escrowID string) (*Escrow, error)
+	Get(ctx context.Context, escrowID AccountID) (*Escrow, error)
 
 	// Release pays escrowed money to the beneficiary.
-	Release(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error)
+	Release(ctx context.Context, escrowID AccountID, in EscrowSettleInput) (*Receipt, error)
 
 	// Refund returns escrowed money to the payer.
-	Refund(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error)
+	Refund(ctx context.Context, escrowID AccountID, in EscrowSettleInput) (*Receipt, error)
 }
 
 // Operations: back-office tools: settlement, suspense, adjustments, trial balance and balance alerts.
@@ -237,11 +293,15 @@ type Operations interface {
 	// ParkInSuspense records unidentified incoming money: clearing account → @Suspense.
 	ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error)
 
-	// AllocateSuspense moves parked money to its owner: @Suspense → account. It
-	// can't allocate more than suspense holds.
+	// AllocateSuspense moves parked money to its owner once known: @Suspense →
+	// customer account. It can't allocate more than suspense holds.
 	AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error)
 
-	// Adjust posts a correction between the account and @Adjustments, recording
+	// ReturnSuspense sends parked money back where it came from: @Suspense →
+	// the provider's clearing account, e.g. when the provider reverses it.
+	ReturnSuspense(ctx context.Context, in ReturnSuspenseInput) (*Receipt, error)
+
+	// Adjust posts a correction between a customer account and @Adjustments, recording
 	// reason, requester and approver in metadata so every correction is auditable.
 	Adjust(ctx context.Context, in AdjustInput) (*Receipt, error)
 
@@ -270,6 +330,8 @@ type Reconciliations interface {
 
 // The namespace implementations share the Service they wrap.
 type (
+	ledgersAPI         struct{ *Service }
+	systemAPI          struct{ *Service }
 	accountsAPI        struct{ *Service }
 	customersAPI       struct{ *Service }
 	paymentsAPI        struct{ *Service }
@@ -280,6 +342,12 @@ type (
 	operationsAPI      struct{ *Service }
 	reconciliationsAPI struct{ *Service }
 )
+
+// Ledgers returns the Ledgers namespace.
+func (s *Service) Ledgers() Ledgers { return ledgersAPI{s} }
+
+// System returns the System namespace.
+func (s *Service) System() System { return systemAPI{s} }
 
 // Accounts returns the Accounts namespace.
 func (s *Service) Accounts() Accounts { return accountsAPI{s} }

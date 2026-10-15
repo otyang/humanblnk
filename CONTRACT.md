@@ -28,8 +28,14 @@ func New(blnkURL string, cfg Config, opts ...Option) *Service
 // l.Pending().Confirm(...). Depend on a single namespace (e.g. ledger.Pending)
 // where that is all a component needs. Service implements it on Blnk;
 // Instrument wraps any Ledger with an Observer.
+//
+// Ledgers, Accounts and System each work on one kind of object only: Blnk
+// ledgers, customer accounts, and system ("@") accounts. Each takes its own id
+// type (LedgerID, AccountID, SystemRef) and refuses ids of another kind.
 type Ledger interface {
+	Ledgers() Ledgers
 	Accounts() Accounts
+	System() System
 	Customers() Customers
 	Payments() Payments
 	Pending() Pending
@@ -40,52 +46,102 @@ type Ledger interface {
 	Reconciliations() Reconciliations
 }
 
-// Accounts: open, read and manage accounts, and their history and statements.
+// Ledgers: create, read and freeze Blnk ledgers. Accounts are opened inside a ledger.
+type Ledgers interface {
+	// Create creates a ledger, or returns the one already created with the same
+	// Key (Replayed set), so it never makes two. The same Key with a different
+	// Name is refused with ErrDuplicateReference. Create ledgers when you
+	// provision, not on the request path.
+	Create(ctx context.Context, in CreateLedgerInput) (*LedgerInfo, error)
+
+	// Get returns a ledger. A ledger that doesn't exist is ErrLedgerNotFound.
+	Get(ctx context.Context, id LedgerID) (*LedgerInfo, error)
+
+	// List lists ledgers, oldest first.
+	List(ctx context.Context, q LedgerQuery) (*LedgerPage, error)
+
+	// Freeze marks the ledger frozen: no money can leave any of its customer
+	// accounts while Config.EnforceAccountStatus is on. Money can still come in,
+	// and system accounts are never blocked.
+	Freeze(ctx context.Context, id LedgerID, reason string) error
+
+	// Unfreeze marks a frozen ledger active again.
+	Unfreeze(ctx context.Context, id LedgerID) error
+}
+
+// Accounts: open, read and manage customer accounts (and pots and escrows),
+// and their history and statements. Every method refuses ledger ids and
+// system accounts with ErrWrongKind; system accounts are read through System().
 type Accounts interface {
 	// Open creates a customer account (a Blnk balance) in Config.LedgerID or
-	// in.LedgerID, marked active. With ExternalID it is safe to retry.
+	// in.LedgerID, marked active. The ledger must exist (ErrLedgerNotFound
+	// otherwise). With ExternalID it is safe to retry.
 	Open(ctx context.Context, in OpenAccountInput) (*Account, error)
 
 	// Get returns an account with its balance, available balance (balance minus
 	// pending debits) and pending amounts.
-	Get(ctx context.Context, accountID string) (*Account, error)
+	Get(ctx context.Context, id AccountID) (*Account, error)
 
-	// GetSystem returns a system account such as "@FeeIncome" or "@PaystackClearing".
-	GetSystem(ctx context.Context, indicator, currency string) (*Account, error)
-
-	// Find lists accounts matching q, oldest first.
+	// Find lists accounts matching q, oldest first. System accounts are never
+	// listed.
 	Find(ctx context.Context, q AccountQuery) (*AccountPage, error)
 
 	// Freeze marks the account frozen in metadata. Enforced by this layer when
 	// Config.EnforceAccountStatus is true (Blnk itself does not block on metadata).
-	Freeze(ctx context.Context, accountID, reason string) error
+	// A closed account can't be frozen (ErrAccountClosed).
+	Freeze(ctx context.Context, id AccountID, reason string) error
 
-	// Unfreeze marks a frozen account active again.
-	Unfreeze(ctx context.Context, accountID string) error
+	// Unfreeze marks a frozen account active again. A closed account stays
+	// closed (ErrAccountClosed).
+	Unfreeze(ctx context.Context, id AccountID) error
 
 	// Close moves any remaining balance to SweepTo and marks the account
 	// closed. It refuses while anything is pending (INFLIGHT) or the balance is
 	// negative. Closed accounts are rejected by every movement when
-	// Config.EnforceAccountStatus is on. Closing a frozen account is allowed.
-	Close(ctx context.Context, accountID string, in CloseInput) (*Account, error)
+	// Config.EnforceAccountStatus is on. Closing a frozen account is allowed;
+	// sweeping money out of an account whose ledger is frozen is not
+	// (ErrLedgerFrozen).
+	Close(ctx context.Context, id AccountID, in CloseInput) (*Account, error)
 
 	// History lists an account's transactions, newest first.
-	History(ctx context.Context, accountID string, q HistoryQuery) (*HistoryPage, error)
+	History(ctx context.Context, id AccountID, q HistoryQuery) (*HistoryPage, error)
 
 	// BalanceAt returns the account's posted balance at t, e.g. a month-end
 	// balance. It uses Blnk's historical balance endpoint recomputed from
 	// transactions (Core 0.10.1+). Pending (INFLIGHT) amounts aren't included.
-	BalanceAt(ctx context.Context, accountID string, t time.Time) (Money, error)
+	BalanceAt(ctx context.Context, id AccountID, t time.Time) (Money, error)
 
 	// Statement builds a statement from posted (APPLIED) entries. Opening comes
 	// from Blnk's historical balance; the running balance is computed here and
 	// checked against the historical balance at To, so a statement that doesn't
 	// add up is an error rather than a wrong document.
-	Statement(ctx context.Context, accountID string, from, to time.Time) (*Statement, error)
+	Statement(ctx context.Context, id AccountID, from, to time.Time) (*Statement, error)
 
 	// LimitUsage reports usage against the account's limit (for "you can send X
 	// more today" in your app).
-	LimitUsage(ctx context.Context, accountID string) (*LimitUsage, error)
+	LimitUsage(ctx context.Context, id AccountID) (*LimitUsage, error)
+}
+
+// System: read system (GL) accounts such as "@FeeIncome" or
+// "@PaystackClearing". They are created by Blnk the first time a movement uses
+// them and change only through the ledger's own flows, so there is nothing to
+// open, freeze or close.
+type System interface {
+	// Get returns a system account in one currency.
+	Get(ctx context.Context, ref SystemRef) (*SystemAccount, error)
+
+	// List lists every system account in currency.
+	List(ctx context.Context, currency string) ([]*SystemAccount, error)
+
+	// History lists a system account's transactions, newest first.
+	History(ctx context.Context, ref SystemRef, q HistoryQuery) (*HistoryPage, error)
+
+	// BalanceAt returns the system account's posted balance at t, as Blnk
+	// stores it (debit-normal accounts run negative).
+	BalanceAt(ctx context.Context, ref SystemRef, t time.Time) (Money, error)
+
+	// Statement builds a statement for a system account, like Accounts().Statement.
+	Statement(ctx context.Context, ref SystemRef, from, to time.Time) (*Statement, error)
 }
 
 // Customers: onboard customers and their savings pots.
@@ -102,7 +158,7 @@ type Customers interface {
 	OpenPot(ctx context.Context, in PotInput) (*Pot, error)
 
 	// ListPots lists the pots under a parent account.
-	ListPots(ctx context.Context, parentID string) ([]*Pot, error)
+	ListPots(ctx context.Context, parentID AccountID) ([]*Pot, error)
 }
 
 // Payments: move money and quote it first.
@@ -231,13 +287,13 @@ type Escrows interface {
 	Open(ctx context.Context, in EscrowInput) (*Escrow, error)
 
 	// Get returns an escrow and how much of it is still held.
-	Get(ctx context.Context, escrowID string) (*Escrow, error)
+	Get(ctx context.Context, escrowID AccountID) (*Escrow, error)
 
 	// Release pays escrowed money to the beneficiary.
-	Release(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error)
+	Release(ctx context.Context, escrowID AccountID, in EscrowSettleInput) (*Receipt, error)
 
 	// Refund returns escrowed money to the payer.
-	Refund(ctx context.Context, escrowID string, in EscrowSettleInput) (*Receipt, error)
+	Refund(ctx context.Context, escrowID AccountID, in EscrowSettleInput) (*Receipt, error)
 }
 
 // Operations: back-office tools: settlement, suspense, adjustments, trial balance and balance alerts.
@@ -255,11 +311,15 @@ type Operations interface {
 	// ParkInSuspense records unidentified incoming money: clearing account → @Suspense.
 	ParkInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error)
 
-	// AllocateSuspense moves parked money to its owner: @Suspense → account. It
-	// can't allocate more than suspense holds.
+	// AllocateSuspense moves parked money to its owner once known: @Suspense →
+	// customer account. It can't allocate more than suspense holds.
 	AllocateSuspense(ctx context.Context, in AllocateInput) (*Receipt, error)
 
-	// Adjust posts a correction between the account and @Adjustments, recording
+	// ReturnSuspense sends parked money back where it came from: @Suspense →
+	// the provider's clearing account, e.g. when the provider reverses it.
+	ReturnSuspense(ctx context.Context, in ReturnSuspenseInput) (*Receipt, error)
+
+	// Adjust posts a correction between a customer account and @Adjustments, recording
 	// reason, requester and approver in metadata so every correction is auditable.
 	Adjust(ctx context.Context, in AdjustInput) (*Receipt, error)
 
@@ -332,50 +392,124 @@ const (
 )
 ```
 
+## Ids
+
+```go
+// AccountID is the balance id of a customer account, pot or escrow ("bln_…").
+//
+// Movement inputs that also accept a system account say so in their field
+// comments; there an AccountID may hold an "@" indicator, e.g.
+// AccountID(ledger.MerchantPayableAccount). Accounts() refuses system accounts.
+type AccountID string
+
+// LedgerID is the id of a Blnk ledger ("ldg_…").
+type LedgerID string
+
+// SystemRef names a system (GL) account: an "@" indicator in one currency.
+// A system account exists once per currency, so both are needed.
+type SystemRef struct {
+	Indicator string // e.g. "@FeeIncome", "@PaystackClearing"
+	Currency  string
+}
+```
+
+## Ledgers
+
+```go
+// CreateLedgerInput creates a ledger (Ledgers().Create).
+type CreateLedgerInput struct {
+	// Key is your unique, stable name for the ledger, e.g. "wallets-ng". It is
+	// what makes Create idempotent: a second Create with the same Key returns
+	// the ledger the first one made. REQUIRED.
+	Key string
+	// Name is the ledger's display name. Default Key.
+	Name string
+	// MetaData is stored on the ledger. The keys this package manages
+	// ("ledger_key", "status", "status_reason", "status_changed_at",
+	// "duplicate_of") are ignored here.
+	MetaData map[string]any
+}
+
+// LedgerInfo is a Blnk ledger: a group of accounts.
+type LedgerInfo struct {
+	ID          LedgerID       `json:"id"`
+	Key         string         `json:"key,omitempty"` // CreateLedgerInput.Key; empty for ledgers made elsewhere
+	Name        string         `json:"name"`
+	Status      string         `json:"status"`                 // active, frozen, or duplicate
+	DuplicateOf LedgerID       `json:"duplicate_of,omitempty"` // set when Status is duplicate: the ledger to use
+	CreatedAt   time.Time      `json:"created_at"`
+	MetaData    map[string]any `json:"meta_data,omitempty"`
+
+	// Replayed: a ledger with this Key already existed; this is it.
+	Replayed bool `json:"replayed,omitempty"`
+}
+
+// LedgerQuery pages Ledgers().List.
+type LedgerQuery struct {
+	Limit  int // default 20, max 100
+	Offset int
+}
+
+// LedgerPage is one page of Ledgers().List.
+type LedgerPage struct {
+	Items  []*LedgerInfo
+	Limit  int
+	Offset int
+}
+```
+
 ## Accounts and customers
 
 ```go
 // OpenAccountInput opens a customer account.
 type OpenAccountInput struct {
 	Currency   string
-	IdentityID string // optional: link to a Blnk identity
-	LedgerID   string // optional: overrides Config.LedgerID
+	IdentityID string   // optional: link to a Blnk identity
+	LedgerID   LedgerID // optional: overrides Config.LedgerID; must exist
 
 	// ExternalID is your own id for this account (e.g. your user id). With it,
 	// Accounts().Open is safe to retry: an account already opened with the same
 	// ExternalID and currency is returned instead of a second one being created.
 	ExternalID string
-	MetaData   map[string]any
+	// MetaData is stored on the account. The keys this package manages
+	// ("status", "account_kind", "external_id") are ignored here: use Freeze,
+	// Close and ExternalID instead.
+	MetaData map[string]any
 }
 
-// Account is a Blnk balance as the wallet sees it, amounts in both forms.
+// Account is a customer account (or pot or escrow) as the wallet sees it,
+// amounts in both forms. System accounts are SystemAccount.
 type Account struct {
-	ID         string      `json:"id"`
-	LedgerID   string      `json:"ledger_id"`
+	ID         AccountID   `json:"id"`
+	LedgerID   LedgerID    `json:"ledger_id"`
 	IdentityID string      `json:"identity_id,omitempty"`
-	Indicator  string      `json:"indicator,omitempty"`
-	Kind       AccountKind `json:"kind"` // customer, or system for "@" indicator accounts such as @FeeIncome
+	Kind       AccountKind `json:"kind"` // customer, pot or escrow
 	Currency   string      `json:"currency"`
 	Precision  int64       `json:"precision"`
 
-	Balance    Money `json:"balance"`     // settled balance
-	Available  Money `json:"available"`   // balance - pending debits (what can be spent now)
-	PendingIn  Money `json:"pending_in"`  // inflight credits
-	PendingOut Money `json:"pending_out"` // inflight debits
-	Credits    Money `json:"credits"`     // lifetime credits
-	Debits     Money `json:"debits"`      // lifetime debits
+	Balances
+	Available Money `json:"available"` // balance - pending debits (what can be spent now)
 
 	Status    string         `json:"status"` // from meta_data.status ("active" if unset)
 	CreatedAt time.Time      `json:"created_at"`
 	MetaData  map[string]any `json:"meta_data,omitempty"`
 }
 
-// AccountKind tells customer accounts (the sub-ledger) from system (GL) accounts.
+// Balances are the figures every Blnk balance carries, customer or system.
+type Balances struct {
+	Balance    Money `json:"balance"`     // settled balance
+	PendingIn  Money `json:"pending_in"`  // inflight credits
+	PendingOut Money `json:"pending_out"` // inflight debits
+	Credits    Money `json:"credits"`     // lifetime credits
+	Debits     Money `json:"debits"`      // lifetime debits
+}
+
+// AccountKind tells customer accounts from the sub-accounts opened under them.
+// System (GL) accounts are a separate type, SystemAccount, read through System().
 type AccountKind string
 
 const (
 	CustomerAccount AccountKind = "customer" // opened with Accounts().Open
-	SystemAccount   AccountKind = "system"   // "@" indicator, e.g. @FeeIncome, @PaystackClearing
 	PotAccount      AccountKind = "pot"      // savings pot under a customer account (OpenPot)
 	EscrowAccount   AccountKind = "escrow"   // one per escrow agreement (Escrows().Open)
 )
@@ -384,7 +518,7 @@ const (
 type AccountQuery struct {
 	IdentityID string
 	Currency   string
-	Kind       AccountKind       // CustomerAccount, PotAccount, EscrowAccount (system accounts: use Accounts().GetSystem)
+	Kind       AccountKind       // CustomerAccount, PotAccount or EscrowAccount; empty = all three
 	Status     string            // "active", "frozen", "closed", ...
 	MetaData   map[string]string // exact matches on meta_data keys, e.g. {"owner": "alice"}
 	Limit      int               // default 20, max 100
@@ -401,9 +535,10 @@ type AccountPage struct {
 
 // CloseInput closes an account (Accounts().Close).
 type CloseInput struct {
-	// SweepTo receives any remaining balance (e.g. the customer's bank payout
-	// account, or another of their accounts). Required when the balance isn't zero.
-	SweepTo   string
+	// SweepTo receives any remaining balance: another customer account, or a
+	// system account such as AccountID("@PayoutClearing"). Required when the
+	// balance isn't zero.
+	SweepTo   AccountID
 	Reference string // REQUIRED when there is a balance to sweep
 	Reason    string
 }
@@ -435,17 +570,73 @@ type Customer struct {
 
 // PotInput opens a savings pot under a customer account.
 type PotInput struct {
-	ParentID string // the customer's main account
-	Name     string // e.g. "Rent", unique per parent
-	Goal     Money  // optional target
+	ParentID AccountID // the customer's main account
+	Name     string    // e.g. "Rent", unique per parent
+	Goal     Money     // optional target
 }
 
 // Pot is a savings sub-account. Move money in and out with Transfer.
 type Pot struct {
 	*Account
 	Name   string
-	Parent string
+	Parent AccountID
 	Goal   Money // zero when no goal was set
+}
+```
+
+## System accounts
+
+```go
+// SystemAccount is a system (GL) account such as "@FeeIncome" in one
+// currency: the accounts finance reconciles against.
+type SystemAccount struct {
+	ID        string   `json:"id"` // Blnk balance id; read it with System(), never Accounts()
+	Indicator string   `json:"indicator"`
+	LedgerID  LedgerID `json:"ledger_id"`
+	Currency  string   `json:"currency"`
+	Precision int64    `json:"precision"`
+
+	Type   GLType     `json:"type"`   // from Chart
+	Normal NormalSide `json:"normal"` // the side its balance normally sits on
+
+	// Balances are as Blnk stores them: a debit-normal account (an asset or
+	// expense) runs negative.
+	Balances
+	// Natural is Balance on the account's normal side: positive when a
+	// debit-normal account holds a debit balance or a credit-normal one a
+	// credit balance. Equal to Balance when Normal is unknown.
+	Natural Money `json:"natural"`
+
+	CreatedAt time.Time      `json:"created_at"`
+	MetaData  map[string]any `json:"meta_data,omitempty"`
+}
+
+// GLType is the accounting type of a system account.
+type GLType string
+
+const (
+	GLAsset     GLType = "asset"
+	GLLiability GLType = "liability"
+	GLEquity    GLType = "equity"
+	GLIncome    GLType = "income"
+	GLExpense   GLType = "expense"
+	GLUnknown   GLType = "" // an indicator not in the chart
+)
+
+// NormalSide is the side a system account normally carries its balance on.
+// Blnk debits the source and credits the destination, so a debit-normal
+// account runs negative in Blnk and a credit-normal one positive.
+type NormalSide string
+
+const (
+	DebitNormal  NormalSide = "debit"
+	CreditNormal NormalSide = "credit"
+)
+
+// GLDef describes a system account in the chart.
+type GLDef struct {
+	Type   GLType
+	Normal NormalSide
 }
 ```
 
@@ -454,10 +645,10 @@ type Pot struct {
 ```go
 // DepositInput records money received from outside through a provider.
 type DepositInput struct {
-	AccountID string
-	Amount    Money  // gross amount received from the provider
-	Fee       Money  // deducted from Amount, credited to the fee income account; required unless Config.Fees is set (NoFee for free)
-	Reference string // REQUIRED idempotency key, e.g. the provider's payment id
+	AccountID AccountID // customer account credited
+	Amount    Money     // gross amount received from the provider
+	Fee       Money     // deducted from Amount, credited to the fee income account; required unless Config.Fees is set (NoFee for free)
+	Reference string    // REQUIRED idempotency key, e.g. the provider's payment id
 
 	// Provider that collected the money, e.g. "paystack" → debits @PaystackClearing.
 	// Empty uses Config.DepositClearingAccount. ClearingAccount overrides with an exact indicator.
@@ -472,10 +663,10 @@ type DepositInput struct {
 
 // WithdrawInput sends money out through a provider.
 type WithdrawInput struct {
-	AccountID string
-	Amount    Money  // amount the customer receives
-	Fee       Money  // charged on top of Amount; required unless Config.Fees is set (NoFee for free)
-	Reference string // REQUIRED idempotency key
+	AccountID AccountID // customer account debited
+	Amount    Money     // amount the customer receives
+	Fee       Money     // charged on top of Amount; required unless Config.Fees is set (NoFee for free)
+	Reference string    // REQUIRED idempotency key
 	// Provider that pays out, e.g. "flutterwave" → credits @FlutterwaveClearing.
 	// Empty uses Config.PayoutClearingAccount. ClearingAccount overrides with an exact indicator.
 	Provider        string
@@ -491,10 +682,10 @@ type WithdrawInput struct {
 
 // TransferInput moves money between accounts.
 type TransferInput struct {
-	From           string // account / balance id or indicator
-	To             string
-	Amount         Money // amount the recipient receives
-	Fee            Money // charged to sender on top of Amount; required unless Config.Fees is set (NoFee for free)
+	From           AccountID // customer account, or a system account as AccountID("@Name")
+	To             AccountID // customer account, or a system account as AccountID("@Name")
+	Amount         Money     // amount the recipient receives
+	Fee            Money     // charged to sender on top of Amount; required unless Config.Fees is set (NoFee for free)
 	Reference      string
 	AllowOverdraft bool
 	Pending        bool // create INFLIGHT; Confirm/Cancel later
@@ -506,8 +697,8 @@ type TransferInput struct {
 // SplitInput pays one amount out to several accounts in a single transaction,
 // e.g. a marketplace order: seller 90%, platform 10%, delivery a fixed 500.
 type SplitInput struct {
-	From      string // account debited (a customer account, or e.g. "@PaystackClearing" when collecting)
-	Amount    Money  // total debited from From
+	From      AccountID // account debited: a customer account, or e.g. AccountID("@PaystackClearing") when collecting
+	Amount    Money     // total debited from From
 	Parts     []SplitPart
 	Reference string
 
@@ -521,18 +712,18 @@ type SplitInput struct {
 
 // SplitPart is one recipient. Set exactly one of Amount, Percent or Rest.
 type SplitPart struct {
-	To        string
-	Amount    Money  // fixed amount
-	Percent   string // share of the total, e.g. "10" for 10%
-	Rest      bool   // whatever is left after the other parts (at most one part)
+	To        AccountID // customer account, or a system account as AccountID("@Name")
+	Amount    Money     // fixed amount
+	Percent   string    // share of the total, e.g. "10" for 10%
+	Rest      bool      // whatever is left after the other parts (at most one part)
 	Narration string
 }
 
 // ExchangeInput converts money between two accounts in different currencies,
 // e.g. a customer's USD account to their NGN account.
 type ExchangeInput struct {
-	From string // account debited, in the sell currency
-	To   string // account credited, in the buy currency
+	From AccountID // customer account debited, in the sell currency
+	To   AccountID // customer account credited, in the buy currency
 
 	// Set Sell (how much leaves From) or Buy (how much must arrive in To).
 	Sell Money
@@ -563,8 +754,8 @@ type ExchangeReceipt struct {
 
 // HoldInput reserves money on an account (Pending().Hold).
 type HoldInput struct {
-	AccountID   string
-	Destination string // where captured funds go, e.g. merchant account or "@CardSettlement"
+	AccountID   AccountID // customer account the money is held on
+	Destination AccountID // where captured funds go: a merchant account, or e.g. AccountID("@CardSettlement")
 	Amount      Money
 	Reference   string
 	ExpiresAt   time.Time // optional auto-release
@@ -658,8 +849,8 @@ const (
 
 // EscrowInput opens an escrow.
 type EscrowInput struct {
-	Payer       string // account the money comes from
-	Beneficiary string // account it goes to on release
+	Payer       AccountID // customer account the money comes from
+	Beneficiary AccountID // account it goes to on release: a customer account, or a system account as AccountID("@Name")
 	Amount      Money
 	Reference   string // REQUIRED; retrying with the same reference returns the same escrow
 	Description string
@@ -680,9 +871,9 @@ type EscrowSettleInput struct {
 // Each escrow is its own Blnk balance, so what is still held is simply that
 // balance, and Blnk itself refuses to release or refund more than is left.
 type Escrow struct {
-	ID          string // the escrow account id; pass it to Escrows().Release / Refund
-	Payer       string
-	Beneficiary string
+	ID          AccountID // the escrow account id; pass it to Escrows().Release / Refund
+	Payer       AccountID
+	Beneficiary AccountID
 	Amount      Money  // amount originally put in escrow
 	Held        Money  // still in escrow
 	Status      string // "held" while anything remains, then "settled"
@@ -763,7 +954,7 @@ type Quote struct {
 	Debit  Money // total leaving the paying account
 	Credit Money // total reaching the customer account (deposit: net of fee)
 
-	Account         string // the customer account the quote is about
+	Account         AccountID // the customer account the quote is about
 	AvailableBefore Money
 	AvailableAfter  Money
 	Allowed         bool
@@ -878,7 +1069,8 @@ type HistoryPage struct {
 // Statement is an account statement for [From, To): opening balance, every
 // posted entry with the running balance after it, and closing balance.
 type Statement struct {
-	AccountID string
+	AccountID string // the balance id; for a system account, its id (Indicator is set)
+	Indicator string // the system account's "@Name"; empty for customer accounts
 	Currency  string
 	From, To  time.Time
 	Opening   Money
@@ -907,8 +1099,8 @@ type TrialBalance struct {
 	Currency string
 
 	// System lists every system account (fee income, clearing, suspense, ...)
-	// with its balance: the figures finance reconciles.
-	System []*Account
+	// with its balance and its type from Chart: the figures finance reconciles.
+	System []*SystemAccount
 
 	// CustomerFunds is what customer accounts (including pots and escrows)
 	// hold in total: the money you owe your customers.
@@ -964,9 +1156,10 @@ type SuspenseInput struct {
 	MetaData        map[string]any
 }
 
-// AllocateInput moves money out of suspense once its owner is known.
+// AllocateInput moves money out of suspense to the customer it belongs to.
+// To send it back to the provider instead, use ReturnSuspense.
 type AllocateInput struct {
-	AccountID string // the customer account, or a clearing account to send it back
+	AccountID AccountID // the customer account
 	Amount    Money
 	Reference string // REQUIRED
 	// SuspenseReference links the allocation to the ParkInSuspense reference.
@@ -974,16 +1167,27 @@ type AllocateInput struct {
 	Note              string
 }
 
+// ReturnSuspenseInput sends parked money back to the provider it came through.
+type ReturnSuspenseInput struct {
+	Provider        string // e.g. "paystack" → @PaystackClearing
+	ClearingAccount string // or an exact clearing account; default Config.DepositClearingAccount
+	Amount          Money
+	Reference       string // REQUIRED
+	// SuspenseReference links the return to the ParkInSuspense reference.
+	SuspenseReference string
+	Note              string
+}
+
 // AdjustInput is a manual correction, with who asked for it and who approved it.
 type AdjustInput struct {
-	AccountID   string
+	AccountID   AccountID // the customer account corrected
 	Type        AdjustmentType
 	Amount      Money
 	Reason      string // REQUIRED
 	RequestedBy string
 	ApprovedBy  string // REQUIRED; must differ from RequestedBy when both are set
 	Reference   string // REQUIRED
-	// Counterparty is the other side of the entry; default @Adjustments.
+	// Counterparty is the other side of the entry, a system account; default @Adjustments.
 	Counterparty string
 	// AllowOverdraft lets a debit take the account below zero.
 	AllowOverdraft bool
@@ -1000,7 +1204,9 @@ const (
 // WatchInput sets up an alert on an account's balance, e.g. "tell me when
 // @PayoutClearing's float drops below 1,000,000".
 type WatchInput struct {
-	AccountID string // balance id (for a system account, use Accounts().GetSystem(...).ID)
+	// Set exactly one: the customer account, or the system account, to watch.
+	AccountID AccountID
+	System    SystemRef
 	Field     string // balance (default), credit_balance, debit_balance, inflight_balance, inflight_debit_balance, inflight_credit_balance
 	Operator  string // <, <=, >, >=, ==, !=  ("=" is accepted and sent as "==")
 	Threshold Money
@@ -1012,7 +1218,7 @@ type WatchInput struct {
 // first time), so debounce alerts on your side.
 type Watch struct {
 	ID        string
-	AccountID string
+	AccountID string // Blnk balance id of the watched account (customer or system)
 	Field     string
 	Operator  string
 	Threshold Money
@@ -1079,10 +1285,11 @@ type MatchingCriterion = blnk.MatchingCriterion
 type Event struct {
 	Name string
 
-	Receipt *Receipt   // transaction.* events
-	Bulk    *BulkEvent // bulk_transaction.*
-	Alert   *Watch     // balance.monitor
-	Account *Account   // balance.created
+	Receipt *Receipt       // transaction.* events
+	Bulk    *BulkEvent     // bulk_transaction.*
+	Alert   *Watch         // balance.monitor
+	Account *Account       // balance.created, for a customer account (or pot or escrow)
+	System  *SystemAccount // balance.created, for a system ("@") account
 
 	Data json.RawMessage
 }
@@ -1130,12 +1337,16 @@ type Service struct {
 	ruleID string // default reconciliation matching rule, created on first use
 
 	indicators sync.Map // "@Name|CUR" → balance id; indicator balances never move
+	ledgers    sync.Map // LedgerID → *ledgerEntry; ledgers are never deleted
+	ledgerKeys sync.Map // CreateLedgerInput.Key → *sync.Mutex, one Create per key at a time
 }
 
 // Config controls how the Service maps domain operations onto Blnk.
 type Config struct {
-	// LedgerID that customer accounts are created in (required for Accounts().Open).
-	LedgerID string
+	// LedgerID that customer accounts are created in (required for
+	// Accounts().Open unless OpenAccountInput.LedgerID is set). Service.Check
+	// verifies it exists.
+	LedgerID LedgerID
 
 	// Display sets how amounts are shown to people per currency (Money.Display),
 	// e.g. {"ETH": {Decimals: 4, TrimZeros: true}}. Unlisted currencies use
@@ -1182,8 +1393,14 @@ type Config struct {
 	CoreDryRun bool
 
 	// EnforceAccountStatus rejects movements touching accounts whose
-	// meta_data.status is "frozen" or "blocked" (one extra GET per account).
+	// meta_data.status is "frozen" or "blocked" (one extra GET per account),
+	// and movements out of accounts whose ledger is frozen (Ledgers().Freeze).
 	EnforceAccountStatus bool
+
+	// LedgerStatusTTL is how long a ledger's frozen/active status is cached
+	// for EnforceAccountStatus. Default 30s; negative reads it every time.
+	// Another process's Ledgers().Freeze takes up to this long to apply here.
+	LedgerStatusTTL time.Duration
 
 	Now func() time.Time
 }
@@ -1282,6 +1499,15 @@ var (
 	ErrConflict           = errors.New("ledger: conflicting operation in progress")
 	ErrUnavailable        = errors.New("ledger: ledger temporarily unavailable")
 	ErrUnauthorized       = errors.New("ledger: unauthorized")
+
+	// ErrLedgerNotFound: the ledger doesn't exist. errors.Is(err, ErrNotFound) also holds.
+	ErrLedgerNotFound = fmt.Errorf("ledger: ledger not found: %w", ErrNotFound)
+	// ErrLedgerFrozen: the account's ledger is frozen, so no money can leave it.
+	ErrLedgerFrozen = errors.New("ledger: ledger is frozen")
+	// ErrWrongKind: the id names another kind of object, e.g. a ledger id passed
+	// to Accounts(), or a system account to a customer-account method.
+	// errors.Is(err, ErrInvalidInput) also holds.
+	ErrWrongKind = fmt.Errorf("ledger: id names the wrong kind of object: %w", ErrInvalidInput)
 )
 
 var (
@@ -1289,6 +1515,11 @@ var (
 	Weekly  = Interval{Days: 7}
 	Monthly = Interval{Months: 1}
 )
+
+// Chart is the chart of accounts: what each system account is. Provider
+// clearing accounts ("@<Provider>Clearing") are assets (money the provider
+// owes you) unless listed here. Add your own indicators to it at start-up.
+var Chart = map[string]GLDef{
 
 // BuiltinDisplay is used for currencies not in Config.Display. Currencies in
 // neither show every decimal place their precision has, padded (fiat style).
@@ -1311,6 +1542,10 @@ var BuiltinPrecisions = map[string]int64{
 ## Functions
 
 ```go
+// ChartEntry returns what indicator is: its Chart entry, else an asset for a
+// provider clearing account, else GLUnknown.
+func ChartEntry(indicator string) GLDef
+
 // ClearingAccount returns the per-provider clearing account:
 // ClearingAccount("paystack") == "@PaystackClearing". It also accepts "@Paystack"
 // and "@PaystackClearing". One clearing account per provider means each

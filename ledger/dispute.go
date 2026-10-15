@@ -60,7 +60,7 @@ func (s disputesAPI) Open(ctx context.Context, in DisputeInput) (*Receipt, error
 		md[k] = v
 	}
 	return s.hold(ctx, op, HoldInput{
-		AccountID: orig.Destination, Destination: orig.Source, Amount: amount,
+		AccountID: AccountID(orig.Destination), Destination: AccountID(orig.Source), Amount: amount,
 		Reference: in.Reference, Description: "Dispute: " + firstNonEmpty(in.Reason, orig.Reference), MetaData: md,
 	}, "dispute")
 }
