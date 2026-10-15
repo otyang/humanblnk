@@ -31,6 +31,44 @@ no deprecation wrappers, released as v0.2.0 (allowed pre-1.0 per CHANGELOG).
 | 1 | What does a frozen ledger block? | **Outgoing money only** from its customer accounts, same as account freeze. Incoming money and internal postings to `@` system accounts still post. |
 | 2 | Operations that legitimately target either kind of account (e.g. `AllocateSuspense` returning money to a clearing account) | **Yes, handle explicitly.** Proposed: split into separate methods/fields so each stays strictly typed (e.g. `AllocateSuspense` → customer `AccountID`; `ReturnSuspense` → `SystemRef`). Confirm split vs. union field before step 5. |
 | 3 | Include `Ledgers().Create`? | **Yes.** |
+| 4 | Ledger creation | **Idempotent: no duplicate ledgers.** Required `Key`; same key returns the existing ledger. |
+| 5 | Opening an account | **Validate the ledger exists first**; missing ledger → `ErrLedgerNotFound`. |
+
+## Idempotent ledger creation
+
+Blnk's `POST /ledgers` has no idempotency key and names aren't unique, so the
+library provides it:
+
+```go
+type CreateLedgerInput struct {
+    Key      string         // REQUIRED, unique, e.g. "wallets-ng"; stored as meta_data.ledger_key
+    Name     string
+    MetaData map[string]any
+}
+```
+
+1. Look up `meta_data.ledger_key == Key` → found: return it (`Replayed = true`).
+   Same key with a different name → conflict error, not a silent replay.
+2. Not found: create with `ledger_key` in metadata.
+3. Look up again: if a race produced several, the **oldest is canonical** and is
+   returned to everyone; the others are tagged `status: duplicate`,
+   `duplicate_of: <canonical id>` and refused by `Accounts().Open`.
+
+Races are further reduced by an in-process `singleflight` per key, and the docs
+recommend creating ledgers at provisioning/startup, not in request handlers.
+Lookup uses a new `FilterLedgers` (`POST /ledgers/filter`); verify metadata
+filtering against live Blnk first, falling back to paging the list.
+
+## Ledger existence check on account open
+
+- `Accounts().Open` loads its ledger through `loadLedger` before creating the
+  balance: not found → `ErrLedgerNotFound`; `duplicate` → refused, naming the
+  canonical ledger; `frozen` → allowed (freeze only blocks outgoing money).
+- Positive results are cached for the process lifetime (ledgers aren't
+  deleted); not-found is never cached.
+- `Service.Check(ctx)` verifies `Config.LedgerID` at startup so a bad config
+  fails at boot.
+- Pots and escrows inherit an existing parent ledger; no extra check.
 
 ## Target API
 
@@ -61,7 +99,9 @@ type Ledger interface {
 ### 1. Types — `ledger/ids.go`, `ledger/accounts.go`
 - [ ] `type LedgerID string`, `type AccountID string`,
       `type SystemRef struct{ Indicator, Currency string }`, each with `Valid()`.
-- [ ] `Ledger` result type (id, name, status, metadata, created at).
+- [ ] `Ledger` result type (id, key, name, status — active/frozen/duplicate —
+      metadata, created at, `Replayed`).
+- [ ] `CreateLedgerInput` with required `Key`; new error kind `ErrLedgerNotFound`.
 - [ ] `SystemAccount` type with `Type` (Asset/Liability/Income/Expense) and
       `Normal` (Debit/Credit); shared `Balances` struct embedded in both
       `Account` and `SystemAccount`.
@@ -82,8 +122,12 @@ type Ledger interface {
       and `status` from caller metadata; remove `GetSystem`.
 - [ ] `System()`: new; `History`/`BalanceAt`/`Statement` share private helpers
       (keyed by balance id) with `Accounts()`.
-- [ ] `Ledgers()`: new; `Create`/`Get` on existing client calls; add
-      `ListLedgers` to `blnk/api.go`; `Freeze`/`Unfreeze` write ledger metadata.
+- [ ] `Ledgers()`: new; `Get` on existing client call; add `ListLedgers` and
+      `FilterLedgers` to `blnk/api.go`; `Freeze`/`Unfreeze` write ledger metadata.
+- [ ] `Ledgers().Create`: idempotent by `Key` — lookup, create, re-lookup
+      (oldest wins, others tagged duplicate), `singleflight` per key.
+- [ ] `Accounts().Open`: validate ledger via `loadLedger` (existence cache).
+- [ ] `Service.Check(ctx)`: verify `Config.LedgerID` at startup.
 
 ### 4. Ledger freeze enforcement
 - [ ] `checkActive` also checks the status of each **source** customer
@@ -112,6 +156,12 @@ type Ledger interface {
   - frozen ledger still allows deposits into its accounts
   - fees and settlements to `@` accounts still post while ledger frozen
   - `Ledgers().Create/Get/List/Freeze/Unfreeze` round trip
+  - `Create` twice with same key → one ledger, second call `Replayed`
+  - same key, different name → conflict
+  - simulated race → oldest ledger returned, duplicate refused by `Open`
+  - `Open` on missing ledger → `ErrLedgerNotFound`
+  - `Open` on frozen ledger → allowed
+  - `Check` with bad `Config.LedgerID` → error
 
 ### 7. Docs and release
 - [ ] Update `cmd/example`, README, `docs.html`; regenerate `CONTRACT.md`
