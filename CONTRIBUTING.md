@@ -32,6 +32,10 @@ it that way unless there is a strong reason.
   `docs.html` and `CONTRACT.md` (CI checks they are current).
 - **New exported names in `ledger`** must be re-exported in `humanblnk.go`;
   `TestReexportsEverything` tells you which.
+- **Each namespace acts on one kind of object.** `Ledgers()`, `Accounts()`
+  and `System()` load what they work on through `loadLedger`/`ledgerFor`,
+  `loadAccount` and `loadSystem` (`ledger/guard.go`), which refuse ids of
+  another kind; new methods must do the same.
 - Keep exported names in product language (`Deposit`, `Confirm`) and system
   accounts in accounting language (`@FeeIncome`).
 

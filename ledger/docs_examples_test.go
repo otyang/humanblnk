@@ -40,6 +40,9 @@ func docSetup() (*ledger.Service, error) {
 		},
 		Location: lagos, // daily limits reset at midnight Lagos time
 	})
+	if err := svc.Check(context.Background()); err != nil {
+		return nil, err // e.g. ErrLedgerNotFound: BLNK_LEDGER_ID is wrong
+	}
 	// enddoc
 	return svc, nil
 }

@@ -24,7 +24,8 @@ type CloseInput struct {
 // Close moves any remaining balance to SweepTo and marks the account
 // closed. It refuses while anything is pending (INFLIGHT) or the balance is
 // negative. Closed accounts are rejected by every movement when
-// Config.EnforceAccountStatus is on. Closing a frozen account is allowed.
+// Config.EnforceAccountStatus is on. Closing a frozen account is allowed;
+// sweeping money out of an account whose ledger is frozen is not.
 func (s accountsAPI) Close(ctx context.Context, accountID AccountID, in CloseInput) (*Account, error) {
 	const op = "ledger.Accounts.Close"
 	b, err := s.loadAccount(ctx, op, accountID)

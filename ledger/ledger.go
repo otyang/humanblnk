@@ -533,11 +533,12 @@ func (s accountsAPI) Get(ctx context.Context, id AccountID) (*Account, error) {
 
 // Freeze marks the account frozen in metadata. Enforced by this layer when
 // Config.EnforceAccountStatus is true (Blnk itself does not block on metadata).
+// A closed account can't be frozen.
 func (s accountsAPI) Freeze(ctx context.Context, id AccountID, reason string) error {
 	return s.setAccountStatus(ctx, "ledger.Accounts.Freeze", id, "frozen", reason)
 }
 
-// Unfreeze marks a frozen account active again.
+// Unfreeze marks a frozen account active again. A closed account stays closed.
 func (s accountsAPI) Unfreeze(ctx context.Context, id AccountID) error {
 	return s.setAccountStatus(ctx, "ledger.Accounts.Unfreeze", id, "active", "")
 }

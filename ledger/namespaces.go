@@ -70,15 +70,19 @@ type Accounts interface {
 
 	// Freeze marks the account frozen in metadata. Enforced by this layer when
 	// Config.EnforceAccountStatus is true (Blnk itself does not block on metadata).
+	// A closed account can't be frozen (ErrAccountClosed).
 	Freeze(ctx context.Context, id AccountID, reason string) error
 
-	// Unfreeze marks a frozen account active again.
+	// Unfreeze marks a frozen account active again. A closed account stays
+	// closed (ErrAccountClosed).
 	Unfreeze(ctx context.Context, id AccountID) error
 
 	// Close moves any remaining balance to SweepTo and marks the account
 	// closed. It refuses while anything is pending (INFLIGHT) or the balance is
 	// negative. Closed accounts are rejected by every movement when
-	// Config.EnforceAccountStatus is on. Closing a frozen account is allowed.
+	// Config.EnforceAccountStatus is on. Closing a frozen account is allowed;
+	// sweeping money out of an account whose ledger is frozen is not
+	// (ErrLedgerFrozen).
 	Close(ctx context.Context, id AccountID, in CloseInput) (*Account, error)
 
 	// History lists an account's transactions, newest first.

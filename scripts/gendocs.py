@@ -176,18 +176,20 @@ section('references', 'References and retries', f'''
 ''')
 
 section('accounts-model', 'Accounts and the chart of accounts', f'''
-<p>Customer accounts are where users’ money lives. System accounts, named with <code>@</code>, are the other side of every entry and are what finance reconciles. Blnk creates each system account on first use, per currency.</p>
-{table(['Account', 'Type', 'Role'], [
- ['<code>@PaystackClearing</code> (any <code>@&lt;Provider&gt;Clearing</code>)', 'Asset / liability', 'Money a provider collected for you, or paid out for you, not yet settled with your bank'],
- ['<code>@FeeIncome</code>', 'Income', 'Every fee'],
- ['<code>@BankOperating</code>', 'Asset', 'Your bank account'],
- ['<code>@ProviderFees</code>', 'Expense', 'Fees providers keep at settlement'],
- ['<code>@FXPool</code>', 'Position', 'Your open position per currency from exchanges'],
- ['<code>@MerchantPayable</code>', 'Liability', 'Captured card payments owed to the card network'],
- ['<code>@Suspense</code>', 'Suspense', 'Money that arrived but can’t be matched to a customer yet'],
- ['<code>@Adjustments</code>', 'Equity / expense', 'Counterparty of approved manual corrections'],
+<p>Customer accounts are where users’ money lives; they sit in your own ledgers. System accounts, named with <code>@</code>, are the other side of every entry and are what finance reconciles. Blnk creates each system account on first use, per currency, in its general ledger. The table is <code>ledger.Chart</code>; add your own indicators to it at startup.</p>
+{table(['Account', 'Type', 'Normal', 'Role'], [
+ ['<code>@PaystackClearing</code> (any <code>@&lt;Provider&gt;Clearing</code>)', 'asset', 'debit', 'Money a provider collected for you, or paid out for you, not yet settled with your bank'],
+ ['<code>@DepositClearing</code>', 'asset', 'debit', 'Deposit source when no provider is named'],
+ ['<code>@PayoutClearing</code>', 'liability', 'credit', 'Withdrawal destination when no provider is named'],
+ ['<code>@FeeIncome</code>', 'income', 'credit', 'Every fee'],
+ ['<code>@BankOperating</code>', 'asset', 'debit', 'Your bank account'],
+ ['<code>@ProviderFees</code>', 'expense', 'debit', 'Fees providers keep at settlement'],
+ ['<code>@FXPool</code>', 'asset', 'debit', 'Your open position per currency from exchanges'],
+ ['<code>@MerchantPayable</code>', 'liability', 'credit', 'Captured card payments owed to the card network'],
+ ['<code>@Suspense</code>', 'liability', 'credit', 'Money that arrived but can’t be matched to a customer yet'],
+ ['<code>@Adjustments</code>', 'equity', 'credit', 'Counterparty of approved manual corrections'],
 ])}
-<p>Blnk debits the source and credits the destination, so asset and expense accounts run negative and liability and income accounts run positive. System accounts are their own type, <code>SystemAccount</code>, read through <code>System()</code>: it carries the account’s <code>Type</code> and <code>Normal</code> side from <code>ledger.Chart</code>, and <code>Natural</code>, the balance on its normal side, so an asset that is owed to you reads positive. Provider clearing accounts default to assets; add a payout-only provider to <code>Chart</code> as a liability if you prefer. Customer accounts are <code>Account</code>, whose <code>Kind</code> is <code>customer</code>, <code>pot</code> or <code>escrow</code>.</p>
+<p>Blnk debits the source and credits the destination, so asset and expense accounts run negative and liability, income and equity accounts run positive. System accounts are their own type, <code>SystemAccount</code>, read through <code>System()</code>: it carries the account’s <code>Type</code> and <code>Normal</code> side from <code>ledger.Chart</code>, and <code>Natural</code>, the balance on its normal side, so an asset that is owed to you reads positive. Provider clearing accounts default to assets; add a payout-only provider to <code>Chart</code> as a liability if you prefer. Customer accounts are <code>Account</code>, whose <code>Kind</code> is <code>customer</code>, <code>pot</code> or <code>escrow</code>.</p>
 {code('system')}
 ''')
 
@@ -212,11 +214,11 @@ section('errors', 'Errors', f'''
  ['<code>ErrWrongKind</code>', 'An id of another kind: a ledger id or system account passed to <code>Accounts()</code>, a balance id to <code>Ledgers()</code>…', 'A bug in the caller'],
  ['<code>ErrLedgerNotFound</code>', 'Opening an account in a ledger that doesn’t exist (also matches <code>ErrNotFound</code>)', 'Fix the configuration'],
  ['<code>ErrInvalidInput</code>', 'Bad amount, missing fee or reference, wrong currency…', 'A bug in the caller'],
- ['<code>ErrDuplicateReference</code>', 'Reference reused for a different movement', 'Investigate; don’t retry'],
+ ['<code>ErrDuplicateReference</code>', 'Reference reused for a different movement, or a ledger <code>Key</code> reused with a different name', 'Investigate; don’t retry'],
  ['<code>ErrNotPending</code>, <code>ErrAlreadyFinalized</code>', 'Confirm/Cancel on something already finished', 'Usually safe to ignore'],
  ['<code>ErrAmountExceeded</code>', 'Capturing or refunding more than is left', 'A bug in the caller'],
  ['<code>ErrFeePricing</code>', 'Your <code>Config.Fees</code> function failed or returned nonsense', 'Retry later; alert'],
- ['<code>ErrNotFound</code>', 'No such account or transaction', '—'],
+ ['<code>ErrNotFound</code>', 'No such ledger, account or transaction', '—'],
  ['<code>ErrConflict</code>, <code>ErrUnavailable</code>', 'Contention or Blnk unreachable (after retries)', '“Try again shortly.”'],
 ])}
 ''')
@@ -243,7 +245,8 @@ section('freeze', 'Freeze, unfreeze and close', f'''
 {code('freeze')}
 <p>A whole ledger can be frozen too. Then no money can leave any of its customer accounts, while deposits into them and postings to system accounts carry on:</p>
 {code('freezeledger')}
-<p><code>Accounts().Close</code> refuses while anything is pending, moves any remaining balance to <code>SweepTo</code>, then marks the account closed for good. A frozen account can still be closed.</p>
+<p><code>Accounts().Close</code> refuses while anything is pending, moves any remaining balance to <code>SweepTo</code>, then marks the account closed for good. A frozen account can still be closed, but nothing can be swept out of a frozen ledger, and a closed account can’t be frozen or unfrozen.</p>
+<p>Each <code>Service</code> caches a ledger’s status for <code>Config.LedgerStatusTTL</code> (30 seconds by default), so a freeze made by another process applies within that time. Pending transactions created before the freeze can still be confirmed.</p>
 ''')
 
 # --- Money in & out
@@ -258,7 +261,8 @@ section('topup', 'Top up through Paystack', f'''
 section('p2p', 'Send money to a friend', f'''
 {code('p2p')}
 {entries([('Ada · NGN', '12,510.00', ''), ('Tunde · NGN', '', '12,500.00'), ('@FeeIncome', '', '10.00')])}
-<p>A quote runs the same checks as the real transfer (funds, limits, frozen accounts, fee) without moving money, so what Ada confirms is what she is charged.</p>
+<p>A quote runs the same checks as the real transfer (funds, limits, frozen accounts and ledgers, fee) without moving money, so what Ada confirms is what she is charged.</p>
+<p><code>From</code> and <code>To</code> are <code>AccountID</code>s. A transfer can also name a system account, written <code>ledger.AccountID("@Name")</code>; deposits, withdrawals, holds and exchanges accept customer accounts only and refuse anything else with <code>ErrWrongKind</code>.</p>
 ''', 'Ada sends Tunde her share of the rent, seeing the fee before she confirms.')
 
 section('withdraw', 'Withdraw to a bank account', f'''
@@ -344,12 +348,12 @@ group('Reporting')
 section('statement', 'Statements', f'''
 {code('statement')}
 {raw(csv_excerpt, caption='WriteCSV output (excerpt, from the run above)')}
-<p>The statement lists posted entries only, dated by when they took effect, so a standing order appears on the day it posted. The closing balance is checked against Blnk’s own balance at the end of the period: a statement that doesn’t add up is an error, never a wrong document. Fees appear as their own lines, as on a bank statement.</p>
+<p><code>System().Statement</code> builds the same statement for a system account such as <code>@FeeIncome</code>. The statement lists posted entries only, dated by when they took effect, so a standing order appears on the day it posted. The closing balance is checked against Blnk’s own balance at the end of the period: a statement that doesn’t add up is an error, never a wrong document. Fees appear as their own lines, as on a bank statement.</p>
 ''', 'A downloadable month for Ada, checked against the ledger.')
 
 section('trial', 'Trial balance', f'''
 {code('trial')}
-<p>In double entry every currency nets to zero. Run this nightly and alert when <code>Balanced</code> is false; <code>CustomerFunds</code> is the total you owe customers, the figure your safeguarding account must cover.</p>
+<p>In double entry every currency nets to zero. Run this nightly and alert when <code>Balanced</code> is false; <code>CustomerFunds</code> is the total you owe customers, the figure your safeguarding account must cover. <code>System</code> lists every system account as a <code>SystemAccount</code>, with its type and <code>Natural</code> balance.</p>
 ''', 'One call to prove the books add up.')
 
 # --- Back office
@@ -365,7 +369,10 @@ section('adjust', 'Manual corrections', f'''
 <p>Every adjustment records its reason, requester and approver in metadata, and the same person can’t do both.</p>
 ''', 'Corrections with a second pair of eyes.')
 
-section('watch', 'Balance alerts', code('watch'), 'Get told when a float runs high or low.')
+section('watch', 'Balance alerts', f'''
+{code('watch')}
+<p>Watch a system account with <code>System</code>, as here, or a customer account with <code>AccountID</code>; set one, not both.</p>
+''', 'Get told when a float runs high or low.')
 
 section('reconcile', 'Reconciliation', f'''
 {code('reconcile')}
@@ -377,7 +384,7 @@ section('reconcile', 'Reconciliation', f'''
 group('Integration')
 section('webhooks', 'Webhooks', f'''
 {code('webhook')}
-<p>With <code>Secret</code> set, signatures (<code>X-Blnk-Signature</code>, HMAC-SHA256 of <code>timestamp.body</code>) and a five-minute timestamp window are checked; without it nothing is verified, so make sure it is set in production. Blnk delivers at least once and retries on errors, so make handlers idempotent, for example keyed on <code>e.Receipt.TransactionID</code> plus <code>e.Name</code>. An expired hold arrives as <code>transaction.void</code>.</p>
+<p><code>balance.created</code> sets <code>e.Account</code> for a customer account and <code>e.System</code> for a system account. With <code>Secret</code> set, signatures (<code>X-Blnk-Signature</code>, HMAC-SHA256 of <code>timestamp.body</code>) and a five-minute timestamp window are checked; without it nothing is verified, so make sure it is set in production. Blnk delivers at least once and retries on errors, so make handlers idempotent, for example keyed on <code>e.Receipt.TransactionID</code> plus <code>e.Name</code>. An expired hold arrives as <code>transaction.void</code>.</p>
 ''', 'React to what happens in the ledger.')
 
 section('observe', 'Logging, metrics and tracing', f'''
@@ -387,7 +394,7 @@ section('observe', 'Logging, metrics and tracing', f'''
 
 section('testing', 'Testing your app', f'''
 {code('testing', 'rent_test.go')}
-<p><code>ledgertest</code> is an in-memory Blnk Core: your tests run the real <code>Service</code> code, so they exercise the same requests production sends. It behaves like Core 0.15 where that matters (fee legs, stored ids, required descriptions) and lets you move time forward to expire holds and run scheduled transfers. To check against a real Core (it writes test data):</p>
+<p><code>ledgertest</code> is an in-memory Blnk Core: your tests run the real <code>Service</code> code, so they exercise the same requests production sends. <code>ledgertest.New</code> creates a ledger for the test and sets <code>Config.LedgerID</code> to it. It behaves like Core 0.15 where that matters (fee legs, stored ids, required descriptions) and lets you move time forward to expire holds and run scheduled transfers. To check against a real Core (it writes test data):</p>
 {raw("BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -v")}
 ''', 'Fast tests with no Docker, using the real request code.')
 
@@ -405,7 +412,9 @@ section('versions', 'Blnk versions and known limits', f'''
 ])}
 <ul class="limits">
 <li><strong>Fee legs.</strong> A movement with a fee is stored as legs (<code>ref-1</code>, <code>ref-2</code>) with no parent record. The library rebuilds the parent for lookups and retries, and disputes or refunds pick the recipient’s leg, but raw Blnk queries and reconciliation see legs. A pending one is confirmed in full (or one leg at a time), never partially.</li>
-<li><strong>System account ids.</strong> Blnk stores <code>@FeeIncome</code>-style accounts by balance id; receipts and history show the id, statements show the name.</li>
+<li><strong>System account ids.</strong> Blnk stores <code>@FeeIncome</code>-style accounts by balance id; receipts and history show the id, statements show the name. Read them through <code>System()</code>; <code>Accounts()</code> refuses them.</li>
+<li><strong>Ledger keys.</strong> Blnk has no unique ledger names, so two processes creating the same <code>Key</code> at once can both succeed; the oldest then wins and the other is marked <code>duplicate</code>. Create ledgers at provisioning time.</li>
+<li><strong>Ledger freeze</strong> is enforced by this library (with <code>EnforceAccountStatus</code>), not by Blnk, and each process caches the status for <code>LedgerStatusTTL</code>.</li>
 <li><strong>Concurrent partial refunds</strong> of one transaction can both pass the remaining-amount check; serialise them.</li>
 <li><strong>Balance alerts</strong> fire after every update while the condition holds; debounce them.</li>
 <li><strong>Dry-run quotes</strong> need Core 0.15.3; older Core ignores <code>dry_run</code> and posts, which is why <code>CoreDryRun</code> is off by default.</li>
