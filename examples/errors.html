@@ -45,13 +45,13 @@
 <h2 id="check-with-errors-is"><a href="#check-with-errors-is">Check with errors.Is</a></h2>
 <p>Each error matches one sentinel from package <code>ledger</code>. Branch on the sentinel, never on the message text.</p>
 <figure class="code"><figcaption>Ada sends more than she has</figcaption><pre><code>_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
-	<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0001&quot;</span>,
 })
 check(err)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
-	<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;75000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;75000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0002&quot;</span>,
 })
 <span class="k">if</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>) {
@@ -84,22 +84,22 @@ Blnk: 400 TXN_INSUFFICIENT_FUNDS</pre></figure>
 <p>These are normal outcomes. The customer's request was understood and refused.</p>
 <figure class="code"><figcaption>Over a limit, to a frozen account, into a closed account</figcaption><pre><code><span class="c">// Over Ada&#x27;s tier2 limit of ₦100,000 per transaction:</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tunde, <span class="t">To</span>: ada,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000.01&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0003&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000.01&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0003&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;limit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
 
 check(ops.<span class="t">FreezeAccount</span>(ctx, tunde, <span class="s">&quot;fraud review&quot;</span>))
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0004&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0004&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 check(ops.<span class="t">UnfreezeAccount</span>(ctx, tunde))
 
-old, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+old, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 _, err = ops.<span class="t">CloseAccount</span>(ctx, old.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;duplicate account&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;support_amaka&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead_femi&quot;</span>})
 check(err)
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: old.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;closed:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>limit: true
 frozen: true
@@ -107,25 +107,25 @@ closed: true</pre></figure>
 <h2 id="mistakes-in-the-call"><a href="#mistakes-in-the-call">Mistakes in the call</a></h2>
 <p>These mean the request was wrong. Fix the code or the input.</p>
 <figure class="code"><pre><code>_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>}) <span class="c">// no Reference</span>
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>}) <span class="c">// no Reference</span>
 fmt.<span class="t">Println</span>(<span class="s">&quot;invalid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_0005&quot;</span>}) <span class="c">// no Fee and no Config.Fees</span>
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_0005&quot;</span>}) <span class="c">// no Fee and no Config.Fees</span>
 fmt.<span class="t">Println</span>(<span class="s">&quot;invalid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>),
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5003&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5003&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;wrong kind:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>), <span class="s">&quot;also invalid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="c">// p2p_0001 was ₦90,000</span>
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0001&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0001&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;duplicate reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))
 
 _, err = wallet.<span class="t">GetAccount</span>(ctx, <span class="s">&quot;bln_999999&quot;</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;not found:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
 
-_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: <span class="s">&quot;ldg_999999&quot;</span>})
+_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">LedgerID</span>: <span class="s">&quot;ldg_999999&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;ledger not found:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>), <span class="s">&quot;also not found:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>invalid: true ledger.Wallet.Transfer: ledger: invalid input: reference (idempotency key) is required
 invalid: true ledger.Wallet.Transfer: ledger: invalid input: fee is required; pass ledger.NoFee for a free transaction, or set Config.Fees
@@ -136,10 +136,10 @@ ledger not found: true also not found: true</pre></figure>
 <ul><li><code>ErrWrongKind</code> also matches <code>ErrInvalidInput</code>. <code>ErrLedgerNotFound</code> also matches <code>ErrNotFound</code>.</li><li>A duplicate reference is only an error when the payload differs. The same reference with the same payload is a replay (see below).</li></ul>
 <h2 id="the-wrong-state-for-this-step"><a href="#the-wrong-state-for-this-step">The wrong state for this step</a></h2>
 <figure class="code"><figcaption>A card hold on Ada's account</figcaption><pre><code>hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_7781&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_7781&quot;</span>})
 check(err)
 
-more := ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
+more := ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, currency.<span class="t">NGN</span>)
 _, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, &amp;more)
 fmt.<span class="t">Println</span>(<span class="s">&quot;amount exceeded:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAmountExceeded</span>))
 
@@ -168,7 +168,7 @@ approval required: true</pre></figure>
 <h2 id="retrying-replays-and-transient-errors"><a href="#retrying-replays-and-transient-errors">Retrying: replays and transient errors</a></h2>
 <p>Every movement takes a <code>Reference</code>. Send the same call again with the same reference and the same payload, and you get the original back with <code>Replayed: true</code>. Nothing posts twice. So when you don't know whether a call worked, retry it unchanged.</p>
 <figure class="code"><pre><code><span class="c">// The app timed out waiting for Blnk and sends the same payment again.</span>
-in := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+in := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0006&quot;</span>}
 first, err := wallet.<span class="t">Transfer</span>(ctx, in)
 check(err)
@@ -180,7 +180,7 @@ retryLater := <span class="k">func</span>(err <span class="b">error</span>) <spa
 	<span class="k">return</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>) || errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrConflict</span>)
 }
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;99000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0007&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;99000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0007&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds, retry later?&quot;</span>, retryLater(err))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>same transaction: true replayed: true
 insufficient funds, retry later? false</pre></figure>
@@ -207,10 +207,10 @@ insufficient funds, retry later? false</pre></figure>
 }
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;99000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0008&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;99000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0008&quot;</span>})
 fmt.<span class="t">Println</span>(userMessage(err))
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: old.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0009&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0009&quot;</span>})
 fmt.<span class="t">Println</span>(userMessage(err))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>You don&#x27;t have enough money for this
 This account is closed</pre></figure>
@@ -226,7 +226,7 @@ This account is closed</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

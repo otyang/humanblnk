@@ -72,7 +72,7 @@
 <span class="c">// In main: http.Handle(&quot;/webhooks/blnk&quot;, handler)</span>
 
 <span class="c">// Paystack confirms Ada&#x27;s top-up, and Oja records it.</span>
-fund(wallet, ada, <span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T7001&quot;</span>)
+fund(wallet, ada, <span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;paystack_T7001&quot;</span>)
 
 <span class="c">// Blnk then POSTs the event to the handler. The emulator builds that request.</span>
 rec := httptest.<span class="t">NewRecorder</span>()
@@ -159,10 +159,10 @@ with a 30 minute window: &lt;nil&gt;</pre></figure>
 <div class="tablewrap"><table><thead><tr><th>Typed field</th><th>Fields</th></tr></thead><tbody><tr><td><code>Receipt</code></td><td><code>TransactionID</code>, <code>Reference</code>, <code>Status</code> (Blnk's: <code>APPLIED</code>, <code>INFLIGHT</code>, …), <code>EntryStatus</code> (<code>posted</code>, <code>pending</code>, …), <code>Amount</code>, <code>Source</code>, <code>Destination</code>, <code>Legs</code>, <code>Description</code>, <code>MetaData</code>, <code>CreatedAt</code></td></tr><tr><td><code>Bulk</code> (<code>*BulkEvent</code>)</td><td><code>BatchID</code>, <code>Status</code>, <code>Count</code> (transactions that didn't fail), <code>Error</code></td></tr><tr><td><code>Alert</code> (<code>*Watch</code>)</td><td><code>ID</code>, <code>AccountID</code> (the Blnk balance id), <code>Field</code>, <code>Operator</code>, <code>Threshold</code></td></tr><tr><td><code>Account</code> / <code>House</code></td><td>the new account, as <code>wallet.GetAccount</code> or <code>ops.GetHouseAccount</code> return it</td></tr></tbody></table></div>
 <h3 id="a-balance-alert">A balance alert</h3>
 <figure class="code"><figcaption>Oja watches for Ada's balance going over ₦100,000</figcaption><pre><code>_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
-	<span class="t">AccountID</span>: ada, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: ada, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, currency.<span class="t">NGN</span>),
 })
 check(err)
-fund(wallet, ada, <span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T7002&quot;</span>) <span class="c">// Ada now has ₦110,000</span>
+fund(wallet, ada, <span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;paystack_T7002&quot;</span>) <span class="c">// Ada now has ₦110,000</span>
 
 <span class="k">for</span> _, ev := <span class="k">range</span> core.<span class="t">Events</span>() {
 	<span class="k">if</span> ev.<span class="t">Event</span> != ledger.<span class="t">EventBalanceAlert</span> {
@@ -247,7 +247,7 @@ notifications sent: 1</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

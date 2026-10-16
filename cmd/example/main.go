@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/otyang/humanblnk/blnk"
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
@@ -55,16 +56,16 @@ func main() {
 	var svc ledger.Ledger = service // depend on the interface; Service adds helpers like ComputeFee
 	run := time.Now().UnixNano()    // unique references for this demo run
 
-	alice, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", MetaData: map[string]any{"owner": "alice"}})
+	alice, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, MetaData: map[string]any{"owner": "alice"}})
 	must(err)
-	bob, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", MetaData: map[string]any{"owner": "bob"}})
+	bob, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, MetaData: map[string]any{"owner": "bob"}})
 	must(err)
 
 	// 1. Deposit ₦10,000 via Paystack, ₦150 fee → Alice gets ₦9,850.
 	//    Dr @PaystackClearing 10,000 / Cr @FeeIncome 150 / Cr Alice 9,850.
 	//    Amounts are typed as decimals; Blnk stores precise_amount 1000000 + precision 100.
 	dep, err := svc.Wallet().Deposit(ctx, ledger.DepositInput{
-		AccountID: alice.ID, Amount: ledger.Amount("10000", "NGN"), Fee: ledger.Amount("150", "NGN"),
+		AccountID: alice.ID, Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.Amount("150", currency.NGN),
 		Reference: fmt.Sprintf("paystack_%d", run), Provider: "paystack",
 	})
 	must(err)
@@ -73,7 +74,7 @@ func main() {
 
 	// 2. Transfer ₦2,000 to Bob with a ₦10 fee.
 	tr, err := svc.Wallet().Transfer(ctx, ledger.TransferInput{
-		From: alice.ID, To: bob.ID, Amount: ledger.Amount("2000", "NGN"), Fee: ledger.Amount("10", "NGN"),
+		From: alice.ID, To: bob.ID, Amount: ledger.Amount("2000", currency.NGN), Fee: ledger.Amount("10", currency.NGN),
 		Reference: fmt.Sprintf("p2p_%d", run), Description: "Lunch",
 	})
 	must(err)
@@ -82,7 +83,7 @@ func main() {
 	// 3. Withdraw ₦5,000 — pending until the payout provider confirms.
 	//    Dr Alice 5,050 / Cr @FlutterwaveClearing 5,000 / Cr @FeeIncome 50.
 	wd, err := svc.Wallet().Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: alice.ID, Amount: ledger.Amount("5000", "NGN"), Fee: ledger.Amount("50", "NGN"),
+		AccountID: alice.ID, Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.Amount("50", currency.NGN),
 		Reference: fmt.Sprintf("payout_%d", run), Provider: "flutterwave",
 	})
 	must(err)
@@ -95,7 +96,7 @@ func main() {
 	// 4. Overspending is a typed error, not a string match.
 	_, err = svc.Wallet().Transfer(ctx, ledger.TransferInput{
 		Fee:  ledger.NoFee,
-		From: bob.ID, To: alice.ID, Amount: ledger.Amount("9999999.99", "NGN"), Reference: fmt.Sprintf("too_much_%d", run),
+		From: bob.ID, To: alice.ID, Amount: ledger.Amount("9999999.99", currency.NGN), Reference: fmt.Sprintf("too_much_%d", run),
 	})
 	if errors.Is(err, ledger.ErrInsufficientFunds) {
 		fmt.Println("as expected: insufficient funds")
@@ -103,7 +104,7 @@ func main() {
 
 	// 5. Card-style hold, partial capture, release the rest.
 	hold, err := svc.Wallet().Hold(ctx, ledger.HoldInput{
-		AccountID: bob.ID, Destination: ledger.MerchantPayableAccount, Amount: ledger.Amount("1000", "NGN"),
+		AccountID: bob.ID, Destination: ledger.MerchantPayableAccount, Amount: ledger.Amount("1000", currency.NGN),
 		Reference: fmt.Sprintf("auth_%d", run), ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
 	})
 	must(err)
@@ -126,15 +127,15 @@ func main() {
 	}
 
 	// 7. Crypto: debit exactly 0.456 BTC. Stored as precise_amount 45600000, precision 100000000.
-	btc, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "BTC"})
+	btc, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.BTC})
 	must(err)
 	_, err = svc.Wallet().Deposit(ctx, ledger.DepositInput{
 		Fee:       ledger.NoFee,
-		AccountID: btc.ID, Amount: ledger.Amount("1.25", "BTC"), Reference: fmt.Sprintf("btc_in_%d", run), Provider: "custody",
+		AccountID: btc.ID, Amount: ledger.Amount("1.25", currency.BTC), Reference: fmt.Sprintf("btc_in_%d", run), Provider: "custody",
 	})
 	must(err)
 	out, err := svc.Wallet().Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: btc.ID, Amount: ledger.Amount("0.456", "BTC"), Fee: ledger.Amount("0.0001", ""),
+		AccountID: btc.ID, Amount: ledger.Amount("0.456", currency.BTC), Fee: ledger.Amount("0.0001", ""),
 		Reference: fmt.Sprintf("btc_out_%d", run), Provider: "onchain", Immediate: true,
 	})
 	must(err)
@@ -142,15 +143,15 @@ func main() {
 	fmt.Println("btc withdrawal:", string(j)) // {"amount":"0.4561","currency":"BTC","precise_amount":"45610000","precision":100000000}
 
 	// 8. Quote before charging: fee from a rule, total debit, balance after.
-	fee, err := service.ComputeFee(ledger.FeeRule{Percent: "1.5", Min: "10", Max: "2000"}, ledger.Amount("1000", "NGN"))
+	fee, err := service.ComputeFee(ledger.FeeRule{Percent: "1.5", Min: "10", Max: "2000"}, ledger.Amount("1000", currency.NGN))
 	must(err)
-	q, err := svc.Wallet().QuoteTransfer(ctx, ledger.TransferInput{From: alice.ID, To: bob.ID, Amount: ledger.Amount("1000", "NGN"), Fee: fee, Reference: fmt.Sprintf("q_%d", run)})
+	q, err := svc.Wallet().QuoteTransfer(ctx, ledger.TransferInput{From: alice.ID, To: bob.ID, Amount: ledger.Amount("1000", currency.NGN), Fee: fee, Reference: fmt.Sprintf("q_%d", run)})
 	must(err)
 	fmt.Println("quote:", q)
 
 	// 9. Marketplace order: seller gets the rest after the platform's 10% and a fixed delivery fee.
 	_, err = svc.Wallet().Split(ctx, ledger.SplitInput{
-		From: alice.ID, Amount: ledger.Amount("1500", "NGN"), Reference: fmt.Sprintf("order_%d", run),
+		From: alice.ID, Amount: ledger.Amount("1500", currency.NGN), Reference: fmt.Sprintf("order_%d", run),
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "10"},
 			{To: ledger.MerchantPayableAccount, Amount: ledger.Amount("200", "")},
@@ -162,7 +163,7 @@ func main() {
 	// 10. Paystack settles the day's collections to the bank, keeping a ₦150 fee:
 	//     Dr @BankOperating 9,850 / Dr @ProviderFees 150 / Cr @PaystackClearing 10,000.
 	_, err = svc.Ops().RecordSettlement(ctx, ledger.SettlementInput{
-		Provider: "paystack", Amount: ledger.Amount("10000", "NGN"), Fee: ledger.Amount("150", ""),
+		Provider: "paystack", Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.Amount("150", ""),
 		Reference: fmt.Sprintf("stl_%d", run),
 	})
 	must(err)
@@ -171,7 +172,7 @@ func main() {
 	st, err := svc.Wallet().Statement(ctx, alice.ID, time.Now().Add(-time.Hour), time.Now().Add(time.Minute))
 	must(err)
 	fmt.Printf("alice statement: opening %s, %d entries, closing %s\n", st.Opening, len(st.Lines), st.Closing)
-	tb, err := svc.Ops().TrialBalance(ctx, "NGN")
+	tb, err := svc.Ops().TrialBalance(ctx, currency.NGN)
 	must(err)
 	fmt.Printf("NGN trial balance: customers hold %s, net %s, balanced=%v\n", tb.CustomerFunds, tb.Net, tb.Balanced)
 }

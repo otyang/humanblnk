@@ -72,7 +72,7 @@ closed, err = ops.<span class="t">CloseAccount</span>(ctx, tundeNGN.<span class=
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, closed.<span class="t">Status</span>, <span class="s">&quot;balance:&quot;</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)
 
-fw, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="b">string</span>(payout), <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+fw, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="b">string</span>(payout), <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 fmt.<span class="t">Println</span>(fw.<span class="t">Indicator</span>, <span class="s">&quot;balance:&quot;</span>, fw.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>status: closed balance: 0.00
@@ -80,7 +80,7 @@ fmt.<span class="t">Println</span>(fw.<span class="t">Indicator</span>, <span cl
 <ul><li><code>ledger.ClearingAccount(&quot;flutterwave&quot;)</code> gives <code>@FlutterwaveClearing</code>. <code>ledger.AccountID(&quot;@PayoutClearing&quot;)</code> works the same way when you don't track payouts per provider.</li><li>The sweep posts at once. It is not a pending withdrawal, so there is nothing to <code>Confirm</code> or <code>Cancel</code>. Send the bank transfer yourself, then clear it against your bank with <code>ops.RecordSettlement</code> as usual. See <a href="settlement.html">Provider settlement</a>.</li><li>If you want the payout to go through your normal withdrawal flow (pending until Flutterwave confirms, auto-cancel on timeout), call <code>wallet.Withdraw</code> for the full balance first, <code>Confirm</code> it when Flutterwave reports success, then close the empty account.</li></ul>
 <h2 id="an-empty-account"><a href="#an-empty-account">An empty account</a></h2>
 <figure class="code"><figcaption>A duplicate account opened by mistake</figcaption><pre><code><span class="c">// An account opened by mistake and never used: no SweepTo or Reference needed.</span>
-spare, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_ada_dup&quot;</span>})
+spare, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_ada_dup&quot;</span>})
 check(err)
 closed, err = ops.<span class="t">CloseAccount</span>(ctx, spare.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{
 	<span class="t">Reason</span>:      <span class="s">&quot;duplicate account&quot;</span>,
@@ -135,7 +135,7 @@ _, err = wallet.<span class="t">Cancel</span>(ctx, hold.<span class="t">Transact
 check(err)
 
 <span class="c">// A standing order to Chidi Stores is due tomorrow.</span>
-_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: shop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: shop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;so_ada_chidi_1&quot;</span>, <span class="t">ScheduledFor</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)})
 check(err)
 _, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, in)
@@ -178,12 +178,12 @@ now: closed 0.00</pre></figure>
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, acct.<span class="t">Status</span>)
 
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T8801&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;deposit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: shop.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;chidi_refund_44&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;chidi_refund_44&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;transfer in:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
 
 err = ops.<span class="t">UnfreezeAccount</span>(ctx, adaNGN.<span class="t">ID</span>)
@@ -208,9 +208,9 @@ close again: closed reason kept: customer request</pre></figure>
 <div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Tunde's account</td><td>125,000</td><td></td></tr><tr><td><code>@FlutterwaveClearing</code></td><td></td><td>125,000</td></tr></tbody></table></div>
 <p>Then the balance's metadata is updated: <code>status: closed</code>, <code>status_reason</code>, <code>closed_requested_by</code>, <code>closed_approved_by</code> and <code>status_changed_at</code>. An account with a zero balance gets the metadata update only. No fee is charged on a sweep.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<figure class="code"><pre><code>chidiSide, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;merchant_311_b&quot;</span>})
+<figure class="code"><pre><code>chidiSide, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">ExternalID</span>: <span class="s">&quot;merchant_311_b&quot;</span>})
 check(err)
-fund(wallet, chidiSide.<span class="t">ID</span>, <span class="s">&quot;9000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;seed_chidi_b&quot;</span>)
+fund(wallet, chidiSide.<span class="t">ID</span>, <span class="s">&quot;9000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;seed_chidi_b&quot;</span>)
 in = ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;merchant request&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
 	<span class="t">SweepTo</span>: adaNGN.<span class="t">ID</span>, <span class="t">Reference</span>: <span class="s">&quot;close_chidi_b&quot;</span>}
 
@@ -232,9 +232,9 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;house account:&quot;</s
 <span class="c">// Nothing leaves a frozen ledger, closure sweeps included.</span>
 agents, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-agents&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Agents&quot;</span>})
 check(err)
-ikeja, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: agents.<span class="t">ID</span>})
+ikeja, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">LedgerID</span>: agents.<span class="t">ID</span>})
 check(err)
-fund(wallet, ikeja.<span class="t">ID</span>, <span class="s">&quot;7000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;seed_ikeja&quot;</span>)
+fund(wallet, ikeja.<span class="t">ID</span>, <span class="s">&quot;7000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;seed_ikeja&quot;</span>)
 check(ops.<span class="t">FreezeLedger</span>(ctx, agents.<span class="t">ID</span>, <span class="s">&quot;CBN directive 2026/114&quot;</span>))
 _, err = ops.<span class="t">CloseAccount</span>(ctx, ikeja.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;agent offboarded&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">SweepTo</span>: <span class="s">&quot;@PayoutClearing&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;close_ikeja&quot;</span>})
@@ -260,7 +260,7 @@ frozen account closed: closed 0.00</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

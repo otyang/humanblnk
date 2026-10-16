@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/otyang/humanblnk/blnk"
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
@@ -45,9 +46,9 @@ func docSetup() (*ledger.Service, error) {
 		LedgerID: ledger.LedgerID(os.Getenv("BLNK_LEDGER_ID")), // customer accounts live here
 		Fees:     pricing,                                      // central fee pricing (see Fees)
 		Limits: []ledger.Limit{ // KYC tiers (see Limits)
-			{Tier: "tier1", Currency: "NGN", PerTransaction: "50000", Daily: "200000"},
-			{Tier: "tier2", Currency: "NGN", PerTransaction: "100000", Daily: "500000"},
-			{Tier: "tier3", Currency: "NGN", PerTransaction: "5000000", Daily: "25000000"},
+			{Tier: "tier1", Currency: currency.NGN, PerTransaction: "50000", Daily: "200000"},
+			{Tier: "tier2", Currency: currency.NGN, PerTransaction: "100000", Daily: "500000"},
+			{Tier: "tier3", Currency: currency.NGN, PerTransaction: "5000000", Daily: "25000000"},
 		},
 		Location: lagos, // daily limits reset at midnight Lagos time
 	})
@@ -69,10 +70,10 @@ func pricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, error) {
 		return ledger.NoFee, nil // premium customers pay nothing
 	}
 	rules := map[ledger.FeeKind]map[string]ledger.FeeRule{
-		ledger.FeeDeposit:    {"NGN": {Percent: "1.5", Max: "2000"}},
-		ledger.FeeTransfer:   {"NGN": {Fixed: "10"}, "USD": {Fixed: "0.10"}},
-		ledger.FeeWithdrawal: {"NGN": {Fixed: "50"}, "BTC": {Fixed: "0.00002"}},
-		ledger.FeeExchange:   {"USD": {Percent: "1"}},
+		ledger.FeeDeposit:    {currency.NGN: {Percent: "1.5", Max: "2000"}},
+		ledger.FeeTransfer:   {currency.NGN: {Fixed: "10"}, currency.USD: {Fixed: "0.10"}},
+		ledger.FeeWithdrawal: {currency.NGN: {Fixed: "50"}, currency.BTC: {Fixed: "0.00002"}},
+		ledger.FeeExchange:   {currency.USD: {Percent: "1"}},
 	}
 	rule, ok := rules[r.Kind][r.Amount.Currency]
 	if !ok {
@@ -87,9 +88,9 @@ func TestDocsSamples(t *testing.T) {
 	cfg := ledger.Config{
 		Fees: pricing,
 		Limits: []ledger.Limit{
-			{Tier: "tier1", Currency: "NGN", PerTransaction: "50000", Daily: "200000"},
-			{Tier: "tier2", Currency: "NGN", PerTransaction: "100000", Daily: "500000"},
-			{Tier: "tier3", Currency: "NGN", PerTransaction: "5000000", Daily: "25000000"},
+			{Tier: "tier1", Currency: currency.NGN, PerTransaction: "50000", Daily: "200000"},
+			{Tier: "tier2", Currency: currency.NGN, PerTransaction: "100000", Daily: "500000"},
+			{Tier: "tier3", Currency: currency.NGN, PerTransaction: "5000000", Daily: "25000000"},
 		},
 	}
 	svc, core := ledgertest.New(t, cfg)
@@ -138,23 +139,23 @@ func TestDocsSamples(t *testing.T) {
 	ada, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{
 		FirstName: "Ada", LastName: "Obi",
 		Email: "ada@example.com", Phone: "+2348030000000", Country: "NG",
-		Currencies: []string{"NGN", "USD", "BTC"},
+		Currencies: []string{currency.NGN, currency.USD, currency.BTC},
 		ExternalID: "user_8812",                     // your user id: retrying returns the same accounts
 		MetaData:   map[string]any{"tier": "tier2"}, // KYC tier: drives limits and pricing
 	})
 	if err != nil {
 		return // e.g. ErrInvalidInput, or ErrUnavailable if Blnk is down
 	}
-	adaNGN := ada.Accounts["NGN"] // *ledger.Account
-	adaUSD := ada.Accounts["USD"]
-	adaBTC := ada.Accounts["BTC"]
+	adaNGN := ada.Accounts[currency.NGN] // *ledger.Account
+	adaUSD := ada.Accounts[currency.USD]
+	adaBTC := ada.Accounts[currency.BTC]
 	// enddoc
 	check(err)
 	tunde, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{FirstName: "Tunde", LastName: "Bakare",
-		Currencies: []string{"NGN"}, ExternalID: "user_9034", MetaData: map[string]any{"tier": "tier1"}})
+		Currencies: []string{currency.NGN}, ExternalID: "user_9034", MetaData: map[string]any{"tier": "tier1"}})
 	check(err)
-	tundeNGN := tunde.Accounts["NGN"]
-	ngWallet, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", LedgerID: ng.ID})
+	tundeNGN := tunde.Accounts[currency.NGN]
+	ngWallet, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, LedgerID: ng.ID})
 	check(err)
 
 	// doc:topup
@@ -162,7 +163,7 @@ func TestDocsSamples(t *testing.T) {
 	// Use their reference as yours, so a repeated webhook can't credit twice.
 	r, err := wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN.ID,
-		Amount:    ledger.Amount("150000", "NGN"),
+		Amount:    ledger.Amount("150000", currency.NGN),
 		Reference: "paystack_T629384756", // Paystack's reference
 		Provider:  "paystack",            // debits @PaystackClearing
 		// Fee left out: Config.Fees prices it (1.5%, capped at ₦2,000)
@@ -174,7 +175,7 @@ func TestDocsSamples(t *testing.T) {
 	// enddoc
 	check(err)
 	say("deposit: %s %s legs=%d", r.Amount.Display, r.EntryStatus, len(r.Legs))
-	again, err := wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN.ID, Amount: ledger.Amount("150000", "NGN"),
+	again, err := wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN.ID, Amount: ledger.Amount("150000", currency.NGN),
 		Reference: "paystack_T629384756", Provider: "paystack"})
 	check(err)
 	if !again.Replayed {
@@ -184,8 +185,8 @@ func TestDocsSamples(t *testing.T) {
 		_, err := wallet.Deposit(ctx, ledger.DepositInput{AccountID: id, Amount: ledger.Amount(amount, cur), Fee: ledger.NoFee, Reference: ref, Provider: "paystack"})
 		check(err)
 	}
-	fund(ngWallet.ID, "1000", "NGN", "ng_wallet_in")
-	fund(adaUSD.ID, "300", "USD", "usd_wire_1")
+	fund(ngWallet.ID, "1000", currency.NGN, "ng_wallet_in")
+	fund(adaUSD.ID, "300", currency.USD, "usd_wire_1")
 
 	// doc:balance
 	acct, err := wallet.GetAccount(ctx, adaNGN.ID)
@@ -201,7 +202,7 @@ func TestDocsSamples(t *testing.T) {
 	// doc:p2p
 	transfer := ledger.TransferInput{
 		From: adaNGN.ID, To: tundeNGN.ID,
-		Amount:      ledger.Amount("12500", "NGN"),
+		Amount:      ledger.Amount("12500", currency.NGN),
 		Reference:   "p2p_01J8ZK2M4Q", // generate once, when the user taps "Send"
 		Description: "Rent share",
 	}
@@ -225,7 +226,7 @@ func TestDocsSamples(t *testing.T) {
 	// Ada withdraws ₦20,000 to her GTBank account through Flutterwave.
 	wd, err := wallet.Withdraw(ctx, ledger.WithdrawInput{
 		AccountID:   adaNGN.ID,
-		Amount:      ledger.Amount("20000", "NGN"), // what reaches her bank
+		Amount:      ledger.Amount("20000", currency.NGN), // what reaches her bank
 		Reference:   "wd_01J8ZM7R2X",
 		Provider:    "flutterwave", // credits @FlutterwaveClearing
 		Description: "Withdrawal to GTBank ****4410",
@@ -248,7 +249,7 @@ func TestDocsSamples(t *testing.T) {
 	auth, err := wallet.Hold(ctx, ledger.HoldInput{
 		AccountID:   adaNGN.ID,
 		Destination: ledger.MerchantPayableAccount, // owed to the card network
-		Amount:      ledger.Amount("18500", "NGN"),
+		Amount:      ledger.Amount("18500", currency.NGN),
 		Reference:   "card_auth_449201",
 		ExpiresAt:   time.Now().Add(7 * 24 * time.Hour), // released if never captured
 		Description: "Mama Nkechi's Kitchen",
@@ -271,7 +272,7 @@ func TestDocsSamples(t *testing.T) {
 	// Ada converts $100 to naira at the rate you quoted (₦1,532.40 per $1).
 	fx := ledger.ExchangeInput{
 		From: adaUSD.ID, To: adaNGN.ID,
-		Sell:      ledger.Amount("100", "USD"),
+		Sell:      ledger.Amount("100", currency.USD),
 		Rate:      "1532.40",
 		Reference: "fx_01J8ZQ0T5C",
 		// Fee from Config.Fees: 1% of the dollars sold, charged on top
@@ -294,8 +295,8 @@ func TestDocsSamples(t *testing.T) {
 	// Your custody provider reports 0.0125 BTC arrived on-chain.
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaBTC.ID,
-		Amount:    ledger.Amount("0.0125", "BTC"), // exact: stored as 1,250,000 satoshi
-		Reference: "btc_tx_9f2c1e…:0",             // txid:vout, unique per output
+		Amount:    ledger.Amount("0.0125", currency.BTC), // exact: stored as 1,250,000 satoshi
+		Reference: "btc_tx_9f2c1e…:0",                    // txid:vout, unique per output
 		Provider:  "custody",
 		Fee:       ledger.NoFee, // incoming crypto is free
 	})
@@ -304,13 +305,13 @@ func TestDocsSamples(t *testing.T) {
 	}
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
 		AccountID: adaBTC.ID,
-		Amount:    ledger.Amount("0.004567896", "BTC"), // 9 decimals: more than BTC has
+		Amount:    ledger.Amount("0.004567896", currency.BTC), // 9 decimals: more than BTC has
 		Reference: "btc_out_77",
 		Provider:  "onchain",
 	})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput)) // true: rejected before reaching Blnk
 	out, err := wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: adaBTC.ID, Amount: ledger.Amount("0.00456789", "BTC"),
+		AccountID: adaBTC.ID, Amount: ledger.Amount("0.00456789", currency.BTC),
 		Reference: "btc_out_77", Provider: "onchain", Immediate: true,
 	})
 	if err != nil {
@@ -322,9 +323,9 @@ func TestDocsSamples(t *testing.T) {
 	say("btc out: %s / %s", out.Amount.Value, out.Amount.Display)
 
 	merchant, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", OrganizationName: "Chidi Stores Ltd",
-		Currencies: []string{"NGN"}, ExternalID: "merchant_311"})
+		Currencies: []string{currency.NGN}, ExternalID: "merchant_311"})
 	check(err)
-	chidi := merchant.Accounts["NGN"]
+	chidi := merchant.Accounts[currency.NGN]
 
 	// doc:marketplace
 	// A ₦25,000 order paid by card through Paystack: the seller gets the rest
@@ -332,7 +333,7 @@ func TestDocsSamples(t *testing.T) {
 	order, err := wallet.Split(ctx, ledger.SplitInput{
 		From:           ledger.AccountID(ledger.ClearingAccount("paystack")), // money arriving from outside
 		AllowOverdraft: true,
-		Amount:         ledger.Amount("25000", "NGN"),
+		Amount:         ledger.Amount("25000", currency.NGN),
 		Reference:      "order_10442",
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "5", Narration: "Oja commission"},
@@ -350,7 +351,7 @@ func TestDocsSamples(t *testing.T) {
 	// Ada buys a ₦80,000 phone from Chidi Stores with buyer protection.
 	esc, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{
 		Payer: adaNGN.ID, Beneficiary: chidi.ID,
-		Amount:    ledger.Amount("80000", "NGN"),
+		Amount:    ledger.Amount("80000", currency.NGN),
 		Reference: "escrow_order_10450",
 	})
 	if err != nil {
@@ -365,7 +366,7 @@ func TestDocsSamples(t *testing.T) {
 	// enddoc
 	check(err)
 
-	pay, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: chidi.ID, Amount: ledger.Amount("9800", "NGN"), Reference: "pay_10461"})
+	pay, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: chidi.ID, Amount: ledger.Amount("9800", currency.NGN), Reference: "pay_10461"})
 	check(err)
 
 	// doc:dispute
@@ -384,7 +385,7 @@ func TestDocsSamples(t *testing.T) {
 	// enddoc
 	check(err)
 
-	pay2, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: chidi.ID, Amount: ledger.Amount("6000", "NGN"), Reference: "pay_10470"})
+	pay2, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: chidi.ID, Amount: ledger.Amount("6000", currency.NGN), Reference: "pay_10470"})
 	check(err)
 
 	// doc:refund
@@ -410,7 +411,7 @@ func TestDocsSamples(t *testing.T) {
 	plan, err := wallet.Schedule(ctx, ledger.RecurringInput{
 		Transfer: ledger.TransferInput{
 			From: adaNGN.ID, To: rent.ID,
-			Amount: ledger.Amount("25000", "NGN"), Fee: ledger.NoFee,
+			Amount: ledger.Amount("25000", currency.NGN), Fee: ledger.NoFee,
 			Reference: "rent_plan_ada_2026", Description: "Rent savings",
 		},
 		First: time.Date(2026, 10, 1, 7, 0, 0, 0, lagos),
@@ -424,7 +425,7 @@ func TestDocsSamples(t *testing.T) {
 	// enddoc
 	check(err)
 
-	fund(chidi.ID, "600000", "NGN", "chidi_bank_transfer_0925")
+	fund(chidi.ID, "600000", currency.NGN, "chidi_bank_transfer_0925")
 
 	// doc:payroll
 	// Chidi Stores pays its staff on the 25th: all or nothing.
@@ -432,7 +433,7 @@ func TestDocsSamples(t *testing.T) {
 	var items []ledger.TransferInput
 	for accountID, salary := range staff {
 		items = append(items, ledger.TransferInput{
-			From: chidi.ID, To: accountID, Amount: ledger.Amount(salary, "NGN"),
+			From: chidi.ID, To: accountID, Amount: ledger.Amount(salary, currency.NGN),
 			Fee: ledger.NoFee, Reference: "payroll_2026_09_" + string(accountID),
 		})
 	}
@@ -443,7 +444,7 @@ func TestDocsSamples(t *testing.T) {
 
 	// doc:limits
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
-		From: adaNGN.ID, To: tundeNGN.ID, Amount: ledger.Amount("150000", "NGN"), Reference: "p2p_big",
+		From: adaNGN.ID, To: tundeNGN.ID, Amount: ledger.Amount("150000", currency.NGN), Reference: "p2p_big",
 	})
 	if errors.Is(err, ledger.ErrLimitExceeded) {
 		// tier2 allows ₦100,000 per transfer: offer Ada the upgrade to tier3
@@ -479,7 +480,7 @@ func TestDocsSamples(t *testing.T) {
 	// doc:freeze
 	_ = ops.FreezeAccount(ctx, tundeNGN.ID, "suspected account takeover")
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("100", "NGN"), Reference: "p2p_x1"})
+		Amount: ledger.Amount("100", currency.NGN), Reference: "p2p_x1"})
 	// errors.Is(err, ledger.ErrAccountFrozen) == true
 	_ = ops.UnfreezeAccount(ctx, tundeNGN.ID)
 	// enddoc
@@ -491,7 +492,7 @@ func TestDocsSamples(t *testing.T) {
 	// The regulator orders a hold on everything in the Nigeria ledger.
 	_ = ops.FreezeLedger(ctx, ng.ID, "CBN directive 2026/114")
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: ngWallet.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("100", "NGN"), Reference: "p2p_x2"})
+		Amount: ledger.Amount("100", currency.NGN), Reference: "p2p_x2"})
 	// errors.Is(err, ledger.ErrLedgerFrozen) == true: nothing can leave its accounts,
 	// but deposits into them still post.
 	_ = ops.UnfreezeLedger(ctx, ng.ID)
@@ -506,7 +507,7 @@ func TestDocsSamples(t *testing.T) {
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{
 		Provider:  "paystack",
 		Direction: ledger.SettlementCollection,
-		Amount:    ledger.Amount("4880000", "NGN"),
+		Amount:    ledger.Amount("4880000", currency.NGN),
 		Fee:       ledger.Amount("73200", ""),
 		Reference: "paystack_settlement_2026_09_30",
 	})
@@ -518,7 +519,7 @@ func TestDocsSamples(t *testing.T) {
 	// doc:suspense
 	// ₦15,000 arrived with no matching customer reference.
 	_, err = ops.HoldInSuspense(ctx, ledger.SuspenseInput{
-		Amount: ledger.Amount("15000", "NGN"), Provider: "paystack",
+		Amount: ledger.Amount("15000", currency.NGN), Provider: "paystack",
 		Reference: "paystack_T7700011", Note: "sender: OKAFOR J., narration blank",
 	})
 	if err != nil {
@@ -526,7 +527,7 @@ func TestDocsSamples(t *testing.T) {
 	}
 	// Support identifies it as Tunde's:
 	_, err = ops.ClaimFromSuspense(ctx, ledger.ClaimFromSuspenseInput{
-		AccountID: tundeNGN.ID, Amount: ledger.Amount("15000", "NGN"),
+		AccountID: tundeNGN.ID, Amount: ledger.Amount("15000", currency.NGN),
 		Reference: "alloc_7700011", SuspenseReference: "paystack_T7700011",
 	})
 	// Had Paystack reversed it instead, send it back with
@@ -537,7 +538,7 @@ func TestDocsSamples(t *testing.T) {
 	// doc:adjust
 	_, err = ops.Adjust(ctx, ledger.AdjustInput{
 		AccountID: adaNGN.ID, Type: ledger.AdjustCredit,
-		Amount:      ledger.Amount("500", "NGN"),
+		Amount:      ledger.Amount("500", currency.NGN),
 		Reason:      "Cashback: September promo",
 		RequestedBy: "ops.kemi", ApprovedBy: "lead.femi", // must be two different people
 		Reference: "adj_cashback_ada_09",
@@ -546,7 +547,7 @@ func TestDocsSamples(t *testing.T) {
 	check(err)
 
 	// doc:trial
-	tb, err := ops.TrialBalance(ctx, "NGN")
+	tb, err := ops.TrialBalance(ctx, currency.NGN)
 	if err != nil {
 		return
 	}
@@ -565,7 +566,7 @@ func TestDocsSamples(t *testing.T) {
 
 	// doc:house
 	// House accounts are read through Ops(), never Wallet().
-	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN})
 	if err != nil {
 		return
 	}
@@ -576,7 +577,7 @@ func TestDocsSamples(t *testing.T) {
 
 	// doc:watch
 	_, err = ops.WatchBalance(ctx, ledger.WatchInput{
-		House:     ledger.HouseRef{Indicator: "@FlutterwaveClearing", Currency: "NGN"},
+		House:     ledger.HouseRef{Indicator: "@FlutterwaveClearing", Currency: currency.NGN},
 		Operator:  ">",
 		Threshold: ledger.Amount("10000000", ""), // ₦10m of payouts not yet settled
 	})
@@ -587,8 +588,8 @@ func TestDocsSamples(t *testing.T) {
 
 	// doc:reconcile
 	report := []ledger.ExternalRecord{ // parsed from Paystack's settlement CSV
-		{ID: "PSK-88120", Amount: ledger.Amount("15000", "NGN"), Reference: "paystack_T7700011", Date: from},
-		{ID: "PSK-88121", Amount: ledger.Amount("4300", "NGN"), Reference: "paystack_T0000404", Date: from},
+		{ID: "PSK-88120", Amount: ledger.Amount("15000", currency.NGN), Reference: "paystack_T7700011", Date: from},
+		{ID: "PSK-88121", Amount: ledger.Amount("4300", currency.NGN), Reference: "paystack_T0000404", Date: from},
 	}
 	run, err := ops.StartReconciliation(ctx, ledger.ReconcileInput{Source: "paystack", Records: report})
 	if err != nil {
@@ -639,13 +640,13 @@ func TestRentTransfer(t *testing.T) {
 	ctx := context.Background()
 	wallet := svc.Wallet()
 
-	ada, _ := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
-	landlord, _ := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	ada, _ := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
+	landlord, _ := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 	wallet.Deposit(ctx, ledger.DepositInput{AccountID: ada.ID,
-		Amount: ledger.Amount("300000", "NGN"), Fee: ledger.NoFee, Reference: "seed", Provider: "paystack"})
+		Amount: ledger.Amount("300000", currency.NGN), Fee: ledger.NoFee, Reference: "seed", Provider: "paystack"})
 
 	_, err := wallet.Transfer(ctx, ledger.TransferInput{From: ada.ID, To: landlord.ID,
-		Amount: ledger.Amount("250000", "NGN"), Fee: ledger.NoFee, Reference: "rent_sept"})
+		Amount: ledger.Amount("250000", currency.NGN), Fee: ledger.NoFee, Reference: "rent_sept"})
 	if err != nil {
 		t.Fatal(err)
 	}

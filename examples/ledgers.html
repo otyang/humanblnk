@@ -50,9 +50,9 @@ ldg_000002 same ledger: true replayed: true</pre></figure>
 	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;country&quot;</span>: <span class="s">&quot;GH&quot;</span>}})
 check(err)
 
-ada, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: ng.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>})
+ada, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">LedgerID</span>: ng.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>})
 check(err)
-kofi, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;GHS&quot;</span>, <span class="t">LedgerID</span>: gh.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_9100&quot;</span>})
+kofi, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">GHS</span>, <span class="t">LedgerID</span>: gh.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_9100&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s naira account in&quot;</span>, ada.<span class="t">LedgerID</span>, <span class="s">&quot;| Kofi&#x27;s cedi account in&quot;</span>, kofi.<span class="t">LedgerID</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>Ada&#x27;s naira account in ldg_000002 | Kofi&#x27;s cedi account in ldg_000003</pre></figure>
@@ -108,7 +108,7 @@ check(err)
 	fmt.<span class="t">Println</span>(l.<span class="t">ID</span>, l.<span class="t">Key</span>, l.<span class="t">Status</span>, l.<span class="t">DuplicateOf</span>)
 }
 twin := all.<span class="t">Items</span>[<span class="b">len</span>(all.<span class="t">Items</span>)-<span class="n">1</span>]
-_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;KES&quot;</span>, <span class="t">LedgerID</span>: twin.<span class="t">ID</span>})
+_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">KES</span>, <span class="t">LedgerID</span>: twin.<span class="t">ID</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;open in the twin:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>everyone gets ldg_000006 replayed: true
 ldg_000006 oja-ke active 
@@ -145,7 +145,7 @@ true ledger.Ops.GetLedger: ledger: id names the wrong kind of object: bln_000004
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

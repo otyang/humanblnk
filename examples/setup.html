@@ -147,13 +147,13 @@ api := customerAPI{wallet: l.<span class="t">Wallet</span>()}
 admin := backOffice{ops: l.<span class="t">Ops</span>()}
 
 ada, err := api.wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
-	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>}, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,
+	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>}, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,
 })
 check(err)
 <span class="c">// api.wallet.FreezeAccount(...) would not compile: Wallet has no such method.</span>
-check(admin.ops.<span class="t">FreezeAccount</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>, <span class="s">&quot;KYC review&quot;</span>))
+check(admin.ops.<span class="t">FreezeAccount</span>(ctx, ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>, <span class="s">&quot;KYC review&quot;</span>))
 
-acct, err := api.wallet.<span class="t">GetAccount</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>)
+acct, err := api.wallet.<span class="t">GetAccount</span>(ctx, ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>)
 check(err)
 fmt.<span class="t">Println</span>(acct.<span class="t">ID</span>, acct.<span class="t">Status</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>bln_000004 frozen</pre></figure>
@@ -167,7 +167,7 @@ fmt.<span class="t">Println</span>(acct.<span class="t">ID</span>, acct.<span cl
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

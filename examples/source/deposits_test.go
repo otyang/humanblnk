@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 // depositsPricing is Oja's fee table for the deposits page: 1.5% on naira
 // deposits, capped at ₦2,000. Everything else is free.
 func depositsPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, error) {
-	if r.Kind == ledger.FeeDeposit && r.Amount.Currency == "NGN" {
+	if r.Kind == ledger.FeeDeposit && r.Amount.Currency == currency.NGN {
 		return ledger.ComputeFee(ledger.FeeRule{Percent: "1.5", Max: "2000"}, r.Amount)
 	}
 	return ledger.NoFee, nil
@@ -20,17 +21,17 @@ func depositsPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, er
 
 func TestDeposits(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{Fees: depositsPricing})
-	ada := customer(wallet, "user_8812", "Ada", "NGN", "BTC")
-	adaNGN, adaBTC := ada.Accounts["NGN"].ID, ada.Accounts["BTC"].ID
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN")
-	tundeNGN := tunde.Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN, currency.BTC)
+	adaNGN, adaBTC := ada.Accounts[currency.NGN].ID, ada.Accounts[currency.BTC].ID
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN)
+	tundeNGN := tunde.Accounts[currency.NGN].ID
 
 	begin("deposits/provider")
 	// sample: deposits/provider
 	// Paystack's charge.success webhook says ₦50,000 arrived for Ada.
 	r, err := wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("50000", "NGN"),
+		Amount:    ledger.Amount("50000", currency.NGN),
 		Fee:       ledger.NoFee,          // free top-up (see below for fees)
 		Reference: "paystack_T629384756", // Paystack's own reference
 		Provider:  "paystack",            // debits @PaystackClearing
@@ -41,7 +42,7 @@ func TestDeposits(t *testing.T) {
 	// A bank transfer to Ada's virtual account, booked against an exact clearing account.
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID:       adaNGN,
-		Amount:          ledger.Amount("20000", "NGN"),
+		Amount:          ledger.Amount("20000", currency.NGN),
 		Fee:             ledger.NoFee,
 		Reference:       "va_credit_88120",
 		ClearingAccount: "@WemaVirtualClearing", // overrides Provider
@@ -49,7 +50,7 @@ func TestDeposits(t *testing.T) {
 	check(err)
 
 	for _, name := range []string{"@PaystackClearing", "@WemaVirtualClearing"} {
-		h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: name, Currency: "NGN"})
+		h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: name, Currency: currency.NGN})
 		check(err)
 		fmt.Println(name, h.Balance.Display, "natural:", h.Natural.Display)
 	}
@@ -61,8 +62,8 @@ func TestDeposits(t *testing.T) {
 	// sample: deposits/fee
 	r, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: tundeNGN,
-		Amount:    ledger.Amount("10000", "NGN"), // gross: what Paystack collected
-		Fee:       ledger.Amount("100", ""),      // deducted; currency taken from Amount
+		Amount:    ledger.Amount("10000", currency.NGN), // gross: what Paystack collected
+		Fee:       ledger.Amount("100", ""),             // deducted; currency taken from Amount
 		Reference: "paystack_T629384801",
 		Provider:  "paystack",
 	})
@@ -92,7 +93,7 @@ func TestDeposits(t *testing.T) {
 	// Fee left out: Config.Fees prices it (1.5%, capped at ₦2,000).
 	r, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: tundeNGN,
-		Amount:    ledger.Amount("200000", "NGN"),
+		Amount:    ledger.Amount("200000", currency.NGN),
 		Reference: "paystack_T629384900",
 		Provider:  "paystack",
 	})
@@ -102,7 +103,7 @@ func TestDeposits(t *testing.T) {
 	// An explicit Fee wins over Config.Fees, e.g. a promotion.
 	r, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: tundeNGN,
-		Amount:    ledger.Amount("5000", "NGN"),
+		Amount:    ledger.Amount("5000", currency.NGN),
 		Fee:       ledger.NoFee,
 		Reference: "paystack_T629384950",
 		Provider:  "paystack",
@@ -110,7 +111,7 @@ func TestDeposits(t *testing.T) {
 	check(err)
 	fmt.Println("promo legs:", len(r.Legs), "fee meta set:", r.MetaData["fee"] != nil)
 
-	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN})
 	check(err)
 	fmt.Println("@FeeIncome:", fees.Balance.Display)
 	// end
@@ -121,7 +122,7 @@ func TestDeposits(t *testing.T) {
 	// Paystack sends the same webhook twice.
 	again, err := wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("50000", "NGN"),
+		Amount:    ledger.Amount("50000", currency.NGN),
 		Fee:       ledger.NoFee,
 		Reference: "paystack_T629384756",
 		Provider:  "paystack",
@@ -132,7 +133,7 @@ func TestDeposits(t *testing.T) {
 	// Same reference, different amount: a real conflict, not a retry.
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("60000", "NGN"),
+		Amount:    ledger.Amount("60000", currency.NGN),
 		Fee:       ledger.NoFee,
 		Reference: "paystack_T629384756",
 		Provider:  "paystack",
@@ -150,7 +151,7 @@ func TestDeposits(t *testing.T) {
 	// A large transfer arrives: hold it until compliance has looked at it.
 	held, err := wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("900000", "NGN"),
+		Amount:    ledger.Amount("900000", currency.NGN),
 		Fee:       ledger.NoFee,
 		Reference: "paystack_T700000001",
 		Provider:  "paystack",
@@ -169,7 +170,7 @@ func TestDeposits(t *testing.T) {
 
 	// Another one fails the checks: cancel it and nothing is credited.
 	bad, err := wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("750000", "NGN"), Fee: ledger.NoFee,
+		AccountID: adaNGN, Amount: ledger.Amount("750000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "paystack_T700000002", Provider: "paystack", Pending: true,
 	})
 	check(err)
@@ -186,7 +187,7 @@ func TestDeposits(t *testing.T) {
 	// Your custody provider reports 0.0125 BTC arrived on-chain.
 	r, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaBTC,
-		Amount:    ledger.Amount("0.0125", "BTC"),
+		Amount:    ledger.Amount("0.0125", currency.BTC),
 		Fee:       ledger.NoFee,
 		Reference: "btc_9f2c1e77:0", // txid:vout, unique per output
 		Provider:  "custody",        // debits @CustodyClearing
@@ -196,7 +197,7 @@ func TestDeposits(t *testing.T) {
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaBTC,
-		Amount:    ledger.Amount("0.000000001", "BTC"), // 9 decimals: BTC has 8
+		Amount:    ledger.Amount("0.000000001", currency.BTC), // 9 decimals: BTC has 8
 		Fee:       ledger.NoFee,
 		Reference: "btc_9f2c1e77:1",
 		Provider:  "custody",
@@ -209,25 +210,25 @@ func TestDeposits(t *testing.T) {
 	// sample: deposits/status
 	check(ops.FreezeAccount(ctx, tundeNGN, "KYC review"))
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: tundeNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee,
+		AccountID: tundeNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "paystack_T800000001", Provider: "paystack",
 	})
 	fmt.Println("frozen account:", errors.Is(err, ledger.ErrAccountFrozen))
 	check(ops.UnfreezeAccount(ctx, tundeNGN))
 
 	// A frozen ledger stops money leaving, not money arriving.
-	check(ops.FreezeLedger(ctx, ada.Accounts["NGN"].LedgerID, "incident 42"))
+	check(ops.FreezeLedger(ctx, ada.Accounts[currency.NGN].LedgerID, "incident 42"))
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee,
+		AccountID: adaNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "paystack_T800000002", Provider: "paystack",
 	})
 	fmt.Println("frozen ledger, deposit ok:", err == nil)
-	check(ops.UnfreezeLedger(ctx, ada.Accounts["NGN"].LedgerID))
+	check(ops.UnfreezeLedger(ctx, ada.Accounts[currency.NGN].LedgerID))
 	// end
 	end()
 
 	_, _, plainWallet, _ := setup(t, ledger.Config{}) // a second service with no Config.Fees
-	bola := customer(plainWallet, "user_9100", "Bola", "NGN").Accounts["NGN"].ID
+	bola := customer(plainWallet, "user_9100", "Bola", currency.NGN).Accounts[currency.NGN].ID
 	_, err = ops.CloseAccount(ctx, tundeNGN, ledger.CloseInput{
 		Reason: "customer request", RequestedBy: "support_17", ApprovedBy: "ops_lead_2",
 		SweepTo: ledger.AccountID(ledger.PayoutClearingAccount), Reference: "close_tunde_ngn",
@@ -238,35 +239,35 @@ func TestDeposits(t *testing.T) {
 	// sample: deposits/errors
 	// plainWallet belongs to a service with no Config.Fees.
 	_, err = plainWallet.Deposit(ctx, ledger.DepositInput{ // and no Fee
-		AccountID: bola, Amount: ledger.Amount("1000", "NGN"), Reference: "dep_1",
+		AccountID: bola, Amount: ledger.Amount("1000", currency.NGN), Reference: "dep_1",
 	})
 	fmt.Println("no fee:", errors.Is(err, ledger.ErrInvalidInput), err)
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee,
+		AccountID: adaNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee,
 	})
 	fmt.Println("no reference:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("100", "NGN"), Fee: ledger.Amount("100", ""),
+		AccountID: adaNGN, Amount: ledger.Amount("100", currency.NGN), Fee: ledger.Amount("100", ""),
 		Reference: "dep_2",
 	})
 	fmt.Println("fee >= amount:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("1000", "USD"), Fee: ledger.NoFee, Reference: "dep_3",
+		AccountID: adaNGN, Amount: ledger.Amount("1000", currency.USD), Fee: ledger.NoFee, Reference: "dep_3",
 	})
 	fmt.Println("wrong currency:", errors.Is(err, ledger.ErrInvalidInput)) // refused by Blnk
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: ledger.AccountID(ledger.FeeIncomeAccount), Amount: ledger.Amount("1000", "NGN"),
+		AccountID: ledger.AccountID(ledger.FeeIncomeAccount), Amount: ledger.Amount("1000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "dep_4",
 	})
 	fmt.Println("house account:", errors.Is(err, ledger.ErrWrongKind))
 
 	// Tunde's NGN account has been closed with ops.CloseAccount.
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: tundeNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "dep_5",
+		AccountID: tundeNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "dep_5",
 	})
 	fmt.Println("closed account:", errors.Is(err, ledger.ErrAccountClosed))
 	// end

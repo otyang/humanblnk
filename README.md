@@ -22,7 +22,7 @@ A wallet business has two jobs. It moves its customers' money: sign-ups, top-ups
 **humanblnk is that layer, written once.** It is the *domain layer*: the code that knows the business. Your app calls it in the business's own words, and it turns each call into correct Blnk entries:
 
 ```go
-wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: ada, Amount: ledger.Amount("20000", "NGN"),
+wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: ada, Amount: ledger.Amount("20000", currency.NGN),
 	Reference: "wd_01J8ZM7R2X", Provider: "flutterwave"})
 ```
 
@@ -126,7 +126,10 @@ go get github.com/otyang/humanblnk@latest
 ## Quick start
 
 ```go
-import "github.com/otyang/humanblnk"
+import (
+	"github.com/otyang/humanblnk"
+	"github.com/otyang/humanblnk/currency"
+)
 
 l := humanblnk.New("http://localhost:5001", humanblnk.Config{LedgerID: "ldg_..."},
 	humanblnk.WithAPIKey(os.Getenv("BLNK_API_KEY")))
@@ -140,17 +143,17 @@ wallet, ops := l.Wallet(), l.Ops()
 
 // Wallet: a customer signs up, tops up and pays a friend.
 ada, err := wallet.OpenCustomer(ctx, humanblnk.CustomerInput{
-	FirstName: "Ada", LastName: "Obi", Currencies: []string{"NGN"}, ExternalID: "user_8812",
+	FirstName: "Ada", LastName: "Obi", Currencies: []string{currency.NGN}, ExternalID: "user_8812",
 })
-adaNGN := ada.Accounts["NGN"]
+adaNGN := ada.Accounts[currency.NGN]
 
 _, err = wallet.Deposit(ctx, humanblnk.DepositInput{
-	AccountID: adaNGN.ID, Amount: humanblnk.Amount("50000", "NGN"), Fee: humanblnk.Amount("750", ""),
+	AccountID: adaNGN.ID, Amount: humanblnk.Amount("50000", currency.NGN), Fee: humanblnk.Amount("750", ""),
 	Reference: "paystack_T629384756", Provider: "paystack", // Paystack's reference: a repeated webhook is harmless
 })
 
 _, err = wallet.Transfer(ctx, humanblnk.TransferInput{
-	From: adaNGN.ID, To: tundeNGN.ID, Amount: humanblnk.Amount("12500", "NGN"),
+	From: adaNGN.ID, To: tundeNGN.ID, Amount: humanblnk.Amount("12500", currency.NGN),
 	Fee: humanblnk.NoFee, Reference: "p2p_01J8ZK2M4Q",
 })
 if errors.Is(err, humanblnk.ErrInsufficientFunds) {
@@ -158,8 +161,8 @@ if errors.Is(err, humanblnk.ErrInsufficientFunds) {
 }
 
 // Financial operations: what the business earned, and whether the books add up.
-fees, _ := ops.GetHouseAccount(ctx, humanblnk.HouseRef{Indicator: humanblnk.FeeIncomeAccount, Currency: "NGN"})
-tb, _ := ops.TrialBalance(ctx, "NGN")
+fees, _ := ops.GetHouseAccount(ctx, humanblnk.HouseRef{Indicator: humanblnk.FeeIncomeAccount, Currency: currency.NGN})
+tb, _ := ops.TrialBalance(ctx, currency.NGN)
 fmt.Println(fees.Natural.Display, tb.Balanced, tb.CustomerFunds.Display)
 ```
 
@@ -234,14 +237,14 @@ You pass amounts as the decimal the user typed. Every `Receipt`, balance and fee
 
 | You type | `Value` | `PreciseAmount` | `Precision` |
 |---|---|---|---|
-| `Amount("0.456", "BTC")` | `"0.456"` | `45600000` | `100000000` |
-| `Amount("100.56", "USD")` | `"100.56"` | `10056` | `100` |
-| `Amount("10000", "NGN")` | `"10000"` | `1000000` | `100` |
+| `Amount("0.456", currency.BTC)` | `"0.456"` | `45600000` | `100000000` |
+| `Amount("100.56", currency.USD)` | `"100.56"` | `10056` | `100` |
+| `Amount("10000", currency.NGN)` | `"10000"` | `1000000` | `100` |
 
 - Only `precise_amount` + `precision` are sent to Blnk, never its float `amount`, so `0.456` can't become `0.45599999`.
 - `Money` marshals to JSON as `{"amount":"0.456","display":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}` and unmarshals from `"0.456"` or a bare `0.456`, read from its literal text.
 - More decimals than the currency allows, and exponents (`1e3`), are rejected before anything is sent.
-- A fee written as `Amount("0.56", "")` takes the main amount's currency. `ledger.Minor(10056, "USD")` works if you already hold the integer.
+- A fee written as `Amount("0.56", "")` takes the main amount's currency. `ledger.Minor(10056, currency.USD)` works if you already hold the integer.
 - **`Display`** is for people: fiat and stablecoins padded (`"100.50"`), crypto trimmed and cut, never rounded up (`"0.456789"` for ETH), so a displayed balance can always be spent in full. Change it per currency with `Config.Currencies`.
 - **Currencies** are built in, in package `currency`: every ISO 4217 code (precision from its minor units: NGN 100, JPY 1, KWD 1000) and major crypto (BTC 1e8, ETH 1e18, SOL 1e9, USDT/USDC 1e6, …), one constant per code. Unknown codes are refused unless `Config.UnknownCurrency` is `ledger.AllowUnknown`. Never change a currency's precision once money has moved.
 
@@ -327,7 +330,7 @@ svc := ledger.New(client, ledger.Config{
   - `Amount`: resolved;
   - `Provider`;
   - `BuyCurrency`, for exchanges.
-- A fee is always in the transaction's currency (an exchange's in the sell currency). Convert inside your function with `r.Convert(ledger.Amount("0.50", "USD"), rate, ledger.RoundUp)`.
+- A fee is always in the transaction's currency (an exchange's in the sell currency). Convert inside your function with `r.Convert(ledger.Amount("0.50", currency.USD), rate, ledger.RoundUp)`.
 - `FeeRule` + `ComputeFee`: percentage + fixed, min/max, tiers, rounding mode.
 - A retry is priced again; if the price changed meanwhile, the retry gets `ErrDuplicateReference`. Retry with the original `Fee` to be safe.
 - `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`. They apply to money customers send: transfers, withdrawals, holds, splits, exchanges and escrow. Refunds, adjustments and other back-office movements neither are checked nor count. `Bulk` batches aren't checked but do count. A scheduled transfer counts on the day it posts. `wallet.LimitUsage` shows what's left, never below zero. Usage is read before posting, so two payments racing each other can both pass.
@@ -431,7 +434,7 @@ var l ledger.Ledger = ledger.Instrument(svc, ledger.LogObserver(slog.Default()))
 
 ```go
 svc, core := ledgertest.New(t, ledger.Config{})
-acct, _ := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+acct, _ := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 core.Advance(25 * time.Hour)          // expire holds, run scheduled transfers
 for _, e := range core.Events() { … } // webhooks Blnk would have sent
 ```

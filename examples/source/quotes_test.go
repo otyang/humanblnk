@@ -6,16 +6,17 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 // quotesPricing is Oja's fee table for the quotes page.
 func quotesPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, error) {
 	rules := map[ledger.FeeKind]map[string]ledger.FeeRule{
-		ledger.FeeDeposit:    {"NGN": {Percent: "1.5", Max: "2000"}},
-		ledger.FeeTransfer:   {"NGN": {Fixed: "10"}},
-		ledger.FeeWithdrawal: {"NGN": {Fixed: "50"}},
-		ledger.FeeExchange:   {"USD": {Percent: "1"}},
+		ledger.FeeDeposit:    {currency.NGN: {Percent: "1.5", Max: "2000"}},
+		ledger.FeeTransfer:   {currency.NGN: {Fixed: "10"}},
+		ledger.FeeWithdrawal: {currency.NGN: {Fixed: "50"}},
+		ledger.FeeExchange:   {currency.USD: {Percent: "1"}},
 	}
 	rule, ok := rules[r.Kind][r.Amount.Currency]
 	if !ok {
@@ -27,19 +28,19 @@ func quotesPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, erro
 func TestQuotes(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{
 		Fees:   quotesPricing,
-		Limits: []ledger.Limit{{Tier: "tier2", Currency: "NGN", PerTransaction: "100000", Daily: "500000"}},
+		Limits: []ledger.Limit{{Tier: "tier2", Currency: currency.NGN, PerTransaction: "100000", Daily: "500000"}},
 	})
-	ada := customer(wallet, "user_8812", "Ada", "NGN", "USD")
-	adaNGN, adaUSD := ada.Accounts["NGN"].ID, ada.Accounts["USD"].ID
-	tundeNGN := customer(wallet, "user_9034", "Tunde", "NGN").Accounts["NGN"].ID
-	fund(wallet, adaNGN, "60000", "NGN", "seed_ada")
-	fund(wallet, adaUSD, "300", "USD", "seed_ada_usd")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN, currency.USD)
+	adaNGN, adaUSD := ada.Accounts[currency.NGN].ID, ada.Accounts[currency.USD].ID
+	tundeNGN := customer(wallet, "user_9034", "Tunde", currency.NGN).Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "60000", currency.NGN, "seed_ada")
+	fund(wallet, adaUSD, "300", currency.USD, "seed_ada_usd")
 
 	begin("quotes/transfer")
 	// sample: quotes/transfer
 	send := ledger.TransferInput{
 		From: adaNGN, To: tundeNGN,
-		Amount:      ledger.Amount("12500", "NGN"),
+		Amount:      ledger.Amount("12500", currency.NGN),
 		Reference:   "p2p_01J8ZK2M4Q", // generated when Ada opens the confirm screen
 		Description: "Rent share",
 	}
@@ -62,7 +63,7 @@ func TestQuotes(t *testing.T) {
 	// "Top up ₦50,000 with your card": show the fee before sending her to Paystack.
 	q, err = wallet.QuoteDeposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("50000", "NGN"),
+		Amount:    ledger.Amount("50000", currency.NGN),
 		Reference: "paystack_T629384756",
 		Provider:  "paystack",
 	})
@@ -76,7 +77,7 @@ func TestQuotes(t *testing.T) {
 	// sample: quotes/withdraw
 	q, err = wallet.QuoteWithdraw(ctx, ledger.WithdrawInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("20000", "NGN"),
+		Amount:    ledger.Amount("20000", currency.NGN),
 		Reference: "wd_01J8ZM7R2X",
 		Provider:  "flutterwave",
 	})
@@ -90,7 +91,7 @@ func TestQuotes(t *testing.T) {
 	// sample: quotes/exchange
 	xq, err := wallet.QuoteExchange(ctx, ledger.ExchangeInput{
 		From: adaUSD, To: adaNGN,
-		Sell:      ledger.Amount("100", "USD"),
+		Sell:      ledger.Amount("100", currency.USD),
 		Rate:      "1532.40",
 		Reference: "fx_01J8ZQ0T5C",
 	})
@@ -105,27 +106,27 @@ func TestQuotes(t *testing.T) {
 	begin("quotes/refused")
 	// sample: quotes/refused
 	tooMuch := send
-	tooMuch.Amount, tooMuch.Reference = ledger.Amount("55000", "NGN"), "p2p_01J8ZKA001"
+	tooMuch.Amount, tooMuch.Reference = ledger.Amount("55000", currency.NGN), "p2p_01J8ZKA001"
 	q, err = wallet.QuoteTransfer(ctx, tooMuch)
 	check(err) // a refusal is not an error
 	fmt.Println(q.Allowed, errors.Is(q.Reason, ledger.ErrInsufficientFunds), "after:", q.AvailableAfter.Display)
 
 	overLimit := send
-	overLimit.Amount, overLimit.Reference = ledger.Amount("150000", "NGN"), "p2p_01J8ZKA002"
+	overLimit.Amount, overLimit.Reference = ledger.Amount("150000", currency.NGN), "p2p_01J8ZKA002"
 	q, err = wallet.QuoteTransfer(ctx, overLimit)
 	check(err)
 	fmt.Println(q.Allowed, errors.Is(q.Reason, ledger.ErrLimitExceeded))
 
 	check(ops.FreezeAccount(ctx, tundeNGN, "KYC review"))
 	q, err = wallet.QuoteTransfer(ctx, ledger.TransferInput{
-		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("100", "NGN"), Reference: "p2p_01J8ZKA003",
+		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("100", currency.NGN), Reference: "p2p_01J8ZKA003",
 	})
 	check(err)
 	fmt.Println(q.Allowed, errors.Is(q.Reason, ledger.ErrAccountFrozen), "CheckedByLedger:", q.CheckedByLedger)
 	check(ops.UnfreezeAccount(ctx, tundeNGN))
 
 	xq, err = wallet.QuoteExchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Sell: ledger.Amount("400", "USD"), Rate: "1532.40", Reference: "fx_01J8ZQ0T6D",
+		From: adaUSD, To: adaNGN, Sell: ledger.Amount("400", currency.USD), Rate: "1532.40", Reference: "fx_01J8ZQ0T6D",
 	})
 	check(err)
 	fmt.Println(xq.Allowed, errors.Is(xq.Reason, ledger.ErrInsufficientFunds))
@@ -135,15 +136,15 @@ func TestQuotes(t *testing.T) {
 	begin("quotes/errors")
 	// sample: quotes/errors
 	_, err = wallet.QuoteTransfer(ctx, ledger.TransferInput{
-		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("12.345", "NGN"), Reference: "p2p_x1",
+		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("12.345", currency.NGN), Reference: "p2p_x1",
 	})
 	fmt.Println("3 decimals in naira:", errors.Is(err, ledger.ErrInvalidInput))
 
-	_, err = wallet.QuoteWithdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN, Amount: ledger.Amount("100", "NGN")})
+	_, err = wallet.QuoteWithdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN, Amount: ledger.Amount("100", currency.NGN)})
 	fmt.Println("no reference:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.QuoteExchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Sell: ledger.Amount("10", "USD"), Rate: "-1", Reference: "fx_x1",
+		From: adaUSD, To: adaNGN, Sell: ledger.Amount("10", currency.USD), Rate: "-1", Reference: "fx_x1",
 	})
 	fmt.Println("bad rate:", errors.Is(err, ledger.ErrInvalidInput))
 

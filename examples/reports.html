@@ -33,29 +33,29 @@
 <h2 id="some-activity-first"><a href="#some-activity-first">Some activity first</a></h2>
 <p>The samples below run on two days of activity: two Paystack deposits with fees, two transfers, a Flutterwave payout, a cashback adjustment, and the next day's settlements.</p>
 <figure class="code"><figcaption>1 and 2 September at Oja</figcaption><pre><code><span class="c">// A day at Oja, 1 September.</span>
-ada := customer(wallet, <span class="s">&quot;user_8812&quot;</span>, <span class="s">&quot;Ada&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
-tunde := customer(wallet, <span class="s">&quot;user_9034&quot;</span>, <span class="s">&quot;Tunde&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
-chidi := customer(wallet, <span class="s">&quot;merchant_311&quot;</span>, <span class="s">&quot;Chidi Stores&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
-adaNGN, tundeNGN, chidiNGN := ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>, tunde.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>, chidi.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>
+ada := customer(wallet, <span class="s">&quot;user_8812&quot;</span>, <span class="s">&quot;Ada&quot;</span>, currency.<span class="t">NGN</span>)
+tunde := customer(wallet, <span class="s">&quot;user_9034&quot;</span>, <span class="s">&quot;Tunde&quot;</span>, currency.<span class="t">NGN</span>)
+chidi := customer(wallet, <span class="s">&quot;merchant_311&quot;</span>, <span class="s">&quot;Chidi Stores&quot;</span>, currency.<span class="t">NGN</span>)
+adaNGN, tundeNGN, chidiNGN := ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>, tunde.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>, chidi.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>
 
 <span class="c">// Money in through Paystack, ₦750 and ₦450 fees.</span>
-_, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;750&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T100&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 check(err)
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;450&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T200&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 check(err)
 
 <span class="c">// Ada pays Tunde; Tunde pays Chidi Stores.</span>
-_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_001&quot;</span>})
 check(err)
-_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_order_10450&quot;</span>})
 check(err)
 
 <span class="c">// Chidi Stores cashes out ₦5,000 through Flutterwave; Flutterwave confirms.</span>
-w, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+w, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;payout_7001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
 check(err)
 _, err = wallet.<span class="t">Confirm</span>(ctx, w.<span class="t">TransactionID</span>, <span class="b">nil</span>)
@@ -63,17 +63,17 @@ check(err)
 
 <span class="c">// Ada gets ₦500 cashback.</span>
 _, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustCredit</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reason</span>: <span class="s">&quot;Cashback: September promo&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reason</span>: <span class="s">&quot;Cashback: September promo&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;adj_cashback_ada_09&quot;</span>})
 check(err)
 
 <span class="c">// Next day: Paystack settles Ada&#x27;s ₦50,000 (keeping ₦750), the bank funds Flutterwave.</span>
 core.<span class="t">Advance</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)
 _, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Direction</span>: ledger.<span class="t">SettlementCollection</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;750&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_stl_0902&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;750&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_stl_0902&quot;</span>})
 check(err)
 _, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>, <span class="t">Direction</span>: ledger.<span class="t">SettlementPayout</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;flw_stl_0902&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;flw_stl_0902&quot;</span>})
 check(err)
 
 <span class="k">for</span> _, id := <span class="k">range</span> []ledger.<span class="t">AccountID</span>{adaNGN, tundeNGN, chidiNGN} {
@@ -86,7 +86,7 @@ user_9034 34050.00
 merchant_311 2950.00</pre></figure>
 <h2 id="the-trial-balance-ops-trialbalance"><a href="#the-trial-balance-ops-trialbalance">The trial balance: ops.TrialBalance</a></h2>
 <p><code>TrialBalance</code> reads every balance in one currency, 100 per request, and adds them up.</p>
-<figure class="code"><pre><code>tb, err := ops.<span class="t">TrialBalance</span>(ctx, <span class="s">&quot;NGN&quot;</span>)
+<figure class="code"><pre><code>tb, err := ops.<span class="t">TrialBalance</span>(ctx, currency.<span class="t">NGN</span>)
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;balanced:&quot;</span>, tb.<span class="t">Balanced</span>, <span class="s">&quot;net:&quot;</span>, tb.<span class="t">Net</span>.<span class="t">Display</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;customer funds:&quot;</span>, tb.<span class="t">CustomerFunds</span>.<span class="t">Display</span>, <span class="s">&quot;in&quot;</span>, tb.<span class="t">CustomerAccounts</span>, <span class="s">&quot;accounts&quot;</span>)
@@ -112,7 +112,7 @@ customer funds: 74225.00 in 3 accounts
 <h2 id="a-nightly-check"><a href="#a-nightly-check">A nightly check</a></h2>
 <p>Run the trial balance every night for every currency you hold, and alert when it doesn't balance.</p>
 <figure class="code"><pre><code><span class="c">// Run once a night, for every currency you hold.</span>
-<span class="k">for</span> _, cur := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;USD&quot;</span>} {
+<span class="k">for</span> _, cur := <span class="k">range</span> []<span class="b">string</span>{currency.<span class="t">NGN</span>, currency.<span class="t">USD</span>} {
 	tb, err := ops.<span class="t">TrialBalance</span>(ctx, cur)
 	check(err)
 	<span class="k">if</span> !tb.<span class="t">Balanced</span> {
@@ -127,7 +127,7 @@ USD balanced, 0 customer accounts, funds 0.00</pre></figure>
 <p>A currency with no balances at all, like USD here, comes back balanced with zero funds.</p>
 <h2 id="customer-funds-and-safeguarding"><a href="#customer-funds-and-safeguarding">Customer funds and safeguarding</a></h2>
 <p>In many countries a wallet business must keep customer money apart from its own and show that it holds enough to pay every customer back. The trial balance gives both sides of that comparison.</p>
-<figure class="code"><figcaption>Is customer money covered?</figcaption><pre><code>tb, err = ops.<span class="t">TrialBalance</span>(ctx, <span class="s">&quot;NGN&quot;</span>)
+<figure class="code"><figcaption>Is customer money covered?</figcaption><pre><code>tb, err = ops.<span class="t">TrialBalance</span>(ctx, currency.<span class="t">NGN</span>)
 check(err)
 <span class="c">// Net house assets: what Oja holds or is owed, less what it owes others.</span>
 net := <span class="b">new</span>(big.<span class="t">Int</span>)
@@ -140,9 +140,9 @@ net := <span class="b">new</span>(big.<span class="t">Int</span>)
 	}
 }
 own := <span class="b">new</span>(big.<span class="t">Int</span>).<span class="t">Sub</span>(net, tb.<span class="t">CustomerFunds</span>.<span class="t">PreciseAmount</span>)
-fmt.<span class="t">Println</span>(<span class="s">&quot;net house assets:&quot;</span>, svc.<span class="t">Display</span>(ledger.<span class="t">Precise</span>(net, <span class="n">100</span>, <span class="s">&quot;NGN&quot;</span>)))
+fmt.<span class="t">Println</span>(<span class="s">&quot;net house assets:&quot;</span>, svc.<span class="t">Display</span>(ledger.<span class="t">Precise</span>(net, <span class="n">100</span>, currency.<span class="t">NGN</span>)))
 fmt.<span class="t">Println</span>(<span class="s">&quot;owed to customers:&quot;</span>, tb.<span class="t">CustomerFunds</span>.<span class="t">Display</span>)
-fmt.<span class="t">Println</span>(<span class="s">&quot;Oja&#x27;s own money:  &quot;</span>, svc.<span class="t">Display</span>(ledger.<span class="t">Precise</span>(own, <span class="n">100</span>, <span class="s">&quot;NGN&quot;</span>)))</code></pre></figure>
+fmt.<span class="t">Println</span>(<span class="s">&quot;Oja&#x27;s own money:  &quot;</span>, svc.<span class="t">Display</span>(ledger.<span class="t">Precise</span>(own, <span class="n">100</span>, currency.<span class="t">NGN</span>)))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>net house assets: 74250.00
 owed to customers: 74225.00
 Oja&#x27;s own money:   25.00</pre></figure>
@@ -152,7 +152,7 @@ Oja&#x27;s own money:   25.00</pre></figure>
 <p>On 2 October, after a new transfer has already earned a fee, finance closes September.</p>
 <figure class="code"><figcaption>Closing September for @FeeIncome</figcaption><pre><code>sepStart := time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>)
 octStart := time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>)
-fees := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}
+fees := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>}
 
 atMonthEnd, err := ops.<span class="t">HouseBalanceAt</span>(ctx, fees, octStart)
 check(err)
@@ -177,7 +177,7 @@ fmt.<span class="t">Println</span>(st.<span class="t">Indicator</span>, <span cl
 <h3 id="a-debit-normal-account">A debit-normal account</h3>
 <p><code>HouseBalanceAt</code> returns the balance as Blnk stores it, so an asset reads negative. Use <code>Natural</code> from <code>GetHouseAccount</code> or the trial balance for the everyday reading.</p>
 <figure class="code"><figcaption>What Paystack still owes</figcaption><pre><code><span class="c">// What Paystack still owes at month-end, to compare with its own report.</span>
-psk := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>), <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}
+psk := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>), <span class="t">Currency</span>: currency.<span class="t">NGN</span>}
 owed, err := ops.<span class="t">HouseBalanceAt</span>(ctx, psk, octStart)
 check(err)
 fmt.<span class="t">Println</span>(psk.<span class="t">Indicator</span>, <span class="s">&quot;as Blnk stores it:&quot;</span>, owed.<span class="t">Display</span>)
@@ -206,16 +206,16 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;Ada, September: opening
 <figure class="code"><pre><code>_, err = ops.<span class="t">TrialBalance</span>(ctx, <span class="s">&quot;&quot;</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;no currency:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-_, err = ops.<span class="t">HouseStatement</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}, sepStart, octStart)
+_, err = ops.<span class="t">HouseStatement</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;FeeIncome&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>}, sepStart, octStart)
 fmt.<span class="t">Println</span>(<span class="s">&quot;no @:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-_, err = ops.<span class="t">HouseBalanceAt</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Suspense&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}, octStart)
+_, err = ops.<span class="t">HouseBalanceAt</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Suspense&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>}, octStart)
 fmt.<span class="t">Println</span>(<span class="s">&quot;never used:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
 
 _, err = ops.<span class="t">HouseStatement</span>(ctx, fees, octStart, sepStart)
 fmt.<span class="t">Println</span>(<span class="s">&quot;from after to:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-_, err = ops.<span class="t">HouseStatement</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="b">string</span>(adaNGN), <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}, sepStart, octStart)
+_, err = ops.<span class="t">HouseStatement</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="b">string</span>(adaNGN), <span class="t">Currency</span>: currency.<span class="t">NGN</span>}, sepStart, octStart)
 fmt.<span class="t">Println</span>(<span class="s">&quot;customer account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>no currency: true
 no @: true
@@ -230,7 +230,7 @@ customer account: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

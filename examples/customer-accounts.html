@@ -34,16 +34,16 @@
 	<span class="t">Email</span>:      <span class="s">&quot;ada@example.com&quot;</span>,
 	<span class="t">Phone</span>:      <span class="s">&quot;+2348030000000&quot;</span>,
 	<span class="t">Country</span>:    <span class="s">&quot;NG&quot;</span>,
-	<span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;USD&quot;</span>},          <span class="c">// at least one</span>
-	<span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,                     <span class="c">// your user id: makes the call safe to retry</span>
-	<span class="t">MetaData</span>:   <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;tier&quot;</span>: <span class="s">&quot;tier2&quot;</span>}, <span class="c">// stored on the identity and on each account</span>
+	<span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>, currency.<span class="t">USD</span>}, <span class="c">// at least one</span>
+	<span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,                          <span class="c">// your user id: makes the call safe to retry</span>
+	<span class="t">MetaData</span>:   <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;tier&quot;</span>: <span class="s">&quot;tier2&quot;</span>},      <span class="c">// stored on the identity and on each account</span>
 })
 check(err)
 
-adaNGN := ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>] <span class="c">// *ledger.Account</span>
+adaNGN := ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>] <span class="c">// *ledger.Account</span>
 fmt.<span class="t">Println</span>(<span class="s">&quot;identity:&quot;</span>, ada.<span class="t">ID</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;NGN account:&quot;</span>, adaNGN.<span class="t">ID</span>, adaNGN.<span class="t">Kind</span>, adaNGN.<span class="t">Status</span>, <span class="s">&quot;tier:&quot;</span>, adaNGN.<span class="t">MetaData</span>[<span class="s">&quot;tier&quot;</span>])
-fmt.<span class="t">Println</span>(<span class="s">&quot;USD account:&quot;</span>, ada.<span class="t">Accounts</span>[<span class="s">&quot;USD&quot;</span>].<span class="t">ID</span>, <span class="s">&quot;precision:&quot;</span>, ada.<span class="t">Accounts</span>[<span class="s">&quot;USD&quot;</span>].<span class="t">Precision</span>)</code></pre></figure>
+fmt.<span class="t">Println</span>(<span class="s">&quot;USD account:&quot;</span>, ada.<span class="t">Accounts</span>[currency.<span class="t">USD</span>].<span class="t">ID</span>, <span class="s">&quot;precision:&quot;</span>, ada.<span class="t">Accounts</span>[currency.<span class="t">USD</span>].<span class="t">Precision</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>identity: idt_000002
 NGN account: bln_000003 customer active tier: tier2
 USD account: bln_000004 precision: 100</pre></figure>
@@ -55,24 +55,24 @@ USD account: bln_000004 precision: 100</pre></figure>
 	<span class="t">OrganizationName</span>: <span class="s">&quot;Chidi Stores Ltd&quot;</span>, <span class="c">// required for organizations</span>
 	<span class="t">Email</span>:            <span class="s">&quot;accounts@chidistores.ng&quot;</span>,
 	<span class="t">Country</span>:          <span class="s">&quot;NG&quot;</span>,
-	<span class="t">Currencies</span>:       []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>},
+	<span class="t">Currencies</span>:       []<span class="b">string</span>{currency.<span class="t">NGN</span>},
 	<span class="t">ExternalID</span>:       <span class="s">&quot;merchant_311&quot;</span>,
 })
 check(err)
-fmt.<span class="t">Println</span>(shop.<span class="t">Identity</span>.<span class="t">IdentityType</span>, shop.<span class="t">Identity</span>.<span class="t">OrganizationName</span>, shop.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>)</code></pre></figure>
+fmt.<span class="t">Println</span>(shop.<span class="t">Identity</span>.<span class="t">IdentityType</span>, shop.<span class="t">Identity</span>.<span class="t">OrganizationName</span>, shop.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>organization Chidi Stores Ltd bln_000006</pre></figure>
 <h2 id="retrying-or-adding-a-currency-later"><a href="#retrying-or-adding-a-currency-later">Retrying, or adding a currency later</a></h2>
 <p><code>ExternalID</code> is your own user id. Call <code>OpenCustomer</code> again with the same one and nothing is duplicated: existing accounts are reused and missing currencies are opened. That makes a sign-up that timed out safe to repeat, and gives you a one-line way to add a currency.</p>
 <figure class="code"><pre><code><span class="c">// The sign-up timed out and the app tries again, now also asking for BTC.</span>
 again, err := wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
 	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>,
-	<span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;USD&quot;</span>, <span class="s">&quot;BTC&quot;</span>},
+	<span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>, currency.<span class="t">USD</span>, currency.<span class="t">BTC</span>},
 	<span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>, <span class="c">// same user id as before</span>
 })
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;same identity:&quot;</span>, again.<span class="t">ID</span> == ada.<span class="t">ID</span>)
-fmt.<span class="t">Println</span>(<span class="s">&quot;same NGN account:&quot;</span>, again.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span> == adaNGN.<span class="t">ID</span>)
-fmt.<span class="t">Println</span>(<span class="s">&quot;accounts now:&quot;</span>, <span class="b">len</span>(again.<span class="t">Accounts</span>), <span class="s">&quot;BTC precision:&quot;</span>, again.<span class="t">Accounts</span>[<span class="s">&quot;BTC&quot;</span>].<span class="t">Precision</span>)</code></pre></figure>
+fmt.<span class="t">Println</span>(<span class="s">&quot;same NGN account:&quot;</span>, again.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span> == adaNGN.<span class="t">ID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;accounts now:&quot;</span>, <span class="b">len</span>(again.<span class="t">Accounts</span>), <span class="s">&quot;BTC precision:&quot;</span>, again.<span class="t">Accounts</span>[currency.<span class="t">BTC</span>].<span class="t">Precision</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>same identity: true
 same NGN account: true
 accounts now: 3 BTC precision: 100000000</pre></figure>
@@ -80,7 +80,7 @@ accounts now: 3 BTC precision: 100000000</pre></figure>
 <p>Use <code>OpenAccount</code> when you want a single account rather than a whole customer.</p>
 <h3 id="for-a-customer-who-already-has-an-identity">For a customer who already has an identity</h3>
 <figure class="code"><figcaption>Ada adds a USDT account</figcaption><pre><code>usdt, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{
-	<span class="t">Currency</span>:   <span class="s">&quot;USDT&quot;</span>,
+	<span class="t">Currency</span>:   currency.<span class="t">USDT</span>,
 	<span class="t">IdentityID</span>: ada.<span class="t">ID</span>,      <span class="c">// link it to Ada</span>
 	<span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>, <span class="c">// retry-safe per ExternalID and currency</span>
 })
@@ -90,12 +90,12 @@ fmt.<span class="t">Println</span>(usdt.<span class="t">ID</span>, usdt.<span cl
 <h3 id="with-no-identity">With no identity</h3>
 <p>For an agent's float, an internal sub-wallet or anything without a person behind it. <code>ExternalID</code> makes it safe to retry here too: the same <code>ExternalID</code> and currency return the existing account.</p>
 <figure class="code"><pre><code>float, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{
-	<span class="t">Currency</span>:   <span class="s">&quot;NGN&quot;</span>,
+	<span class="t">Currency</span>:   currency.<span class="t">NGN</span>,
 	<span class="t">ExternalID</span>: <span class="s">&quot;agent_float_17&quot;</span>,
 	<span class="t">MetaData</span>:   <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;purpose&quot;</span>: <span class="s">&quot;agent float&quot;</span>},
 })
 check(err)
-retry, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;agent_float_17&quot;</span>})
+retry, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">ExternalID</span>: <span class="s">&quot;agent_float_17&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(float.<span class="t">ID</span>, <span class="s">&quot;no identity:&quot;</span>, float.<span class="t">IdentityID</span> == <span class="s">&quot;&quot;</span>, <span class="s">&quot;retry returns it:&quot;</span>, retry.<span class="t">ID</span> == float.<span class="t">ID</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>bln_000009 no identity: true retry returns it: true</pre></figure>
@@ -105,14 +105,14 @@ fmt.<span class="t">Println</span>(float.<span class="t">ID</span>, <span class=
 check(err)
 
 kofi, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{
-	<span class="t">Currency</span>:   <span class="s">&quot;GHS&quot;</span>,
+	<span class="t">Currency</span>:   currency.<span class="t">GHS</span>,
 	<span class="t">LedgerID</span>:   gh.<span class="t">ID</span>, <span class="c">// overrides Config.LedgerID</span>
 	<span class="t">ExternalID</span>: <span class="s">&quot;user_9100&quot;</span>,
 })
 check(err)
 fmt.<span class="t">Println</span>(kofi.<span class="t">ID</span>, <span class="s">&quot;in&quot;</span>, kofi.<span class="t">LedgerID</span> == gh.<span class="t">ID</span>)
 
-_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;GHS&quot;</span>, <span class="t">LedgerID</span>: <span class="s">&quot;ldg_doesnotexist&quot;</span>})
+_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">GHS</span>, <span class="t">LedgerID</span>: <span class="s">&quot;ldg_doesnotexist&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;missing ledger:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>bln_000011 in true
 missing ledger: true</pre></figure>
@@ -120,8 +120,8 @@ missing ledger: true</pre></figure>
 <p>A pot is a sub-account under a customer account. It takes its parent's currency and identity, can have a goal, and money moves in and out of it with an ordinary transfer. Opening the same name twice returns the existing pot. More in <a href="savings-pots.html">Savings pots and standing orders</a>.</p>
 <figure class="code"><figcaption>A rent pot with a ₦600,000 goal</figcaption><pre><code>rent, err := wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{
 	<span class="t">ParentID</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Name</span>:     <span class="s">&quot;Rent&quot;</span>,                         <span class="c">// unique per parent</span>
-	<span class="t">Goal</span>:     ledger.<span class="t">Amount</span>(<span class="s">&quot;600000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// optional</span>
+	<span class="t">Name</span>:     <span class="s">&quot;Rent&quot;</span>,                                <span class="c">// unique per parent</span>
+	<span class="t">Goal</span>:     ledger.<span class="t">Amount</span>(<span class="s">&quot;600000&quot;</span>, currency.<span class="t">NGN</span>), <span class="c">// optional</span>
 })
 check(err)
 fmt.<span class="t">Println</span>(rent.<span class="t">ID</span>, rent.<span class="t">Kind</span>, rent.<span class="t">Currency</span>, <span class="s">&quot;goal:&quot;</span>, rent.<span class="t">Goal</span>.<span class="t">Display</span>, <span class="s">&quot;Ada&#x27;s:&quot;</span>, rent.<span class="t">IdentityID</span> == ada.<span class="t">ID</span>)
@@ -135,8 +135,8 @@ same name returns the same pot: true</pre></figure>
 <p>Opening an escrow creates its own account and moves the money into it at once, so the money has left the payer but isn't the seller's yet. More in <a href="escrow.html">Escrow</a>.</p>
 <figure class="code"><figcaption>Ada pays ₦80,000 into escrow for an order from Chidi Stores</figcaption><pre><code>esc, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{
 	<span class="t">Payer</span>:       adaNGN.<span class="t">ID</span>,
-	<span class="t">Beneficiary</span>: shop.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>,
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Beneficiary</span>: shop.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>,
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:   <span class="s">&quot;escrow_10450&quot;</span>, <span class="c">// a retry returns the same escrow</span>
 })
 check(err)
@@ -170,7 +170,7 @@ Ada&#x27;s pots: 1</pre></figure>
 <figure class="code"><pre><code>_, err = wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{<span class="t">FirstName</span>: <span class="s">&quot;Bola&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
-_, err = wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{<span class="t">Type</span>: <span class="s">&quot;organization&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>}})
+_, err = wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{<span class="t">Type</span>: <span class="s">&quot;organization&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>}})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{<span class="t">ParentID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), <span class="t">Name</span>: <span class="s">&quot;Fees&quot;</span>})
@@ -182,7 +182,7 @@ true</pre></figure>
 <h2 id="reserved-metadata"><a href="#reserved-metadata">Reserved metadata</a></h2>
 <p>The keys humanblnk manages (<code>status</code>, <code>account_kind</code>, <code>external_id</code>) are ignored when you pass them in <code>MetaData</code>, so an account can't be opened already frozen or disguised as a pot. Your own keys are kept. Freeze with <code>ops.FreezeAccount</code>; set the user id with <code>ExternalID</code>.</p>
 <figure class="code"><pre><code>acc, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{
-	<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>,
+	<span class="t">Currency</span>: currency.<span class="t">NGN</span>,
 	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;status&quot;</span>: <span class="s">&quot;frozen&quot;</span>, <span class="s">&quot;account_kind&quot;</span>: <span class="s">&quot;pot&quot;</span>, <span class="s">&quot;branch&quot;</span>: <span class="s">&quot;Ikeja&quot;</span>},
 })
 check(err)
@@ -193,7 +193,7 @@ fmt.<span class="t">Println</span>(acc.<span class="t">Status</span>, acc.<span 
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

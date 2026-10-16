@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 // transfersPricing charges ₦10 on every naira transfer; anything else is free.
 func transfersPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, error) {
-	if r.Kind == ledger.FeeTransfer && r.Amount.Currency == "NGN" {
+	if r.Kind == ledger.FeeTransfer && r.Amount.Currency == currency.NGN {
 		return ledger.ComputeFee(ledger.FeeRule{Fixed: "10"}, r.Amount)
 	}
 	return ledger.NoFee, nil
@@ -21,11 +22,11 @@ func transfersPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, e
 func TestTransfers(t *testing.T) {
 	_, core, wallet, ops := setup(t, ledger.Config{
 		Fees:   transfersPricing,
-		Limits: []ledger.Limit{{Tier: "tier2", Currency: "NGN", PerTransaction: "100000", Daily: "500000"}},
+		Limits: []ledger.Limit{{Tier: "tier2", Currency: currency.NGN, PerTransaction: "100000", Daily: "500000"}},
 	})
-	adaNGN := customer(wallet, "user_8812", "Ada", "NGN").Accounts["NGN"].ID
-	tundeNGN := customer(wallet, "user_9034", "Tunde", "NGN").Accounts["NGN"].ID
-	fund(wallet, adaNGN, "100000", "NGN", "seed_ada")
+	adaNGN := customer(wallet, "user_8812", "Ada", currency.NGN).Accounts[currency.NGN].ID
+	tundeNGN := customer(wallet, "user_9034", "Tunde", currency.NGN).Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "100000", currency.NGN, "seed_ada")
 
 	balances := func() {
 		a, err := wallet.GetAccount(ctx, adaNGN)
@@ -40,10 +41,10 @@ func TestTransfers(t *testing.T) {
 	sent, err := wallet.Transfer(ctx, ledger.TransferInput{
 		From:        adaNGN,
 		To:          tundeNGN,
-		Amount:      ledger.Amount("12500", "NGN"), // what Tunde receives
-		Fee:         ledger.NoFee,                  // free: overrides Config.Fees
-		Reference:   "p2p_01J8ZK2M4Q",              // generate once, when Ada taps "Send"
-		Description: "Rent share",                  // shown on both statements
+		Amount:      ledger.Amount("12500", currency.NGN), // what Tunde receives
+		Fee:         ledger.NoFee,                         // free: overrides Config.Fees
+		Reference:   "p2p_01J8ZK2M4Q",                     // generate once, when Ada taps "Send"
+		Description: "Rent share",                         // shown on both statements
 	})
 	check(err)
 	fmt.Println(sent.Amount.Display, sent.EntryStatus, sent.Description, sent.MetaData["txn_type"])
@@ -56,7 +57,7 @@ func TestTransfers(t *testing.T) {
 	// No Fee: Config.Fees prices it at ₦10, paid by Ada on top.
 	r, err := wallet.Transfer(ctx, ledger.TransferInput{
 		From: adaNGN, To: tundeNGN,
-		Amount:    ledger.Amount("5000", "NGN"),
+		Amount:    ledger.Amount("5000", currency.NGN),
 		Reference: "p2p_01J8ZK3A7B",
 	})
 	check(err)
@@ -66,7 +67,7 @@ func TestTransfers(t *testing.T) {
 	}
 	balances()
 
-	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN})
 	check(err)
 	fmt.Println("@FeeIncome:", fees.Balance.Display)
 	// end
@@ -77,7 +78,7 @@ func TestTransfers(t *testing.T) {
 	// Tunde sells Ada a used phone: reserve ₦30,000 now, settle when she has it.
 	p, err := wallet.Transfer(ctx, ledger.TransferInput{
 		From: adaNGN, To: tundeNGN,
-		Amount:    ledger.Amount("30000", "NGN"),
+		Amount:    ledger.Amount("30000", currency.NGN),
 		Fee:       ledger.NoFee,
 		Reference: "p2p_01J8ZK4C9D",
 		Pending:   true,
@@ -101,7 +102,7 @@ func TestTransfers(t *testing.T) {
 	// Ada sends Tunde ₦2,000 tomorrow at 08:00.
 	s, err := wallet.Transfer(ctx, ledger.TransferInput{
 		From: adaNGN, To: tundeNGN,
-		Amount:       ledger.Amount("2000", "NGN"),
+		Amount:       ledger.Amount("2000", currency.NGN),
 		Fee:          ledger.NoFee,
 		Reference:    "p2p_01J8ZK5E1F",
 		ScheduledFor: time.Date(2026, 9, 2, 8, 0, 0, 0, time.UTC),
@@ -124,7 +125,7 @@ func TestTransfers(t *testing.T) {
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
 		From:           ledger.AccountID("@MarketingCashback"),
 		To:             adaNGN,
-		Amount:         ledger.Amount("500", "NGN"),
+		Amount:         ledger.Amount("500", currency.NGN),
 		Fee:            ledger.NoFee,
 		Reference:      "cashback_sept_8812",
 		AllowOverdraft: true, // a house account starts at zero
@@ -136,14 +137,14 @@ func TestTransfers(t *testing.T) {
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
 		From:        adaNGN,
 		To:          ledger.AccountID("@AirtimePayable"),
-		Amount:      ledger.Amount("1000", "NGN"),
+		Amount:      ledger.Amount("1000", currency.NGN),
 		Fee:         ledger.NoFee,
 		Reference:   "airtime_77120",
 		Description: "MTN airtime 0803***0000",
 	})
 	check(err)
 	for _, name := range []string{"@MarketingCashback", "@AirtimePayable"} {
-		h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: name, Currency: "NGN"})
+		h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: name, Currency: currency.NGN})
 		check(err)
 		fmt.Println(name, h.Balance.Display)
 	}
@@ -158,7 +159,7 @@ func TestTransfers(t *testing.T) {
 	check(err)
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
 		From: tundeNGN, To: adaNGN,
-		Amount:    ledger.Amount("48000", "NGN"),
+		Amount:    ledger.Amount("48000", currency.NGN),
 		Fee:       ledger.NoFee,
 		Reference: "p2p_01J8ZK6G2H",
 	})
@@ -166,7 +167,7 @@ func TestTransfers(t *testing.T) {
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
 		From: tundeNGN, To: adaNGN,
-		Amount:         ledger.Amount("48000", "NGN"),
+		Amount:         ledger.Amount("48000", currency.NGN),
 		Fee:            ledger.NoFee,
 		Reference:      "p2p_01J8ZK6G2H",
 		AllowOverdraft: true,
@@ -181,14 +182,14 @@ func TestTransfers(t *testing.T) {
 	begin("transfers/replay")
 	// sample: transfers/replay
 	in := ledger.TransferInput{
-		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("12500", "NGN"),
+		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("12500", currency.NGN),
 		Fee: ledger.NoFee, Reference: "p2p_01J8ZK2M4Q", Description: "Rent share",
 	}
 	again, err := wallet.Transfer(ctx, in) // the app timed out and sends it again
 	check(err)
 	fmt.Println("replayed:", again.Replayed, "same transaction:", again.TransactionID == sent.TransactionID)
 
-	in.Amount = ledger.Amount("15000", "NGN") // same reference, different payment
+	in.Amount = ledger.Amount("15000", currency.NGN) // same reference, different payment
 	_, err = wallet.Transfer(ctx, in)
 	fmt.Println("conflict:", errors.Is(err, ledger.ErrDuplicateReference))
 	// end
@@ -197,29 +198,29 @@ func TestTransfers(t *testing.T) {
 	begin("transfers/errors")
 	// sample: transfers/errors
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
-		From: tundeNGN, To: adaNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "e1",
+		From: tundeNGN, To: adaNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "e1",
 	})
 	fmt.Println("insufficient funds:", errors.Is(err, ledger.ErrInsufficientFunds))
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
-		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("150000", "NGN"), Fee: ledger.NoFee, Reference: "e2",
+		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("150000", currency.NGN), Fee: ledger.NoFee, Reference: "e2",
 	})
 	fmt.Println("limit:", errors.Is(err, ledger.ErrLimitExceeded), err)
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
-		From: adaNGN, To: adaNGN, Amount: ledger.Amount("100", "NGN"), Fee: ledger.NoFee, Reference: "e3",
+		From: adaNGN, To: adaNGN, Amount: ledger.Amount("100", currency.NGN), Fee: ledger.NoFee, Reference: "e3",
 	})
 	fmt.Println("same account:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
-		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("100", "NGN"), Fee: ledger.NoFee, Reference: "e4",
+		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("100", currency.NGN), Fee: ledger.NoFee, Reference: "e4",
 		Pending: true, ScheduledFor: time.Date(2026, 9, 3, 8, 0, 0, 0, time.UTC),
 	})
 	fmt.Println("pending and scheduled:", errors.Is(err, ledger.ErrInvalidInput))
 
 	check(ops.FreezeAccount(ctx, tundeNGN, "KYC review"))
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
-		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("100", "NGN"), Fee: ledger.NoFee, Reference: "e5",
+		From: adaNGN, To: tundeNGN, Amount: ledger.Amount("100", currency.NGN), Fee: ledger.NoFee, Reference: "e5",
 	})
 	fmt.Println("frozen recipient:", errors.Is(err, ledger.ErrAccountFrozen))
 	// end

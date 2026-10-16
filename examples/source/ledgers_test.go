@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/otyang/humanblnk/blnk"
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -37,9 +38,9 @@ func TestLedgers(t *testing.T) {
 		MetaData: map[string]any{"country": "GH"}})
 	check(err)
 
-	ada, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", LedgerID: ng.ID, ExternalID: "user_8812"})
+	ada, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, LedgerID: ng.ID, ExternalID: "user_8812"})
 	check(err)
-	kofi, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "GHS", LedgerID: gh.ID, ExternalID: "user_9100"})
+	kofi, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.GHS, LedgerID: gh.ID, ExternalID: "user_9100"})
 	check(err)
 	fmt.Println("Ada's naira account in", ada.LedgerID, "| Kofi's cedi account in", kofi.LedgerID)
 	// end
@@ -91,7 +92,7 @@ func TestLedgers(t *testing.T) {
 		fmt.Println(l.ID, l.Key, l.Status, l.DuplicateOf)
 	}
 	twin := all.Items[len(all.Items)-1]
-	_, err = wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "KES", LedgerID: twin.ID})
+	_, err = wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.KES, LedgerID: twin.ID})
 	fmt.Println("open in the twin:", errors.Is(err, ledger.ErrInvalidInput), err)
 	// end
 	end()

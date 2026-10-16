@@ -36,23 +36,23 @@ err = ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN.<span class="t">ID<
 check(err)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_77&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_77&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;send out:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;wd_tunde_502&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;wd_tunde_502&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;cash out:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_ada_12&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_ada_12&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;receive from Ada:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 
 _, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Destination</span>: tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;hold_ada_12&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;hold_ada_12&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;hold paying Tunde:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5501&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5501&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;top up:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 fmt.<span class="t">Println</span>(err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>send out: true
@@ -72,7 +72,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;since:&quot;</span>, ac
 fmt.<span class="t">Println</span>(<span class="s">&quot;balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, acct.<span class="t">Available</span>.<span class="t">Display</span>)
 
 q, err := wallet.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_78&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_78&quot;</span>})
 check(err) <span class="c">// a refusal is not an error here: it is in the quote</span>
 fmt.<span class="t">Println</span>(<span class="s">&quot;quote allowed:&quot;</span>, q.<span class="t">Allowed</span>, <span class="s">&quot;frozen:&quot;</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>status: frozen
@@ -125,7 +125,7 @@ err = ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN.<span class="t">I
 check(err)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_77&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_77&quot;</span>})
 check(err)
 
 acct, err = wallet.<span class="t">GetAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
@@ -138,9 +138,9 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, a
 <figure class="code"><figcaption>A regulator's hold on every agent float</figcaption><pre><code><span class="c">// Agent floats live in their own ledger. A regulator orders a hold on all of them.</span>
 agents, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-agents&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Agents&quot;</span>})
 check(err)
-ikeja, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: agents.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;agent_ikeja&quot;</span>})
+ikeja, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">LedgerID</span>: agents.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;agent_ikeja&quot;</span>})
 check(err)
-fund(wallet, ikeja.<span class="t">ID</span>, <span class="s">&quot;200000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;seed_ikeja&quot;</span>)
+fund(wallet, ikeja.<span class="t">ID</span>, <span class="s">&quot;200000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;seed_ikeja&quot;</span>)
 
 err = ops.<span class="t">FreezeLedger</span>(ctx, agents.<span class="t">ID</span>, <span class="s">&quot;CBN directive 2026/114&quot;</span>)
 check(err)
@@ -150,26 +150,26 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;ledger:&quot;</span>, l
 
 <span class="c">// Out of the ledger: refused.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_1&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_1&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;agent pays Ada:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))
 
 <span class="c">// Into the ledger: allowed.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: ikeja.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_in_1&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_in_1&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;Ada pays agent:&quot;</span>, err == <span class="b">nil</span>)
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ikeja.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ikeja.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5520&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;agent tops up:&quot;</span>, err == <span class="b">nil</span>)
 
 <span class="c">// House postings carry on.</span>
 _, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_stl_0901&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_stl_0901&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;Paystack settlement:&quot;</span>, err == <span class="b">nil</span>)
 
 err = ops.<span class="t">UnfreezeLedger</span>(ctx, agents.<span class="t">ID</span>)
 check(err)
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_1&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_1&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;after unfreeze, agent pays Ada:&quot;</span>, err == <span class="b">nil</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>ledger: frozen - CBN directive 2026/114
 agent pays Ada: true
@@ -188,12 +188,12 @@ err = admin.<span class="t">Ops</span>().<span class="t">FreezeLedger</span>(ctx
 check(err)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_2&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_2&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;API server, same moment:&quot;</span>, err == <span class="b">nil</span>)
 
 core.<span class="t">Advance</span>(<span class="n">31</span> * time.<span class="t">Second</span>) <span class="c">// past the default 30s LedgerStatusTTL</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_3&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_3&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;API server, 31s later:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>API server, same moment: true
 API server, 31s later: true</pre></figure>
@@ -205,7 +205,7 @@ API server, 31s later: true</pre></figure>
 <p>Blnk itself doesn't act on these fields. humanblnk enforces them on every movement it makes. A call made to Blnk directly, outside humanblnk, is not blocked.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <figure class="code"><pre><code><span class="c">// A closed account can&#x27;t be frozen or unfrozen.</span>
-old, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_ada_old&quot;</span>})
+old, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_ada_old&quot;</span>})
 check(err)
 _, err = ops.<span class="t">CloseAccount</span>(ctx, old.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;duplicate account&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>})
@@ -236,7 +236,7 @@ unknown account: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

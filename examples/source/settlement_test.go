@@ -5,25 +5,26 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 // settlementHouse prints a house account's balance as Blnk stores it and on its normal side.
 func settlementHouse(ops ledger.Ops, indicator string) {
-	h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: indicator, Currency: "NGN"})
+	h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: indicator, Currency: currency.NGN})
 	check(err)
 	fmt.Printf("  %-22s balance %12s  natural %12s  (%s)\n", h.Indicator, h.Balance.Display, h.Natural.Display, h.Type)
 }
 
 func TestSettlement(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{})
-	adaNGN := customer(wallet, "user_ada", "Ada", "NGN").Accounts["NGN"]
-	tundeNGN := customer(wallet, "user_tunde", "Tunde", "NGN").Accounts["NGN"]
+	adaNGN := customer(wallet, "user_ada", "Ada", currency.NGN).Accounts[currency.NGN]
+	tundeNGN := customer(wallet, "user_tunde", "Tunde", currency.NGN).Accounts[currency.NGN]
 
 	// Yesterday Paystack collected three top-ups for Oja.
-	fund(wallet, adaNGN.ID, "50000", "NGN", "paystack_T1001")
-	fund(wallet, tundeNGN.ID, "30000", "NGN", "paystack_T1002")
-	fund(wallet, adaNGN.ID, "20000", "NGN", "paystack_T1003")
+	fund(wallet, adaNGN.ID, "50000", currency.NGN, "paystack_T1001")
+	fund(wallet, tundeNGN.ID, "30000", currency.NGN, "paystack_T1002")
+	fund(wallet, adaNGN.ID, "20000", currency.NGN, "paystack_T1003")
 
 	begin("settlement/collection")
 	// sample: settlement/collection
@@ -34,8 +35,8 @@ func TestSettlement(t *testing.T) {
 	st, err := ops.RecordSettlement(ctx, ledger.SettlementInput{
 		Provider:  "paystack", // → @PaystackClearing
 		Direction: ledger.SettlementCollection,
-		Amount:    ledger.Amount("100000", "NGN"), // the gross amount it clears
-		Fee:       ledger.Amount("1500", "NGN"),
+		Amount:    ledger.Amount("100000", currency.NGN), // the gross amount it clears
+		Fee:       ledger.Amount("1500", currency.NGN),
 		Reference: "paystack_stl_2026_09_01",
 	})
 	check(err)
@@ -56,8 +57,8 @@ func TestSettlement(t *testing.T) {
 	st, err = ops.RecordSettlement(ctx, ledger.SettlementInput{
 		Provider:  "flutterwave", // → @FlutterwaveClearing
 		Direction: ledger.SettlementPayout,
-		Amount:    ledger.Amount("60000", "NGN"),
-		Fee:       ledger.Amount("250", "NGN"),
+		Amount:    ledger.Amount("60000", currency.NGN),
+		Fee:       ledger.Amount("250", currency.NGN),
 		Reference: "flw_topup_2026_09_01",
 	})
 	check(err)
@@ -68,7 +69,7 @@ func TestSettlement(t *testing.T) {
 	settlementHouse(ops, "@FlutterwaveClearing")
 
 	// During the week Flutterwave pays out ₦45,000 of withdrawals from that balance.
-	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN.ID, Amount: ledger.Amount("45000", "NGN"),
+	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN.ID, Amount: ledger.Amount("45000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "wd_ada_301", Provider: "flutterwave"})
 	check(err)
 	_, err = wallet.Confirm(ctx, w.TransactionID, nil)
@@ -81,10 +82,10 @@ func TestSettlement(t *testing.T) {
 
 	begin("settlement/no-fee")
 	// sample: settlement/no-fee
-	fund(wallet, tundeNGN.ID, "12000", "NGN", "paystack_T1004")
+	fund(wallet, tundeNGN.ID, "12000", currency.NGN, "paystack_T1004")
 	st, err = ops.RecordSettlement(ctx, ledger.SettlementInput{
 		Provider:    "paystack",
-		Amount:      ledger.Amount("12000", "NGN"), // Direction defaults to SettlementCollection
+		Amount:      ledger.Amount("12000", currency.NGN), // Direction defaults to SettlementCollection
 		Reference:   "paystack_stl_2026_09_02",
 		Description: "Paystack settlement 2 Sep",
 	})
@@ -101,8 +102,8 @@ func TestSettlement(t *testing.T) {
 	settlementHouse(ops, "@BankOperating")
 	again, err := ops.RecordSettlement(ctx, ledger.SettlementInput{
 		Provider:  "paystack",
-		Amount:    ledger.Amount("100000", "NGN"),
-		Fee:       ledger.Amount("1500", "NGN"),
+		Amount:    ledger.Amount("100000", currency.NGN),
+		Fee:       ledger.Amount("1500", currency.NGN),
 		Reference: "paystack_stl_2026_09_01",
 	})
 	check(err)
@@ -112,8 +113,8 @@ func TestSettlement(t *testing.T) {
 	// The same reference with a different amount is a conflict, not a replay.
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{
 		Provider:  "paystack",
-		Amount:    ledger.Amount("110000", "NGN"),
-		Fee:       ledger.Amount("1500", "NGN"),
+		Amount:    ledger.Amount("110000", currency.NGN),
+		Fee:       ledger.Amount("1500", currency.NGN),
 		Reference: "paystack_stl_2026_09_01",
 	})
 	fmt.Println("different amount:", errors.Is(err, ledger.ErrDuplicateReference))
@@ -122,7 +123,7 @@ func TestSettlement(t *testing.T) {
 
 	// Customers who pay by bank transfer into their Providus virtual account
 	// are credited with no provider, so the money sits in @DepositClearing.
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN.ID, Amount: ledger.Amount("25000", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN.ID, Amount: ledger.Amount("25000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "providus_va_8812_01"})
 	check(err)
 
@@ -137,8 +138,8 @@ func TestSettlement(t *testing.T) {
 		ClearingAccount: ledger.DepositClearingAccount, // "@DepositClearing", instead of Provider
 		BankAccount:     "@BankProvidus",               // default "@BankOperating"
 		FeeAccount:      "@BankCharges",                // default "@ProviderFees"
-		Amount:          ledger.Amount("25000", "NGN"),
-		Fee:             ledger.Amount("50", "NGN"),
+		Amount:          ledger.Amount("25000", currency.NGN),
+		Fee:             ledger.Amount("50", currency.NGN),
 		Reference:       "providus_sweep_2026_09_01",
 	})
 	check(err)
@@ -153,28 +154,28 @@ func TestSettlement(t *testing.T) {
 
 	begin("settlement/errors")
 	// sample: settlement/errors
-	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Amount: ledger.Amount("1000", "NGN"), Reference: "stl_x1"})
+	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Amount: ledger.Amount("1000", currency.NGN), Reference: "stl_x1"})
 	fmt.Println("no provider:", errors.Is(err, ledger.ErrInvalidInput))
 
-	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack", Amount: ledger.Amount("1000", "NGN")})
+	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack", Amount: ledger.Amount("1000", currency.NGN)})
 	fmt.Println("no reference:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack",
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.Amount("1000", "NGN"), Reference: "stl_x2"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.Amount("1000", currency.NGN), Reference: "stl_x2"})
 	fmt.Println("fee not below amount:", errors.Is(err, ledger.ErrInvalidInput))
 	fmt.Println(err)
 
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack",
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.Amount("10", "USD"), Reference: "stl_x3"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.Amount("10", currency.USD), Reference: "stl_x3"})
 	fmt.Println("fee in another currency:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack",
-		Amount: ledger.Amount("0", "NGN"), Reference: "stl_x4"})
+		Amount: ledger.Amount("0", currency.NGN), Reference: "stl_x4"})
 	fmt.Println("zero amount:", errors.Is(err, ledger.ErrInvalidInput))
 
 	// Only house accounts: a customer account here could be taken below zero.
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack", BankAccount: string(adaNGN.ID),
-		Amount: ledger.Amount("1000", "NGN"), Reference: "stl_x5"})
+		Amount: ledger.Amount("1000", currency.NGN), Reference: "stl_x5"})
 	fmt.Println("customer account as the bank:", errors.Is(err, ledger.ErrWrongKind))
 	fmt.Println(err)
 	// end

@@ -32,7 +32,7 @@
 <figure class="code"><figcaption>₦500 cashback for Ada</figcaption><pre><code>rc, err := ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
 	<span class="t">AccountID</span>:   adaNGN,
 	<span class="t">Type</span>:        ledger.<span class="t">AdjustCredit</span>, <span class="c">// money in</span>
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>:      <span class="s">&quot;Cashback: September promo&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
 	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>, <span class="c">// must not be the requester</span>
@@ -67,7 +67,7 @@ Ada&#x27;s balance: 20500.00</pre></figure>
 rc, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
 	<span class="t">AccountID</span>:   tundeNGN,
 	<span class="t">Type</span>:        ledger.<span class="t">AdjustDebit</span>, <span class="c">// money out</span>
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>:      <span class="s">&quot;Duplicate deposit paystack_T300_dup&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
 	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>,
@@ -86,7 +86,7 @@ Tunde&#x27;s balance: 8000.00</pre></figure>
 <p><code>Reference</code> is the idempotency key, as for every movement. The same reference with the same input returns the original with <code>Replayed: true</code> and moves nothing.</p>
 <figure class="code"><pre><code><span class="c">// The ops tool timed out and sent the same correction again.</span>
 again, err := ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>:      <span class="s">&quot;Duplicate deposit paystack_T300_dup&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;adj_dup_paystack_T300&quot;</span>, <span class="c">// same reference</span>
@@ -106,7 +106,7 @@ Tunde&#x27;s balance: 8000.00</pre></figure>
 _, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
 	<span class="t">AccountID</span>:    tundeNGN,
 	<span class="t">Type</span>:         ledger.<span class="t">AdjustCredit</span>,
-	<span class="t">Amount</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>:       <span class="s">&quot;Goodwill: failed transfer on 30 Aug&quot;</span>,
 	<span class="t">RequestedBy</span>:  <span class="s">&quot;ops.kemi&quot;</span>,
 	<span class="t">ApprovedBy</span>:   <span class="s">&quot;lead.femi&quot;</span>,
@@ -115,7 +115,7 @@ _, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInp
 })
 check(err)
 
-mkt, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Marketing&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+mkt, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Marketing&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 fmt.<span class="t">Println</span>(mkt.<span class="t">Indicator</span>, <span class="s">&quot;balance:&quot;</span>, mkt.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>@Marketing balance: -1000.00</pre></figure>
@@ -124,7 +124,7 @@ fmt.<span class="t">Println</span>(mkt.<span class="t">Indicator</span>, <span c
 <p>A debit adjustment can't take the account below zero unless you say so. The usual case is a claw-back where the customer has already spent the money.</p>
 <figure class="code"><figcaption>Claw back ₦25,000 from a ₦20,500 balance</figcaption><pre><code><span class="c">// Ada spent a ₦25,000 reversal before it was clawed back. Her balance is ₦20,500.</span>
 in := ledger.<span class="t">AdjustInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>:      <span class="s">&quot;Claw back reversed card payment&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;adj_clawback_ada_01&quot;</span>,
@@ -143,7 +143,7 @@ Ada&#x27;s balance: -4500.00</pre></figure>
 <ul><li>Without <code>AllowOverdraft</code>, Blnk refuses the debit with <code>ErrInsufficientFunds</code> and nothing moves.</li><li>With it, the account goes negative. Ada now owes Oja ₦4,500. Her next deposit brings the balance back up from there.</li><li><code>AllowOverdraft</code> only matters for <code>AdjustDebit</code>. A credit always posts, because the house account is the source and may go negative.</li></ul>
 <h2 id="the-adjustments-account"><a href="#the-adjustments-account">The @Adjustments account</a></h2>
 <p><code>@Adjustments</code> is in the chart as equity, credit-normal. Its lifetime credits and debits show how much was taken back from and given to customers by hand.</p>
-<figure class="code"><pre><code>adj, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">AdjustmentsAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+<figure class="code"><pre><code>adj, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">AdjustmentsAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 fmt.<span class="t">Println</span>(adj.<span class="t">Indicator</span>, adj.<span class="t">Type</span>, adj.<span class="t">Normal</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;credits:&quot;</span>, adj.<span class="t">Credits</span>.<span class="t">Display</span>, <span class="s">&quot;debits:&quot;</span>, adj.<span class="t">Debits</span>.<span class="t">Display</span>, <span class="s">&quot;balance:&quot;</span>, adj.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
@@ -159,7 +159,7 @@ credits: 28000.00 debits: 500.00 balance: 27500.00</pre></figure>
 <p>A credit is sent with <code>allow_overdraft</code>, since the house account is the source. A debit is sent with <code>allow_overdraft</code> only when you set <code>AllowOverdraft</code>. Blnk stores house accounts by balance id, so the receipt's <code>Source</code> or <code>Destination</code> shows the id of <code>@Adjustments</code>, not its name.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <figure class="code"><pre><code>base := ledger.<span class="t">AdjustInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustCredit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustCredit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>: <span class="s">&quot;Test&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;adj_err_1&quot;</span>,
 }
 
@@ -224,7 +224,7 @@ reused reference: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

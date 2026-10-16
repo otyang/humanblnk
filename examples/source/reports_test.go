@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -17,29 +18,29 @@ func TestReports(t *testing.T) {
 	begin("reports/activity")
 	// sample: reports/activity
 	// A day at Oja, 1 September.
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN")
-	chidi := customer(wallet, "merchant_311", "Chidi Stores", "NGN")
-	adaNGN, tundeNGN, chidiNGN := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID, chidi.Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN)
+	chidi := customer(wallet, "merchant_311", "Chidi Stores", currency.NGN)
+	adaNGN, tundeNGN, chidiNGN := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID, chidi.Accounts[currency.NGN].ID
 
 	// Money in through Paystack, ₦750 and ₦450 fees.
-	_, err := wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("50000", "NGN"),
+	_, err := wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("50000", currency.NGN),
 		Fee: ledger.Amount("750", ""), Reference: "paystack_T100", Provider: "paystack"})
 	check(err)
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: tundeNGN, Amount: ledger.Amount("30000", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: tundeNGN, Amount: ledger.Amount("30000", currency.NGN),
 		Fee: ledger.Amount("450", ""), Reference: "paystack_T200", Provider: "paystack"})
 	check(err)
 
 	// Ada pays Tunde; Tunde pays Chidi Stores.
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN, Amount: ledger.Amount("12500", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN, Amount: ledger.Amount("12500", currency.NGN),
 		Fee: ledger.Amount("25", ""), Reference: "p2p_001"})
 	check(err)
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: chidiNGN, Amount: ledger.Amount("8000", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: chidiNGN, Amount: ledger.Amount("8000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "pay_order_10450"})
 	check(err)
 
 	// Chidi Stores cashes out ₦5,000 through Flutterwave; Flutterwave confirms.
-	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: chidiNGN, Amount: ledger.Amount("5000", "NGN"),
+	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: chidiNGN, Amount: ledger.Amount("5000", currency.NGN),
 		Fee: ledger.Amount("50", ""), Reference: "payout_7001", Provider: "flutterwave"})
 	check(err)
 	_, err = wallet.Confirm(ctx, w.TransactionID, nil)
@@ -47,17 +48,17 @@ func TestReports(t *testing.T) {
 
 	// Ada gets ₦500 cashback.
 	_, err = ops.Adjust(ctx, ledger.AdjustInput{AccountID: adaNGN, Type: ledger.AdjustCredit,
-		Amount: ledger.Amount("500", "NGN"), Reason: "Cashback: September promo",
+		Amount: ledger.Amount("500", currency.NGN), Reason: "Cashback: September promo",
 		RequestedBy: "ops.kemi", ApprovedBy: "lead.femi", Reference: "adj_cashback_ada_09"})
 	check(err)
 
 	// Next day: Paystack settles Ada's ₦50,000 (keeping ₦750), the bank funds Flutterwave.
 	core.Advance(24 * time.Hour)
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack", Direction: ledger.SettlementCollection,
-		Amount: ledger.Amount("50000", "NGN"), Fee: ledger.Amount("750", ""), Reference: "paystack_stl_0902"})
+		Amount: ledger.Amount("50000", currency.NGN), Fee: ledger.Amount("750", ""), Reference: "paystack_stl_0902"})
 	check(err)
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "flutterwave", Direction: ledger.SettlementPayout,
-		Amount: ledger.Amount("5000", "NGN"), Reference: "flw_stl_0902"})
+		Amount: ledger.Amount("5000", currency.NGN), Reference: "flw_stl_0902"})
 	check(err)
 
 	for _, id := range []ledger.AccountID{adaNGN, tundeNGN, chidiNGN} {
@@ -70,7 +71,7 @@ func TestReports(t *testing.T) {
 
 	begin("reports/trial")
 	// sample: reports/trial
-	tb, err := ops.TrialBalance(ctx, "NGN")
+	tb, err := ops.TrialBalance(ctx, currency.NGN)
 	check(err)
 	fmt.Println("balanced:", tb.Balanced, "net:", tb.Net.Display)
 	fmt.Println("customer funds:", tb.CustomerFunds.Display, "in", tb.CustomerAccounts, "accounts")
@@ -87,7 +88,7 @@ func TestReports(t *testing.T) {
 	begin("reports/nightly")
 	// sample: reports/nightly
 	// Run once a night, for every currency you hold.
-	for _, cur := range []string{"NGN", "USD"} {
+	for _, cur := range []string{currency.NGN, currency.USD} {
 		tb, err := ops.TrialBalance(ctx, cur)
 		check(err)
 		if !tb.Balanced {
@@ -102,7 +103,7 @@ func TestReports(t *testing.T) {
 
 	begin("reports/safeguarding")
 	// sample: reports/safeguarding
-	tb, err = ops.TrialBalance(ctx, "NGN")
+	tb, err = ops.TrialBalance(ctx, currency.NGN)
 	check(err)
 	// Net house assets: what Oja holds or is owed, less what it owes others.
 	net := new(big.Int)
@@ -115,15 +116,15 @@ func TestReports(t *testing.T) {
 		}
 	}
 	own := new(big.Int).Sub(net, tb.CustomerFunds.PreciseAmount)
-	fmt.Println("net house assets:", svc.Display(ledger.Precise(net, 100, "NGN")))
+	fmt.Println("net house assets:", svc.Display(ledger.Precise(net, 100, currency.NGN)))
 	fmt.Println("owed to customers:", tb.CustomerFunds.Display)
-	fmt.Println("Oja's own money:  ", svc.Display(ledger.Precise(own, 100, "NGN")))
+	fmt.Println("Oja's own money:  ", svc.Display(ledger.Precise(own, 100, currency.NGN)))
 	// end
 	end()
 
 	// Some October activity, so month-end figures differ from today's.
 	core.SetNow(time.Date(2026, 10, 2, 10, 0, 0, 0, time.UTC))
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: adaNGN, Amount: ledger.Amount("1000", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: adaNGN, Amount: ledger.Amount("1000", currency.NGN),
 		Fee: ledger.Amount("25", ""), Reference: "p2p_002"})
 	check(err)
 
@@ -131,7 +132,7 @@ func TestReports(t *testing.T) {
 	// sample: reports/month-end
 	sepStart := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	octStart := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
-	fees := ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"}
+	fees := ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN}
 
 	atMonthEnd, err := ops.HouseBalanceAt(ctx, fees, octStart)
 	check(err)
@@ -152,7 +153,7 @@ func TestReports(t *testing.T) {
 	begin("reports/clearing")
 	// sample: reports/clearing
 	// What Paystack still owes at month-end, to compare with its own report.
-	psk := ledger.HouseRef{Indicator: ledger.ClearingAccount("paystack"), Currency: "NGN"}
+	psk := ledger.HouseRef{Indicator: ledger.ClearingAccount("paystack"), Currency: currency.NGN}
 	owed, err := ops.HouseBalanceAt(ctx, psk, octStart)
 	check(err)
 	fmt.Println(psk.Indicator, "as Blnk stores it:", owed.Display)
@@ -179,16 +180,16 @@ func TestReports(t *testing.T) {
 	_, err = ops.TrialBalance(ctx, "")
 	fmt.Println("no currency:", errors.Is(err, ledger.ErrInvalidInput))
 
-	_, err = ops.HouseStatement(ctx, ledger.HouseRef{Indicator: "FeeIncome", Currency: "NGN"}, sepStart, octStart)
+	_, err = ops.HouseStatement(ctx, ledger.HouseRef{Indicator: "FeeIncome", Currency: currency.NGN}, sepStart, octStart)
 	fmt.Println("no @:", errors.Is(err, ledger.ErrInvalidInput))
 
-	_, err = ops.HouseBalanceAt(ctx, ledger.HouseRef{Indicator: "@Suspense", Currency: "NGN"}, octStart)
+	_, err = ops.HouseBalanceAt(ctx, ledger.HouseRef{Indicator: "@Suspense", Currency: currency.NGN}, octStart)
 	fmt.Println("never used:", errors.Is(err, ledger.ErrNotFound))
 
 	_, err = ops.HouseStatement(ctx, fees, octStart, sepStart)
 	fmt.Println("from after to:", errors.Is(err, ledger.ErrInvalidInput))
 
-	_, err = ops.HouseStatement(ctx, ledger.HouseRef{Indicator: string(adaNGN), Currency: "NGN"}, sepStart, octStart)
+	_, err = ops.HouseStatement(ctx, ledger.HouseRef{Indicator: string(adaNGN), Currency: currency.NGN}, sepStart, octStart)
 	fmt.Println("customer account:", errors.Is(err, ledger.ErrWrongKind))
 	// end
 	end()

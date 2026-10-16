@@ -6,12 +6,13 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 // exchangePricing charges 1% of the dollars sold. Selling naira is free.
 func exchangePricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, error) {
-	if r.Kind == ledger.FeeExchange && r.Amount.Currency == "USD" {
+	if r.Kind == ledger.FeeExchange && r.Amount.Currency == currency.USD {
 		return ledger.ComputeFee(ledger.FeeRule{Percent: "1"}, r.Amount)
 	}
 	return ledger.NoFee, nil
@@ -19,15 +20,15 @@ func exchangePricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, er
 
 func TestCurrencyExchange(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{Fees: exchangePricing})
-	ada := customer(wallet, "user_8812", "Ada", "NGN", "USD")
-	adaNGN, adaUSD := ada.Accounts["NGN"].ID, ada.Accounts["USD"].ID
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN", "USD")
-	tundeNGN, tundeUSD := tunde.Accounts["NGN"].ID, tunde.Accounts["USD"].ID
-	fund(wallet, adaUSD, "300", "USD", "seed_ada_usd")
-	fund(wallet, tundeNGN, "200000", "NGN", "seed_tunde")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN, currency.USD)
+	adaNGN, adaUSD := ada.Accounts[currency.NGN].ID, ada.Accounts[currency.USD].ID
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN, currency.USD)
+	tundeNGN, tundeUSD := tunde.Accounts[currency.NGN].ID, tunde.Accounts[currency.USD].ID
+	fund(wallet, adaUSD, "300", currency.USD, "seed_ada_usd")
+	fund(wallet, tundeNGN, "200000", currency.NGN, "seed_tunde")
 
 	pool := func() {
-		for _, cur := range []string{"USD", "NGN"} {
+		for _, cur := range []string{currency.USD, currency.NGN} {
 			h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FXPoolAccount, Currency: cur})
 			check(err)
 			fmt.Println("@FXPool", cur, h.Balance.Display)
@@ -40,8 +41,8 @@ func TestCurrencyExchange(t *testing.T) {
 	fx := ledger.ExchangeInput{
 		From:      adaUSD,
 		To:        adaNGN,
-		Sell:      ledger.Amount("100", "USD"), // exactly this leaves her USD account
-		Rate:      "1532.40",                   // NGN per 1 USD
+		Sell:      ledger.Amount("100", currency.USD), // exactly this leaves her USD account
+		Rate:      "1532.40",                          // NGN per 1 USD
 		Reference: "fx_01J8ZQ0T5C",
 		// Fee left out: Config.Fees charges 1% of the dollars, on top
 	}
@@ -66,7 +67,7 @@ func TestCurrencyExchange(t *testing.T) {
 	y, err := wallet.Exchange(ctx, ledger.ExchangeInput{
 		From:      tundeNGN,
 		To:        tundeUSD,
-		Buy:       ledger.Amount("25", "USD"),
+		Buy:       ledger.Amount("25", currency.USD),
 		Rate:      "0.000652", // USD per 1 NGN
 		Reference: "fx_01J8ZQ1A2B",
 	})
@@ -79,7 +80,7 @@ func TestCurrencyExchange(t *testing.T) {
 	// sample: currency-exchange/rounding
 	// Selling: the amount bought rounds down. 3.33 × 1532.47 = 5103.1251 naira.
 	q, err := wallet.QuoteExchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Sell: ledger.Amount("3.33", "USD"), Rate: "1532.47",
+		From: adaUSD, To: adaNGN, Sell: ledger.Amount("3.33", currency.USD), Rate: "1532.47",
 		Fee: ledger.NoFee, Reference: "fx_round_1",
 	})
 	check(err)
@@ -87,7 +88,7 @@ func TestCurrencyExchange(t *testing.T) {
 
 	// Buying: the amount sold rounds up. 1000 / 1532.47 = 0.65254... dollars.
 	q, err = wallet.QuoteExchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Buy: ledger.Amount("1000", "NGN"), Rate: "1532.47",
+		From: adaUSD, To: adaNGN, Buy: ledger.Amount("1000", currency.NGN), Rate: "1532.47",
 		Fee: ledger.NoFee, Reference: "fx_round_2",
 	})
 	check(err)
@@ -99,7 +100,7 @@ func TestCurrencyExchange(t *testing.T) {
 	// sample: currency-exchange/pool
 	// Oja took in $101 from Ada and paid out naira; Tunde did the opposite.
 	pool()
-	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "USD"})
+	fees, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.USD})
 	check(err)
 	fmt.Println("@FeeIncome USD", fees.Balance.Display)
 	// end
@@ -122,35 +123,35 @@ func TestCurrencyExchange(t *testing.T) {
 	begin("currency-exchange/errors")
 	// sample: currency-exchange/errors
 	_, err = wallet.Exchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Sell: ledger.Amount("500", "USD"), Rate: "1532.40", Reference: "e1",
+		From: adaUSD, To: adaNGN, Sell: ledger.Amount("500", currency.USD), Rate: "1532.40", Reference: "e1",
 	})
 	fmt.Println("insufficient funds:", errors.Is(err, ledger.ErrInsufficientFunds))
 
 	_, err = wallet.Exchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Sell: ledger.Amount("10", "USD"), Buy: ledger.Amount("15000", "NGN"),
+		From: adaUSD, To: adaNGN, Sell: ledger.Amount("10", currency.USD), Buy: ledger.Amount("15000", currency.NGN),
 		Rate: "1532.40", Reference: "e2",
 	})
 	fmt.Println("Sell and Buy:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.Exchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: tundeUSD, Sell: ledger.Amount("10", "USD"), Rate: "1", Reference: "e3",
+		From: adaUSD, To: tundeUSD, Sell: ledger.Amount("10", currency.USD), Rate: "1", Reference: "e3",
 	})
 	fmt.Println("same currency:", err)
 
 	_, err = wallet.Exchange(ctx, ledger.ExchangeInput{
-		From: tundeNGN, To: tundeUSD, Sell: ledger.Amount("0.01", "NGN"), Rate: "0.000652", Reference: "e4",
+		From: tundeNGN, To: tundeUSD, Sell: ledger.Amount("0.01", currency.NGN), Rate: "0.000652", Reference: "e4",
 	})
 	fmt.Println("too small:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.Exchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: ledger.AccountID(ledger.FXPoolAccount), Sell: ledger.Amount("10", "USD"),
+		From: adaUSD, To: ledger.AccountID(ledger.FXPoolAccount), Sell: ledger.Amount("10", currency.USD),
 		Rate: "1532.40", Reference: "e5",
 	})
 	fmt.Println("house account:", errors.Is(err, ledger.ErrWrongKind))
 
 	check(ops.FreezeAccount(ctx, adaNGN, "KYC review"))
 	_, err = wallet.Exchange(ctx, ledger.ExchangeInput{
-		From: adaUSD, To: adaNGN, Sell: ledger.Amount("10", "USD"), Rate: "1532.40", Reference: "e6",
+		From: adaUSD, To: adaNGN, Sell: ledger.Amount("10", currency.USD), Rate: "1532.40", Reference: "e6",
 	})
 	fmt.Println("frozen destination:", errors.Is(err, ledger.ErrAccountFrozen))
 	// end

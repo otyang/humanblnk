@@ -43,29 +43,29 @@
 <figure class="code"><figcaption>Oja's tiers, with days starting at midnight in Lagos</figcaption><pre><code>lagos := time.<span class="t">FixedZone</span>(<span class="s">&quot;WAT&quot;</span>, <span class="n">3600</span>) <span class="c">// Lagos, UTC+1</span>
 cfg := ledger.<span class="t">Config</span>{
 	<span class="t">Limits</span>: []ledger.<span class="t">Limit</span>{
-		{<span class="t">Tier</span>: <span class="s">&quot;tier1&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;50000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;200000&quot;</span>, <span class="t">Monthly</span>: <span class="s">&quot;1000000&quot;</span>},
-		{<span class="t">Tier</span>: <span class="s">&quot;tier2&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;100000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;500000&quot;</span>, <span class="t">Monthly</span>: <span class="s">&quot;5000000&quot;</span>},
-		{<span class="t">Tier</span>: <span class="s">&quot;tier3&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;5000000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;25000000&quot;</span>},
-		{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;10000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;30000&quot;</span>}, <span class="c">// accounts with no tier</span>
-		{<span class="t">Tier</span>: <span class="s">&quot;*&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;USD&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;1000&quot;</span>},                <span class="c">// every tier, in dollars</span>
+		{<span class="t">Tier</span>: <span class="s">&quot;tier1&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;50000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;200000&quot;</span>, <span class="t">Monthly</span>: <span class="s">&quot;1000000&quot;</span>},
+		{<span class="t">Tier</span>: <span class="s">&quot;tier2&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;100000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;500000&quot;</span>, <span class="t">Monthly</span>: <span class="s">&quot;5000000&quot;</span>},
+		{<span class="t">Tier</span>: <span class="s">&quot;tier3&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;5000000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;25000000&quot;</span>},
+		{<span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;10000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;30000&quot;</span>}, <span class="c">// accounts with no tier</span>
+		{<span class="t">Tier</span>: <span class="s">&quot;*&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">USD</span>, <span class="t">Daily</span>: <span class="s">&quot;1000&quot;</span>},                <span class="c">// every tier, in dollars</span>
 	},
 	<span class="t">Location</span>: lagos, <span class="c">// a day starts at midnight in Lagos</span>
 }
 svc, core, wallet, ops := setup(t, cfg) <span class="c">// in your app: ledger.New(client, cfg)</span>
 
 tunde, err := wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
-	<span class="t">FirstName</span>: <span class="s">&quot;Tunde&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Bakare&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;USD&quot;</span>},
+	<span class="t">FirstName</span>: <span class="s">&quot;Tunde&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Bakare&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>, currency.<span class="t">USD</span>},
 	<span class="t">ExternalID</span>: <span class="s">&quot;user_9034&quot;</span>,
 	<span class="t">MetaData</span>:   <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;tier&quot;</span>: <span class="s">&quot;tier1&quot;</span>}, <span class="c">// the tier is read from here</span>
 })
 check(err)
-tundeNGN := tunde.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>
+tundeNGN := tunde.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">ID</span>
 
 u, err := wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
 check(err)
 fmt.<span class="t">Printf</span>(<span class="s">&quot;%s %s: per transaction %s, daily %s, monthly %s\n&quot;</span>,
 	u.<span class="t">Limit</span>.<span class="t">Tier</span>, u.<span class="t">Limit</span>.<span class="t">Currency</span>, u.<span class="t">Limit</span>.<span class="t">PerTransaction</span>, u.<span class="t">Limit</span>.<span class="t">Daily</span>, u.<span class="t">Limit</span>.<span class="t">Monthly</span>)
-usd, err := wallet.<span class="t">LimitUsage</span>(ctx, tunde.<span class="t">Accounts</span>[<span class="s">&quot;USD&quot;</span>].<span class="t">ID</span>)
+usd, err := wallet.<span class="t">LimitUsage</span>(ctx, tunde.<span class="t">Accounts</span>[currency.<span class="t">USD</span>].<span class="t">ID</span>)
 check(err)
 fmt.<span class="t">Printf</span>(<span class="s">&quot;USD: tier %q, daily %s\n&quot;</span>, usd.<span class="t">Limit</span>.<span class="t">Tier</span>, usd.<span class="t">Limit</span>.<span class="t">Daily</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>tier1 NGN: per transaction 50000, daily 200000, monthly 1000000
@@ -77,11 +77,11 @@ USD: tier &quot;*&quot;, daily 1000</pre></figure>
 <p>The tier is the <code>tier</code> key in the account's <code>MetaData</code>. <code>OpenCustomer</code> copies its <code>MetaData</code> onto every account it opens, so setting <code>tier</code> there covers all of a customer's currencies. <code>OpenAccount</code> takes the same key. Limits read the account's metadata, not the identity's.</p>
 <h2 id="per-transaction-caps"><a href="#per-transaction-caps">Per-transaction caps</a></h2>
 <figure class="code"><figcaption>Tunde is on tier1: ₦50,000 at a time</figcaption><pre><code>_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_31001&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_31001&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>), err)
 
 <span class="c">// The fee counts: ₦49,990 + ₦50 is over ₦50,000.</span>
-_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;49990&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;49990&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;payout_31002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>), err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Transfer: ledger: transaction limit exceeded: per-transaction limit 50000 NGN: this needs 60000.00
@@ -91,7 +91,7 @@ true ledger.Wallet.Withdraw: ledger: transaction limit exceeded: per-transaction
 <p><code>wallet.LimitUsage</code> reports what the account has used and has left. Use it for the "you can send X more today" line in your app.</p>
 <figure class="code"><figcaption>Tunde pays Chidi Stores four times, then tries a fifth</figcaption><pre><code><span class="k">for</span> i, amount := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;50000&quot;</span>, <span class="s">&quot;50000&quot;</span>, <span class="s">&quot;30000&quot;</span>} {
 	_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidiNGN,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;order_%d&quot;</span>, <span class="n">5101</span>+i)}) <span class="c">// order_5101 … order_5104</span>
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;order_%d&quot;</span>, <span class="n">5101</span>+i)}) <span class="c">// order_5101 … order_5104</span>
 	check(err)
 }
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
@@ -99,7 +99,7 @@ check(err)
 limitsShow(<span class="s">&quot;Tunde:&quot;</span>, u)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5105&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5105&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>), err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>Tunde: used today 180000.00 left today 20000.00 | used this month 180000.00 left 820000.00
 true ledger.Wallet.Transfer: ledger: transaction limit exceeded: daily limit 200000 NGN: already used 180000.00, this needs 25000.00</pre></figure>
@@ -110,7 +110,7 @@ true ledger.Wallet.Transfer: ledger: transaction limit exceeded: daily limit 200
 <p>A card authorisation reserves money, so it counts against the limit at once. Cancelling it gives the allowance back; a partial capture keeps only what was captured.</p>
 <figure class="code"><figcaption>Ada's ₦80,000 card authorisation</figcaption><pre><code><span class="c">// Ada&#x27;s card is authorised for ₦80,000 at Chidi Stores.</span>
 hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_771&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_771&quot;</span>})
 check(err)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, adaNGN)
 check(err)
@@ -124,9 +124,9 @@ limitsShow(<span class="s">&quot;released:&quot;</span>, u)
 
 <span class="c">// A partial capture counts only what was captured.</span>
 hold, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_772&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_772&quot;</span>})
 check(err)
-part := ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
+part := ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, currency.<span class="t">NGN</span>)
 _, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, &amp;part)
 check(err)
 _, err = wallet.<span class="t">Cancel</span>(ctx, hold.<span class="t">TransactionID</span>)
@@ -140,7 +140,7 @@ captured: used today 30000.00 left today 470000.00 | used this month 30000.00 le
 <p>Pending withdrawals and pending transfers work the same way: they count while pending, and a cancelled or expired one gives its amount back.</p>
 <h2 id="which-movements-are-limited"><a href="#which-movements-are-limited">Which movements are limited</a></h2>
 <figure class="code"><pre><code><span class="c">// Money coming in is never limited.</span>
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T31003&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;deposit:&quot;</span>, err == <span class="b">nil</span>)
 
@@ -148,12 +148,12 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;deposit:&quot;</span>, 
 pot, err := wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{<span class="t">ParentID</span>: tundeNGN, <span class="t">Name</span>: <span class="s">&quot;School fees&quot;</span>})
 check(err)
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: pot.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;save_31004&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;save_31004&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;into the pot:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
 
 <span class="c">// Bulk batches are not checked: you are responsible for them.</span>
 _, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Atomic</span>: <span class="b">true</span>, <span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bulk_31005_1&quot;</span>},
+	{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bulk_31005_1&quot;</span>},
 }})
 fmt.<span class="t">Println</span>(<span class="s">&quot;bulk over the limit:&quot;</span>, err == <span class="b">nil</span>)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN) <span class="c">// but it counts in usage afterwards</span>
@@ -162,7 +162,7 @@ limitsShow(<span class="s">&quot;Tunde:&quot;</span>, u)
 
 <span class="c">// Back-office flows don&#x27;t use up an allowance: a correction that debits Tunde,</span>
 _, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reason</span>: <span class="s">&quot;duplicate top-up&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reason</span>: <span class="s">&quot;duplicate top-up&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
 	<span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;adj_31006&quot;</span>})
 check(err)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
@@ -173,7 +173,7 @@ limitsShow(<span class="s">&quot;after a correction:&quot;</span>, u)
 order, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;order_5101&quot;</span>)
 check(err)
 _, err = wallet.<span class="t">RefundPartial</span>(ctx, order.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_5101_1&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_5101_1&quot;</span>})
 check(err)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, chidiNGN)
 check(err)
@@ -199,7 +199,7 @@ check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;now:&quot;</span>, u.<span class="t">Limit</span>.<span class="t">Tier</span>, <span class="s">&quot;daily&quot;</span>, u.<span class="t">Limit</span>.<span class="t">Daily</span>, <span class="s">&quot;left today&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5106&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5106&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;₦90,000 transfer:&quot;</span>, err == <span class="b">nil</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>now: tier2 daily 500000 left today 260000.00
 ₦90,000 transfer: true</pre></figure>
@@ -208,7 +208,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;₦90,000 transfer:&quo
 <p>Daily usage starts again at midnight in <code>Config.Location</code>; monthly usage on the 1st. With <code>Location</code> set to Lagos, 23:30 UTC is already the next day.</p>
 <figure class="code"><figcaption>A transfer scheduled for just after midnight counts on the new day</figcaption><pre><code><span class="c">// Tunde schedules ₦20,000 for 00:15 on 2 September in Lagos.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;so_31007&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;so_31007&quot;</span>,
 	<span class="t">ScheduledFor</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">2</span>, <span class="n">0</span>, <span class="n">15</span>, <span class="n">0</span>, <span class="n">0</span>, lagos)})
 check(err)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
@@ -225,7 +225,7 @@ next day: used today 20000.00 left today 480000.00 | used this month 350000.00 l
 <h2 id="on-the-confirm-screen"><a href="#on-the-confirm-screen">On the confirm screen</a></h2>
 <p>A quote runs the same checks, so the app can say "over your limit" before the customer confirms. See <a href="quotes.html">Quotes</a>.</p>
 <figure class="code"><figcaption>Ada (tier2, ₦100,000 at a time) asks for ₦150,000</figcaption><pre><code>q, err := wallet.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5107&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5107&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;allowed:&quot;</span>, q.<span class="t">Allowed</span>, <span class="s">&quot;limit:&quot;</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrLimitExceeded</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>allowed: false limit: true</pre></figure>
@@ -240,7 +240,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;allowed:&quot;</span>, 
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

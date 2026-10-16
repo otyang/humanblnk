@@ -7,12 +7,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 // withdrawalsPricing charges ₦50 on every naira withdrawal.
 func withdrawalsPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money, error) {
-	if r.Kind == ledger.FeeWithdrawal && r.Amount.Currency == "NGN" {
+	if r.Kind == ledger.FeeWithdrawal && r.Amount.Currency == currency.NGN {
 		return ledger.ComputeFee(ledger.FeeRule{Fixed: "50"}, r.Amount)
 	}
 	return ledger.NoFee, nil
@@ -21,13 +22,13 @@ func withdrawalsPricing(ctx context.Context, r ledger.FeeRequest) (ledger.Money,
 func TestWithdrawals(t *testing.T) {
 	_, core, wallet, ops := setup(t, ledger.Config{
 		Fees:   withdrawalsPricing,
-		Limits: []ledger.Limit{{Tier: "tier2", Currency: "NGN", PerTransaction: "100000", Daily: "500000"}},
+		Limits: []ledger.Limit{{Tier: "tier2", Currency: currency.NGN, PerTransaction: "100000", Daily: "500000"}},
 	})
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	adaNGN := ada.Accounts["NGN"].ID
-	tundeNGN := customer(wallet, "user_9034", "Tunde", "NGN").Accounts["NGN"].ID
-	fund(wallet, adaNGN, "200000", "NGN", "seed_ada")
-	fund(wallet, tundeNGN, "30000", "NGN", "seed_tunde")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	adaNGN := ada.Accounts[currency.NGN].ID
+	tundeNGN := customer(wallet, "user_9034", "Tunde", currency.NGN).Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "200000", currency.NGN, "seed_ada")
+	fund(wallet, tundeNGN, "30000", currency.NGN, "seed_tunde")
 
 	show := func(id ledger.AccountID, who string) {
 		a, err := wallet.GetAccount(ctx, id)
@@ -40,9 +41,9 @@ func TestWithdrawals(t *testing.T) {
 	// Ada withdraws ₦20,000 to her GTBank account through Flutterwave.
 	wd, err := wallet.Withdraw(ctx, ledger.WithdrawInput{
 		AccountID:   adaNGN,
-		Amount:      ledger.Amount("20000", "NGN"), // what reaches her bank
-		Reference:   "wd_01J8ZM7R2X",               // generate once, when she taps "Withdraw"
-		Provider:    "flutterwave",                 // credits @FlutterwaveClearing
+		Amount:      ledger.Amount("20000", currency.NGN), // what reaches her bank
+		Reference:   "wd_01J8ZM7R2X",                      // generate once, when she taps "Withdraw"
+		Provider:    "flutterwave",                        // credits @FlutterwaveClearing
 		Description: "Withdrawal to GTBank ****4410",
 		// Fee left out: Config.Fees charges ₦50 on top
 	})
@@ -57,7 +58,7 @@ func TestWithdrawals(t *testing.T) {
 	fmt.Println(done.EntryStatus)
 	show(adaNGN, "Ada")
 	for _, name := range []string{"@FlutterwaveClearing", ledger.FeeIncomeAccount} {
-		h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: name, Currency: "NGN"})
+		h, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: name, Currency: currency.NGN})
 		check(err)
 		fmt.Println(name, h.Balance.Display)
 	}
@@ -68,7 +69,7 @@ func TestWithdrawals(t *testing.T) {
 	// sample: withdrawals/cancel
 	wd, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
 		AccountID: tundeNGN,
-		Amount:    ledger.Amount("10000", "NGN"),
+		Amount:    ledger.Amount("10000", currency.NGN),
 		Reference: "wd_01J8ZM9K4T",
 		Provider:  "flutterwave",
 	})
@@ -88,7 +89,7 @@ func TestWithdrawals(t *testing.T) {
 	// An agent paid Ada ₦5,000 cash over the counter: there is nothing to wait for.
 	wd, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
 		AccountID:       adaNGN,
-		Amount:          ledger.Amount("5000", "NGN"),
+		Amount:          ledger.Amount("5000", currency.NGN),
 		Fee:             ledger.NoFee,
 		Reference:       "cashout_agent17_5521",
 		ClearingAccount: "@AgentCashPayable", // exact account, overrides Provider
@@ -105,13 +106,13 @@ func TestWithdrawals(t *testing.T) {
 	// Default: a withdrawal the provider never answers is cancelled after
 	// Config.WithdrawalHoldTTL (24h).
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: tundeNGN, Amount: ledger.Amount("3000", "NGN"), Fee: ledger.NoFee,
+		AccountID: tundeNGN, Amount: ledger.Amount("3000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "wd_01J8ZMB1C2", Provider: "flutterwave",
 	})
 	check(err)
 	// ExpiresIn sets a shorter window for this one.
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: tundeNGN, Amount: ledger.Amount("2000", "NGN"), Fee: ledger.NoFee,
+		AccountID: tundeNGN, Amount: ledger.Amount("2000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "wd_01J8ZMB3D4", Provider: "flutterwave",
 		ExpiresIn: 2 * time.Hour,
 	})
@@ -131,7 +132,7 @@ func TestWithdrawals(t *testing.T) {
 	var ids []string
 	for i, amount := range []string{"1000", "2000", "3000"} {
 		wd, err := wallet.Withdraw(ctx, ledger.WithdrawInput{
-			AccountID: adaNGN, Amount: ledger.Amount(amount, "NGN"),
+			AccountID: adaNGN, Amount: ledger.Amount(amount, currency.NGN),
 			Reference: fmt.Sprintf("wd_batch_%d", i+1), Provider: "flutterwave",
 		})
 		check(err)
@@ -156,12 +157,12 @@ func TestWithdrawals(t *testing.T) {
 	begin("withdrawals/errors")
 	// sample: withdrawals/errors
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: tundeNGN, Amount: ledger.Amount("90000", "NGN"), Reference: "e1", Provider: "flutterwave",
+		AccountID: tundeNGN, Amount: ledger.Amount("90000", currency.NGN), Reference: "e1", Provider: "flutterwave",
 	})
 	fmt.Println("insufficient funds:", errors.Is(err, ledger.ErrInsufficientFunds))
 
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: adaNGN, Amount: ledger.Amount("100000", "NGN"), Reference: "e2", Provider: "flutterwave",
+		AccountID: adaNGN, Amount: ledger.Amount("100000", currency.NGN), Reference: "e2", Provider: "flutterwave",
 	})
 	fmt.Println("limit (100,000 + 50 fee):", errors.Is(err, ledger.ErrLimitExceeded))
 
@@ -169,16 +170,16 @@ func TestWithdrawals(t *testing.T) {
 	fmt.Println("confirmed twice:", errors.Is(err, ledger.ErrAlreadyFinalized))
 
 	wd, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: adaNGN, Amount: ledger.Amount("4000", "NGN"), Reference: "e3", Provider: "flutterwave",
+		AccountID: adaNGN, Amount: ledger.Amount("4000", currency.NGN), Reference: "e3", Provider: "flutterwave",
 	})
 	check(err)
 	part := ledger.Amount("1000", "")
 	_, err = wallet.Confirm(ctx, wd.TransactionID, &part)
 	fmt.Println("partial with a fee:", errors.Is(err, ledger.ErrInvalidInput))
 
-	check(ops.FreezeLedger(ctx, ada.Accounts["NGN"].LedgerID, "incident 42"))
+	check(ops.FreezeLedger(ctx, ada.Accounts[currency.NGN].LedgerID, "incident 42"))
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: adaNGN, Amount: ledger.Amount("1000", "NGN"), Reference: "e4", Provider: "flutterwave",
+		AccountID: adaNGN, Amount: ledger.Amount("1000", currency.NGN), Reference: "e4", Provider: "flutterwave",
 	})
 	fmt.Println("ledger frozen:", errors.Is(err, ledger.ErrLedgerFrozen))
 	// end

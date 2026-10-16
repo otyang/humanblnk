@@ -36,16 +36,16 @@
 svc, core := ledgertest.<span class="t">New</span>(t, ledger.<span class="t">Config</span>{}) <span class="c">// closed when the test ends</span>
 wallet := svc.<span class="t">Wallet</span>()
 
-ada, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+ada, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
-landlord, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+landlord, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ada.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ada.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;seed&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 check(err)
 
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada.<span class="t">ID</span>, <span class="t">To</span>: landlord.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;250000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_sept&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;250000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_sept&quot;</span>})
 check(err)
 
 got, err := wallet.<span class="t">GetAccount</span>(ctx, landlord.<span class="t">ID</span>)
@@ -62,9 +62,9 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;landlord:&quot;</span>,
 fmt.<span class="t">Println</span>(<span class="s">&quot;starts at:&quot;</span>, core.<span class="t">Now</span>()) <span class="c">// always the same</span>
 
 core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>))
-acct, err := svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+acct, err := svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
-r, err := svc.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: acct.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+r, err := svc.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: acct.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;seed&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;posted at:&quot;</span>, r.<span class="t">CreatedAt</span>)
@@ -78,7 +78,7 @@ now: 2026-09-02 21:00:00 +0000 UTC</pre></figure>
 <p>"Whatever became due" means: scheduled transactions post, pending transactions past their expiry are cancelled, and those past their capture time are captured.</p>
 <h2 id="a-card-hold-that-expires"><a href="#a-card-hold-that-expires">A card hold that expires</a></h2>
 <figure class="code"><figcaption>Chidi Stores never captures Ada's ₦20,000</figcaption><pre><code>hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
-	<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: shop, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: shop, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;card_auth_4410&quot;</span>, <span class="t">ExpiresAt</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">2</span> * time.<span class="t">Hour</span>),
 })
 check(err)
@@ -109,7 +109,7 @@ capture now: true</pre></figure>
 <h2 id="a-withdrawal-the-provider-never-confirms"><a href="#a-withdrawal-the-provider-never-confirms">A withdrawal the provider never confirms</a></h2>
 <p>Withdrawals are pending by default and cancel themselves after <code>Config.WithdrawalHoldTTL</code> (24 hours).</p>
 <figure class="code"><figcaption>Flutterwave goes quiet on Ada's ₦10,000</figcaption><pre><code>wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: ada, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: ada, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;wd_9001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>, <span class="c">// pending until Flutterwave answers</span>
 })
 check(err)
@@ -136,7 +136,7 @@ confirm now: true</pre></figure>
 <p>More in <a href="withdrawals.html">Withdrawals</a>.</p>
 <h2 id="scheduled-transfers-and-standing-orders"><a href="#scheduled-transfers-and-standing-orders">Scheduled transfers and standing orders</a></h2>
 <figure class="code"><figcaption>₦10,000 to Ada's rent pot on the 2nd of each month</figcaption><pre><code>plan, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
-	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: pot.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: pot.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>),
 		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_plan_ada&quot;</span>},
 	<span class="t">First</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>), <span class="t">Every</span>: ledger.<span class="t">Monthly</span>, <span class="t">Count</span>: <span class="n">3</span>,
 })
@@ -168,9 +168,9 @@ third payment: rejected</pre></figure>
 <figure class="code"><figcaption>A deposit, then a card hold that is cancelled</figcaption><pre><code><span class="k">var</span> names []<span class="b">string</span>
 core.<span class="t">OnEvent</span>(<span class="k">func</span>(e ledgertest.<span class="t">Event</span>) { names = <span class="b">append</span>(names, e.<span class="t">Event</span>) }) <span class="c">// as each is sent</span>
 
-fund(wallet, ada, <span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T9201&quot;</span>)
+fund(wallet, ada, <span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;paystack_T9201&quot;</span>)
 hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: tunde,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_9201&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_9201&quot;</span>})
 check(err)
 _, err = wallet.<span class="t">Cancel</span>(ctx, hold.<span class="t">TransactionID</span>)
 check(err)
@@ -222,7 +222,7 @@ spy := ledger.<span class="t">ObserverFunc</span>(<span class="k">func</span>(ct
 api := ledger.<span class="t">Instrument</span>(ledger.<span class="t">New</span>(core.<span class="t">Client</span>(), ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ng, <span class="t">Now</span>: core.<span class="t">Now</span>}), spy)
 backOffice := ledger.<span class="t">New</span>(core.<span class="t">Client</span>(), ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: gh, <span class="t">Now</span>: core.<span class="t">Now</span>})
 
-acct, err := api.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+acct, err := api.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 check(backOffice.<span class="t">Ops</span>().<span class="t">FreezeAccount</span>(ctx, acct.<span class="t">ID</span>, <span class="s">&quot;test&quot;</span>))
 a, err := api.<span class="t">Wallet</span>().<span class="t">GetAccount</span>(ctx, acct.<span class="t">ID</span>)
@@ -271,7 +271,7 @@ BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -count=1 
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

@@ -9,6 +9,7 @@ import (
 
 	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/blnk"
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -75,13 +76,13 @@ func TestSetup(t *testing.T) {
 	admin := backOffice{ops: l.Ops()}
 
 	ada, err := api.wallet.OpenCustomer(ctx, ledger.CustomerInput{
-		FirstName: "Ada", LastName: "Obi", Currencies: []string{"NGN"}, ExternalID: "user_8812",
+		FirstName: "Ada", LastName: "Obi", Currencies: []string{currency.NGN}, ExternalID: "user_8812",
 	})
 	check(err)
 	// api.wallet.FreezeAccount(...) would not compile: Wallet has no such method.
-	check(admin.ops.FreezeAccount(ctx, ada.Accounts["NGN"].ID, "KYC review"))
+	check(admin.ops.FreezeAccount(ctx, ada.Accounts[currency.NGN].ID, "KYC review"))
 
-	acct, err := api.wallet.GetAccount(ctx, ada.Accounts["NGN"].ID)
+	acct, err := api.wallet.GetAccount(ctx, ada.Accounts[currency.NGN].ID)
 	check(err)
 	fmt.Println(acct.ID, acct.Status)
 	// end

@@ -29,7 +29,7 @@
 <h2 id="read-one-ops-gethouseaccount"><a href="#read-one-ops-gethouseaccount">Read one: ops.GetHouseAccount</a></h2>
 <p>A house account is named by its indicator and a currency, together a <code>ledger.HouseRef</code>.</p>
 <figure class="code"><figcaption>Fee income and the Paystack clearing account</figcaption><pre><code><span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{ledger.<span class="t">FeeIncomeAccount</span>, <span class="s">&quot;@PaystackClearing&quot;</span>} {
-	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	check(err)
 	fmt.<span class="t">Println</span>(h.<span class="t">Indicator</span>, h.<span class="t">Currency</span>, h.<span class="t">Type</span>, h.<span class="t">Normal</span>, <span class="s">&quot;balance:&quot;</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;natural:&quot;</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
 }</code></pre></figure>
@@ -42,7 +42,7 @@
 <p>Blnk takes money from the source and adds it to the destination. A deposit takes ₦50,000 from <code>@PaystackClearing</code>, so in Blnk that balance runs negative. In the books it is an asset: Paystack owes Oja the money.</p>
 <p><code>Natural</code> turns the balance the right way round for its type. For a debit-normal account (assets, expenses) it is <code>Balance</code> with the sign flipped; for a credit-normal one it equals <code>Balance</code>. In their usual state, all house accounts read positive in <code>Natural</code>. Here <code>@PaystackClearing</code> reads ₦20,000: Tunde's top-up, which Paystack has not settled yet.</p>
 <h2 id="every-house-account-ops-listhouseaccounts"><a href="#every-house-account-ops-listhouseaccounts">Every house account: ops.ListHouseAccounts</a></h2>
-<figure class="code"><figcaption>Oja's naira house accounts</figcaption><pre><code>all, err := ops.<span class="t">ListHouseAccounts</span>(ctx, <span class="s">&quot;NGN&quot;</span>)
+<figure class="code"><figcaption>Oja's naira house accounts</figcaption><pre><code>all, err := ops.<span class="t">ListHouseAccounts</span>(ctx, currency.<span class="t">NGN</span>)
 check(err)
 <span class="k">for</span> _, h := <span class="k">range</span> all {
 	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-21s %-9s %-6s %10s\n&quot;</span>, h.<span class="t">Indicator</span>, h.<span class="t">Type</span>, h.<span class="t">Normal</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
@@ -84,7 +84,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;@MonnifyClearing:&quot;
 <p><code>Provider: &quot;paystack&quot;</code> on a deposit or withdrawal uses <code>@PaystackClearing</code>, and <code>Provider: &quot;flutterwave&quot;</code> uses <code>@FlutterwaveClearing</code>. <code>ledger.ClearingAccount</code> gives the name: it accepts <code>&quot;paystack&quot;</code>, <code>&quot;@Paystack&quot;</code> or <code>&quot;@PaystackClearing&quot;</code>, and returns <code>@DepositClearing</code> for an empty provider. To use an exact account, set <code>ClearingAccount</code> on the input instead of <code>Provider</code>.</p>
 <p>One clearing account per provider means each provider's balance is what that provider still owes you, or you owe it, and can be reconciled against that provider's settlement report. See <a href="settlement.html">Settlement</a>.</p>
 <h2 id="history-balance-at-a-moment-statement"><a href="#history-balance-at-a-moment-statement">History, balance at a moment, statement</a></h2>
-<figure class="code"><figcaption>@PaystackClearing over the day</figcaption><pre><code>paystack := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@PaystackClearing&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}
+<figure class="code"><figcaption>@PaystackClearing over the day</figcaption><pre><code>paystack := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@PaystackClearing&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>}
 h, err := ops.<span class="t">HouseHistory</span>(ctx, paystack, ledger.<span class="t">HistoryQuery</span>{}) <span class="c">// newest first; same query as wallet.History</span>
 check(err)
 <span class="k">for</span> _, r := <span class="k">range</span> h.<span class="t">Items</span> {
@@ -126,12 +126,12 @@ ledger.<span class="t">Chart</span>[<span class="s">&quot;@Marketing&quot;</span
 
 <span class="c">// Oja pays Tunde a ₦500 sign-up bonus out of its marketing budget.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ledger.<span class="t">AccountID</span>(<span class="s">&quot;@Marketing&quot;</span>), <span class="t">To</span>: tundeNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_9034&quot;</span>, <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_9034&quot;</span>, <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
 	<span class="t">Description</span>: <span class="s">&quot;Sign-up bonus&quot;</span>})
 check(err)
 
 <span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;@FlutterwaveClearing&quot;</span>, <span class="s">&quot;@Marketing&quot;</span>} {
-	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	check(err)
 	fmt.<span class="t">Println</span>(h.<span class="t">Indicator</span>, h.<span class="t">Type</span>, h.<span class="t">Normal</span>, <span class="s">&quot;balance:&quot;</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;natural:&quot;</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
 }</code></pre></figure>
@@ -148,13 +148,13 @@ svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</
 	<span class="t">DepositClearingAccount</span>: <span class="s">&quot;@World&quot;</span>, <span class="c">// default @DepositClearing, when a deposit names no provider</span>
 	<span class="t">PayoutClearingAccount</span>:  <span class="s">&quot;@World&quot;</span>, <span class="c">// default @PayoutClearing, when a withdrawal names no provider</span>
 })
-r, err := svc.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+r, err := svc.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;bank_transfer_5531&quot;</span>}) <span class="c">// no Provider</span>
 check(err)
 <span class="k">for</span> _, leg := <span class="k">range</span> r.<span class="t">Legs</span> {
 	fmt.<span class="t">Println</span>(<span class="s">&quot;leg to&quot;</span>, leg.<span class="t">Account</span>, leg.<span class="t">Narration</span>)
 }
-fees, err := svc.<span class="t">Ops</span>().<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Fees&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+fees, err := svc.<span class="t">Ops</span>().<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Fees&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 fmt.<span class="t">Println</span>(fees.<span class="t">Indicator</span>, fees.<span class="t">Type</span>, fees.<span class="t">Natural</span>.<span class="t">Display</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>leg to @Fees Deposit fee
@@ -166,7 +166,7 @@ leg to bln_000003 Deposit
 <div class="tablewrap"><table><thead><tr><th>Movement</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's top-up</td><td><code>@PaystackClearing</code></td><td>₦50,000</td><td></td></tr><tr><td>Ada's top-up</td><td>Ada's account</td><td></td><td>₦49,250</td></tr><tr><td>Ada's top-up</td><td><code>@FeeIncome</code></td><td></td><td>₦750</td></tr><tr><td>Tunde's top-up</td><td><code>@PaystackClearing</code></td><td>₦20,000</td><td></td></tr><tr><td>Tunde's top-up</td><td>Tunde's account</td><td></td><td>₦19,700</td></tr><tr><td>Tunde's top-up</td><td><code>@FeeIncome</code></td><td></td><td>₦300</td></tr><tr><td>Ada's withdrawal</td><td>Ada's account</td><td>₦10,050</td><td></td></tr><tr><td>Ada's withdrawal</td><td><code>@FlutterwaveClearing</code></td><td></td><td>₦10,000</td></tr><tr><td>Ada's withdrawal</td><td><code>@FeeIncome</code></td><td></td><td>₦50</td></tr><tr><td>Paystack settles</td><td><code>@BankOperating</code></td><td>₦49,250</td><td></td></tr><tr><td>Paystack settles</td><td><code>@ProviderFees</code></td><td>₦750</td><td></td></tr><tr><td>Paystack settles</td><td><code>@PaystackClearing</code></td><td></td><td>₦50,000</td></tr></tbody></table></div>
 <p>Blnk creates each <code>@</code> balance in its general ledger the first time it is used, and stores it on transactions by its balance id. Receipts and history therefore show the id; statements show the <code>@Name</code>.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<figure class="code"><pre><code>income, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+<figure class="code"><pre><code>income, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 
 _, err = wallet.<span class="t">GetAccount</span>(ctx, ledger.<span class="t">AccountID</span>(income.<span class="t">ID</span>)) <span class="c">// its balance id</span>
@@ -175,13 +175,13 @@ fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.
 _, err = wallet.<span class="t">GetAccount</span>(ctx, ledger.<span class="t">AccountID</span>(<span class="s">&quot;@FeeIncome&quot;</span>))
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
 
-_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;FeeIncome&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
-_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;GHS&quot;</span>}) <span class="c">// never used in GHS</span>
+_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">GHS</span>}) <span class="c">// never used in GHS</span>
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.GetAccount: ledger: id names the wrong kind of object: bln_000007 is a house account (@FeeIncome), not a customer account
 true
@@ -196,7 +196,7 @@ true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

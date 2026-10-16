@@ -28,9 +28,9 @@
 <h2 id="reconcile-a-report-ops-startreconciliation"><a href="#reconcile-a-report-ops-startreconciliation">Reconcile a report: ops.StartReconciliation</a></h2>
 <figure class="code"><figcaption>Paystack's report for 1 September</figcaption><pre><code><span class="c">// Paystack&#x27;s report for 1 September, parsed from its CSV.</span>
 report := []ledger.<span class="t">ExternalRecord</span>{
-	{<span class="t">ID</span>: <span class="s">&quot;PSK-88120&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T100&quot;</span>, <span class="t">Date</span>: day},
-	{<span class="t">ID</span>: <span class="s">&quot;PSK-88121&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T200&quot;</span>, <span class="t">Date</span>: day},
-	{<span class="t">ID</span>: <span class="s">&quot;PSK-88122&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4300&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T404&quot;</span>, <span class="t">Date</span>: day},
+	{<span class="t">ID</span>: <span class="s">&quot;PSK-88120&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T100&quot;</span>, <span class="t">Date</span>: day},
+	{<span class="t">ID</span>: <span class="s">&quot;PSK-88121&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T200&quot;</span>, <span class="t">Date</span>: day},
+	{<span class="t">ID</span>: <span class="s">&quot;PSK-88122&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4300&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T404&quot;</span>, <span class="t">Date</span>: day},
 }
 run, err := ops.<span class="t">StartReconciliation</span>(ctx, ledger.<span class="t">ReconcileInput</span>{
 	<span class="t">Source</span>:  <span class="s">&quot;paystack&quot;</span>,
@@ -67,7 +67,7 @@ check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;rule:&quot;</span>, ruleID)
 
 flw := []ledger.<span class="t">ExternalRecord</span>{
-	{<span class="t">ID</span>: <span class="s">&quot;FLW-3001&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12346&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;flw_in_5501&quot;</span>, <span class="t">Date</span>: day},
+	{<span class="t">ID</span>: <span class="s">&quot;FLW-3001&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12346&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;flw_in_5501&quot;</span>, <span class="t">Date</span>: day},
 }
 strict, err := ops.<span class="t">StartReconciliation</span>(ctx, ledger.<span class="t">ReconcileInput</span>{<span class="t">Source</span>: <span class="s">&quot;flutterwave&quot;</span>, <span class="t">Records</span>: flw})
 check(err)
@@ -91,14 +91,14 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;dry run:&quot;</span>, 
 <h2 id="movements-with-a-fee"><a href="#movements-with-a-fee">Movements with a fee</a></h2>
 <p>A movement with a fee is stored in Blnk only as its legs, <code>&lt;ref&gt;-1</code>, <code>&lt;ref&gt;-2</code> and so on. The provider's report has one line under the original reference, for the full amount. No single ledger transaction has that reference or that amount, so a one-to-one match fails.</p>
 <figure class="code"><figcaption>A ₦20,000 deposit with a ₦300 fee</figcaption><pre><code><span class="c">// Oja charges Ada ₦300 on a ₦20,000 Paystack deposit.</span>
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T300&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 check(err)
 
 <span class="c">// Blnk stores it as two legs, each with its own reference.</span>
 adaSide, err := wallet.<span class="t">History</span>(ctx, adaNGN, ledger.<span class="t">HistoryQuery</span>{<span class="t">Limit</span>: <span class="n">1</span>})
 check(err)
-feeSide, err := ops.<span class="t">HouseHistory</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>},
+feeSide, err := ops.<span class="t">HouseHistory</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>},
 	ledger.<span class="t">HistoryQuery</span>{<span class="t">Limit</span>: <span class="n">1</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s leg:&quot;</span>, adaSide.<span class="t">Items</span>[<span class="n">0</span>].<span class="t">Reference</span>, adaSide.<span class="t">Items</span>[<span class="n">0</span>].<span class="t">Amount</span>.<span class="t">Display</span>)
@@ -106,7 +106,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;fee leg:  &quot;</span>
 
 <span class="c">// Paystack reports one line of ₦20,000 under paystack_T300.</span>
 one, err := ops.<span class="t">StartReconciliation</span>(ctx, ledger.<span class="t">ReconcileInput</span>{<span class="t">Source</span>: <span class="s">&quot;paystack&quot;</span>,
-	<span class="t">Records</span>: []ledger.<span class="t">ExternalRecord</span>{{<span class="t">ID</span>: <span class="s">&quot;PSK-88130&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Records</span>: []ledger.<span class="t">ExternalRecord</span>{{<span class="t">ID</span>: <span class="s">&quot;PSK-88130&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>),
 		<span class="t">Reference</span>: <span class="s">&quot;paystack_T300&quot;</span>, <span class="t">Date</span>: day}}})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;one_to_one:&quot;</span>, one.<span class="t">Matched</span>, <span class="s">&quot;matched,&quot;</span>, one.<span class="t">Unmatched</span>, <span class="s">&quot;unmatched&quot;</span>)</code></pre></figure>
@@ -145,7 +145,7 @@ check(err)
 <div class="tablewrap"><table><thead><tr><th>Call</th><th>Blnk request</th></tr></thead><tbody><tr><td><code>CreateMatchingRule</code></td><td><code>POST /reconciliation/matching-rules</code></td></tr><tr><td><code>StartReconciliation</code> with <code>Records</code></td><td><code>POST /reconciliation/start-instant</code> with the lines inline (Core 0.10.0+)</td></tr><tr><td><code>StartReconciliation</code> with <code>File</code></td><td><code>POST /reconciliation/upload</code> with the file, then <code>POST /reconciliation/start</code> with its upload id</td></tr><tr><td><code>GetReconciliation</code></td><td><code>GET /reconciliation/{id}</code></td></tr></tbody></table></div>
 <p>The first run without <code>RuleIDs</code> also creates the default rule. Amounts are sent in major units, as Blnk expects.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<figure class="code"><pre><code>line := []ledger.<span class="t">ExternalRecord</span>{{<span class="t">ID</span>: <span class="s">&quot;PSK-1&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;r&quot;</span>, <span class="t">Date</span>: day}}
+<figure class="code"><pre><code>line := []ledger.<span class="t">ExternalRecord</span>{{<span class="t">ID</span>: <span class="s">&quot;PSK-1&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;r&quot;</span>, <span class="t">Date</span>: day}}
 
 _, err = ops.<span class="t">StartReconciliation</span>(ctx, ledger.<span class="t">ReconcileInput</span>{<span class="t">Records</span>: line})
 fmt.<span class="t">Println</span>(<span class="s">&quot;no source:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
@@ -191,7 +191,7 @@ unknown run: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

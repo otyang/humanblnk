@@ -6,23 +6,24 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 func TestAdjustments(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN")
-	adaNGN, tundeNGN := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "20000", "NGN", "paystack_T100")
-	fund(wallet, tundeNGN, "5000", "NGN", "paystack_T200")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN)
+	adaNGN, tundeNGN := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "20000", currency.NGN, "paystack_T100")
+	fund(wallet, tundeNGN, "5000", currency.NGN, "paystack_T200")
 
 	begin("adjustments/cashback")
 	// sample: adjustments/cashback
 	rc, err := ops.Adjust(ctx, ledger.AdjustInput{
 		AccountID:   adaNGN,
 		Type:        ledger.AdjustCredit, // money in
-		Amount:      ledger.Amount("500", "NGN"),
+		Amount:      ledger.Amount("500", currency.NGN),
 		Reason:      "Cashback: September promo",
 		RequestedBy: "ops.kemi",
 		ApprovedBy:  "lead.femi", // must not be the requester
@@ -48,8 +49,8 @@ func TestAdjustments(t *testing.T) {
 	end()
 
 	// A Paystack webhook was recorded twice under two references.
-	fund(wallet, tundeNGN, "3000", "NGN", "paystack_T300")
-	fund(wallet, tundeNGN, "3000", "NGN", "paystack_T300_dup")
+	fund(wallet, tundeNGN, "3000", currency.NGN, "paystack_T300")
+	fund(wallet, tundeNGN, "3000", currency.NGN, "paystack_T300_dup")
 
 	begin("adjustments/correction")
 	// sample: adjustments/correction
@@ -57,7 +58,7 @@ func TestAdjustments(t *testing.T) {
 	rc, err = ops.Adjust(ctx, ledger.AdjustInput{
 		AccountID:   tundeNGN,
 		Type:        ledger.AdjustDebit, // money out
-		Amount:      ledger.Amount("3000", "NGN"),
+		Amount:      ledger.Amount("3000", currency.NGN),
 		Reason:      "Duplicate deposit paystack_T300_dup",
 		RequestedBy: "ops.kemi",
 		ApprovedBy:  "lead.femi",
@@ -76,7 +77,7 @@ func TestAdjustments(t *testing.T) {
 	// sample: adjustments/retry
 	// The ops tool timed out and sent the same correction again.
 	again, err := ops.Adjust(ctx, ledger.AdjustInput{
-		AccountID: tundeNGN, Type: ledger.AdjustDebit, Amount: ledger.Amount("3000", "NGN"),
+		AccountID: tundeNGN, Type: ledger.AdjustDebit, Amount: ledger.Amount("3000", currency.NGN),
 		Reason:      "Duplicate deposit paystack_T300_dup",
 		RequestedBy: "ops.kemi", ApprovedBy: "lead.femi",
 		Reference: "adj_dup_paystack_T300", // same reference
@@ -96,7 +97,7 @@ func TestAdjustments(t *testing.T) {
 	_, err = ops.Adjust(ctx, ledger.AdjustInput{
 		AccountID:    tundeNGN,
 		Type:         ledger.AdjustCredit,
-		Amount:       ledger.Amount("1000", "NGN"),
+		Amount:       ledger.Amount("1000", currency.NGN),
 		Reason:       "Goodwill: failed transfer on 30 Aug",
 		RequestedBy:  "ops.kemi",
 		ApprovedBy:   "lead.femi",
@@ -105,7 +106,7 @@ func TestAdjustments(t *testing.T) {
 	})
 	check(err)
 
-	mkt, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: "@Marketing", Currency: "NGN"})
+	mkt, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: "@Marketing", Currency: currency.NGN})
 	check(err)
 	fmt.Println(mkt.Indicator, "balance:", mkt.Balance.Display)
 	// end
@@ -115,7 +116,7 @@ func TestAdjustments(t *testing.T) {
 	// sample: adjustments/overdraft
 	// Ada spent a ₦25,000 reversal before it was clawed back. Her balance is ₦20,500.
 	in := ledger.AdjustInput{
-		AccountID: adaNGN, Type: ledger.AdjustDebit, Amount: ledger.Amount("25000", "NGN"),
+		AccountID: adaNGN, Type: ledger.AdjustDebit, Amount: ledger.Amount("25000", currency.NGN),
 		Reason:      "Claw back reversed card payment",
 		RequestedBy: "ops.kemi", ApprovedBy: "lead.femi",
 		Reference: "adj_clawback_ada_01",
@@ -134,7 +135,7 @@ func TestAdjustments(t *testing.T) {
 
 	begin("adjustments/house")
 	// sample: adjustments/house
-	adj, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.AdjustmentsAccount, Currency: "NGN"})
+	adj, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.AdjustmentsAccount, Currency: currency.NGN})
 	check(err)
 	fmt.Println(adj.Indicator, adj.Type, adj.Normal)
 	fmt.Println("credits:", adj.Credits.Display, "debits:", adj.Debits.Display, "balance:", adj.Balance.Display)
@@ -144,7 +145,7 @@ func TestAdjustments(t *testing.T) {
 	begin("adjustments/errors")
 	// sample: adjustments/errors
 	base := ledger.AdjustInput{
-		AccountID: tundeNGN, Type: ledger.AdjustCredit, Amount: ledger.Amount("100", "NGN"),
+		AccountID: tundeNGN, Type: ledger.AdjustCredit, Amount: ledger.Amount("100", currency.NGN),
 		Reason: "Test", RequestedBy: "ops.kemi", ApprovedBy: "lead.femi", Reference: "adj_err_1",
 	}
 

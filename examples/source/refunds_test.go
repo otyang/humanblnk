@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -17,16 +18,16 @@ func refundBalance(w ledger.Wallet, id ledger.AccountID) string {
 
 func TestRefunds(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_ada", "Ada", "NGN")
-	tunde := customer(wallet, "user_tunde", "Tunde", "NGN")
+	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_tunde", "Tunde", currency.NGN)
 	shop, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", OrganizationName: "Chidi Stores Ltd",
-		Currencies: []string{"NGN"}, ExternalID: "merchant_311"})
+		Currencies: []string{currency.NGN}, ExternalID: "merchant_311"})
 	check(err)
-	adaNGN, tundeNGN, chidi := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID, shop.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "100000", "NGN", "seed_ada")
+	adaNGN, tundeNGN, chidi := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID, shop.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "100000", currency.NGN, "seed_ada")
 
 	pay, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("15000", "NGN"), Fee: ledger.NoFee, Reference: "pay_10460"})
+		Amount: ledger.Amount("15000", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10460"})
 	check(err)
 
 	begin("refunds/full")
@@ -47,20 +48,20 @@ func TestRefunds(t *testing.T) {
 	end()
 
 	pay2, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("6000", "NGN"), Fee: ledger.NoFee, Reference: "pay_10470"})
+		Amount: ledger.Amount("6000", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10470"})
 	check(err)
 
 	begin("refunds/partial")
 	// sample: refunds/partial
 	// Two of three items in a ₦6,000 order were out of stock, refunded one at a time.
 	r1, err := wallet.RefundPartial(ctx, pay2.TransactionID, ledger.PartialRefundInput{
-		Amount:    ledger.Amount("2000", "NGN"),
+		Amount:    ledger.Amount("2000", currency.NGN),
 		Reference: "refund_10470_1", // one per refund; a retry replays it
 		Reason:    "item out of stock",
 	})
 	check(err)
 	r2, err := wallet.RefundPartial(ctx, pay2.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("2500", "NGN"), Reference: "refund_10470_2", Reason: "item out of stock",
+		Amount: ledger.Amount("2500", currency.NGN), Reference: "refund_10470_2", Reason: "item out of stock",
 	})
 	check(err)
 	fmt.Println(r1.Amount.Display, r2.Amount.Display, "linked:", r2.MetaData["refund_of"] == pay2.TransactionID)
@@ -70,7 +71,7 @@ func TestRefunds(t *testing.T) {
 	fmt.Println("refunded so far (kobo):", orig.MetaData["refunded_precise"])
 
 	_, err = wallet.RefundPartial(ctx, pay2.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("2000", "NGN"), Reference: "refund_10470_3",
+		Amount: ledger.Amount("2000", currency.NGN), Reference: "refund_10470_3",
 	})
 	fmt.Println(errors.Is(err, ledger.ErrAmountExceeded), err)
 
@@ -102,14 +103,14 @@ func TestRefunds(t *testing.T) {
 	// sample: refunds/with-fee
 	// Ada paid Chidi Stores ₦10,000 plus a ₦50 Oja fee. The order is cancelled.
 	feePay, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("10000", "NGN"), Fee: ledger.Amount("50", "NGN"), Reference: "pay_10480"})
+		Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.Amount("50", currency.NGN), Reference: "pay_10480"})
 	check(err)
 	fmt.Println("paid in legs:", len(feePay.Legs), "Ada:", refundBalance(wallet, adaNGN))
 
 	// Refund by the payment id: every leg is reversed, the fee included.
 	undo, err := wallet.Refund(ctx, feePay.TransactionID, ledger.RefundInput{Reason: "order cancelled"})
 	check(err)
-	feeIncome, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	feeIncome, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN})
 	check(err)
 	names := map[string]string{string(chidi): "Chidi Stores", feeIncome.ID: "@FeeIncome"}
 	for _, leg := range undo.Legs {
@@ -126,10 +127,10 @@ func TestRefunds(t *testing.T) {
 	// sample: refunds/keep-fee
 	// Another ₦10,000 + ₦50 order. Chidi Stores gives the ₦10,000 back; Oja keeps its fee.
 	feePay2, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("10000", "NGN"), Fee: ledger.Amount("50", "NGN"), Reference: "pay_10481"})
+		Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.Amount("50", currency.NGN), Reference: "pay_10481"})
 	check(err)
 	rf, err := wallet.RefundPartial(ctx, feePay2.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("10000", "NGN"), Reference: "refund_10481",
+		Amount: ledger.Amount("10000", currency.NGN), Reference: "refund_10481",
 	})
 	check(err)
 	fmt.Println(rf.Amount.Display, "from Chidi Stores:", rf.Source == string(chidi))
@@ -142,10 +143,10 @@ func TestRefunds(t *testing.T) {
 	// A ₦10,000 card order: Oja's 5%, ₦1,500 to Tunde for delivery, the rest to Chidi Stores.
 	cancelled, err := wallet.Split(ctx, ledger.SplitInput{
 		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
-		Amount: ledger.Amount("10000", "NGN"), Reference: "order_10491",
+		Amount: ledger.Amount("10000", currency.NGN), Reference: "order_10491",
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "5"},
-			{To: tundeNGN, Amount: ledger.Amount("1500", "NGN")},
+			{To: tundeNGN, Amount: ledger.Amount("1500", currency.NGN)},
 			{To: chidi, Rest: true},
 		},
 	})
@@ -165,17 +166,17 @@ func TestRefunds(t *testing.T) {
 	// Another card order, split the same way. Chidi Stores refunds ₦3,800 of its share.
 	order, err := wallet.Split(ctx, ledger.SplitInput{
 		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
-		Amount: ledger.Amount("20000", "NGN"), Reference: "order_10490",
+		Amount: ledger.Amount("20000", currency.NGN), Reference: "order_10490",
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "5"},
-			{To: tundeNGN, Amount: ledger.Amount("1500", "NGN")},
+			{To: tundeNGN, Amount: ledger.Amount("1500", currency.NGN)},
 			{To: chidi, Rest: true},
 		},
 	})
 	check(err)
 
 	_, err = wallet.RefundPartial(ctx, order.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("1000", "NGN"), Reference: "refund_10490_x",
+		Amount: ledger.Amount("1000", currency.NGN), Reference: "refund_10490_x",
 	})
 	fmt.Println("whole split:", errors.Is(err, ledger.ErrInvalidInput))
 
@@ -186,10 +187,10 @@ func TestRefunds(t *testing.T) {
 		}
 	}
 	rs, err := wallet.RefundPartial(ctx, chidiLeg, ledger.PartialRefundInput{
-		Amount: ledger.Amount("3800", "NGN"), Reference: "refund_10490_1", Reason: "returned item",
+		Amount: ledger.Amount("3800", currency.NGN), Reference: "refund_10490_1", Reason: "returned item",
 	})
 	check(err)
-	clearing, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: "@PaystackClearing", Currency: "NGN"})
+	clearing, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: "@PaystackClearing", Currency: currency.NGN})
 	check(err)
 	fmt.Println(rs.Amount.Display, "back to @PaystackClearing:", rs.Destination == clearing.ID)
 	fmt.Println("Chidi Stores balance:", refundBalance(wallet, chidi))
@@ -200,21 +201,21 @@ func TestRefunds(t *testing.T) {
 	// sample: refunds/spent
 	// Tunde got ₦2,000 from Ada, then cashed out everything he had (₦3,500).
 	p2p, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN,
-		Amount: ledger.Amount("2000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_502"})
+		Amount: ledger.Amount("2000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_502"})
 	check(err)
-	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: tundeNGN, Amount: ledger.Amount("3500", "NGN"),
+	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: tundeNGN, Amount: ledger.Amount("3500", currency.NGN),
 		Fee: ledger.NoFee, Reference: "cashout_77", Provider: "flutterwave", Immediate: true})
 	check(err)
 
 	_, err = wallet.Refund(ctx, p2p.TransactionID, ledger.RefundInput{Reason: "sent by mistake"})
 	fmt.Println(errors.Is(err, ledger.ErrInsufficientFunds), err)
 	_, err = wallet.RefundPartial(ctx, p2p.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("2000", "NGN"), Reference: "refund_502_1"})
+		Amount: ledger.Amount("2000", currency.NGN), Reference: "refund_502_1"})
 	fmt.Println("partial too:", errors.Is(err, ledger.ErrInsufficientFunds))
 	fmt.Println("nothing moved, Tunde:", refundBalance(wallet, tundeNGN))
 
 	// Tunde tops up again. Now the refund posts.
-	fund(wallet, tundeNGN, "2000", "NGN", "paystack_T502")
+	fund(wallet, tundeNGN, "2000", currency.NGN, "paystack_T502")
 	_, err = wallet.Refund(ctx, p2p.TransactionID, ledger.RefundInput{Reason: "sent by mistake"})
 	check(err)
 	fmt.Println("refunded, Tunde:", refundBalance(wallet, tundeNGN))
@@ -225,7 +226,7 @@ func TestRefunds(t *testing.T) {
 	// sample: refunds/retry
 	// A refund of a ₦5,000 + ₦50 payment stopped after its first leg, here the fee.
 	pay4, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.Amount("50", "NGN"), Reference: "pay_10495"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.Amount("50", currency.NGN), Reference: "pay_10495"})
 	check(err)
 	for _, leg := range pay4.Legs {
 		if leg.Account == ledger.FeeIncomeAccount {
@@ -247,14 +248,14 @@ func TestRefunds(t *testing.T) {
 	begin("refunds/frozen")
 	// sample: refunds/frozen
 	pay3, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN,
-		Amount: ledger.Amount("3000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_501"})
+		Amount: ledger.Amount("3000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_501"})
 	check(err)
 	check(ops.FreezeAccount(ctx, adaNGN, "fraud check"))
 
 	_, err = wallet.Refund(ctx, pay3.TransactionID, ledger.RefundInput{})
 	fmt.Println("payer frozen:", errors.Is(err, ledger.ErrAccountFrozen))
 	_, err = wallet.RefundPartial(ctx, pay3.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("1000", "NGN"), Reference: "refund_501_1"})
+		Amount: ledger.Amount("1000", currency.NGN), Reference: "refund_501_1"})
 	fmt.Println("partial too:", errors.Is(err, ledger.ErrAccountFrozen))
 
 	check(ops.UnfreezeAccount(ctx, adaNGN))
@@ -267,18 +268,18 @@ func TestRefunds(t *testing.T) {
 	begin("refunds/errors")
 	// sample: refunds/errors
 	held, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "pay_10500", Pending: true})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10500", Pending: true})
 	check(err)
 	_, err = wallet.RefundPartial(ctx, held.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("500", "NGN"), Reference: "refund_10500_1"})
+		Amount: ledger.Amount("500", currency.NGN), Reference: "refund_10500_1"})
 	fmt.Println("pending:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.RefundPartial(ctx, "txn_unknown", ledger.PartialRefundInput{
-		Amount: ledger.Amount("500", "NGN"), Reference: "refund_x"})
+		Amount: ledger.Amount("500", currency.NGN), Reference: "refund_x"})
 	fmt.Println("unknown:", errors.Is(err, ledger.ErrNotFound))
 
 	_, err = wallet.RefundPartial(ctx, pay.TransactionID, ledger.PartialRefundInput{
-		Amount: ledger.Amount("500", "NGN"), Reference: "refund_10460_1"})
+		Amount: ledger.Amount("500", currency.NGN), Reference: "refund_10460_1"})
 	fmt.Println("already fully refunded:", errors.Is(err, ledger.ErrAlreadyFinalized))
 
 	_, err = wallet.Refund(ctx, "txn_unknown", ledger.RefundInput{})

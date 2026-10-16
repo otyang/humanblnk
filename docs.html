@@ -183,9 +183,9 @@ svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</
 	<span class="t">LedgerID</span>: ledger.<span class="t">LedgerID</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_LEDGER_ID&quot;</span>)), <span class="c">// customer accounts live here</span>
 	<span class="t">Fees</span>:     pricing,                                      <span class="c">// central fee pricing (see Fees)</span>
 	<span class="t">Limits</span>: []ledger.<span class="t">Limit</span>{ <span class="c">// KYC tiers (see Limits)</span>
-		{<span class="t">Tier</span>: <span class="s">&quot;tier1&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;50000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;200000&quot;</span>},
-		{<span class="t">Tier</span>: <span class="s">&quot;tier2&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;100000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;500000&quot;</span>},
-		{<span class="t">Tier</span>: <span class="s">&quot;tier3&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;5000000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;25000000&quot;</span>},
+		{<span class="t">Tier</span>: <span class="s">&quot;tier1&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;50000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;200000&quot;</span>},
+		{<span class="t">Tier</span>: <span class="s">&quot;tier2&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;100000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;500000&quot;</span>},
+		{<span class="t">Tier</span>: <span class="s">&quot;tier3&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>, <span class="t">PerTransaction</span>: <span class="s">&quot;5000000&quot;</span>, <span class="t">Daily</span>: <span class="s">&quot;25000000&quot;</span>},
 	},
 	<span class="t">Location</span>: lagos, <span class="c">// daily limits reset at midnight Lagos time</span>
 })
@@ -223,10 +223,10 @@ err = svc.<span class="t">Check</span>(ctx)</code></pre></figure>
 </section><section id="money"><h2><a href="#money">Money</a></h2>
 <p>Amounts are typed as decimal strings, exactly as the user entered them, and never pass through floating point. Every amount the service returns carries three forms:</p>
 <div class="tablewrap"><table class=""><thead><tr><th>Field</th><th>Example (₦1,250.5)</th><th>Use it for</th></tr></thead><tbody><tr><td><code>Value</code> / JSON <code>amount</code></td><td><code>"1250.5"</code></td><td>computing, storing, APIs: exact</td></tr><tr><td><code>Display</code> / JSON <code>display</code></td><td><code>"1250.50"</code></td><td>showing to people</td></tr><tr><td><code>PreciseAmount</code> + <code>Precision</code></td><td><code>125050</code> × <code>100</code></td><td>what Blnk stores: the integer in the smallest unit</td></tr></tbody></table></div>
-<figure class="code"><pre><code>ledger.<span class="t">Amount</span>(<span class="s">&quot;1250.50&quot;</span>, <span class="s">&quot;NGN&quot;</span>)   <span class="c">// what the user typed</span>
-ledger.<span class="t">Amount</span>(<span class="s">&quot;0.0125&quot;</span>, <span class="s">&quot;BTC&quot;</span>)    <span class="c">// 1,250,000 satoshi</span>
-ledger.<span class="t">Amount</span>(<span class="s">&quot;17250.50&quot;</span>, <span class="s">&quot;&quot;</span>)     <span class="c">// currency taken from context (fees, partial captures, splits)</span>
-ledger.<span class="t">Minor</span>(<span class="n">125050</span>, <span class="s">&quot;NGN&quot;</span>)       <span class="c">// if you already hold the integer</span></code></pre></figure>
+<figure class="code"><pre><code>ledger.<span class="t">Amount</span>(<span class="s">&quot;1250.50&quot;</span>, currency.<span class="t">NGN</span>) <span class="c">// what the user typed</span>
+ledger.<span class="t">Amount</span>(<span class="s">&quot;0.0125&quot;</span>, currency.<span class="t">BTC</span>)  <span class="c">// 1,250,000 satoshi</span>
+ledger.<span class="t">Amount</span>(<span class="s">&quot;17250.50&quot;</span>, <span class="s">&quot;&quot;</span>)          <span class="c">// currency taken from context (fees, partial captures, splits)</span>
+ledger.<span class="t">Minor</span>(<span class="n">125050</span>, currency.<span class="t">NGN</span>)     <span class="c">// if you already hold the integer</span></code></pre></figure>
 <p><code>Display</code> follows a rule per currency: fiat and stablecoins are padded to their decimals; crypto is trimmed and <strong>cut, never rounded up</strong>, so a displayed balance can always be withdrawn in full.</p>
 <div class="tablewrap"><table class=""><thead><tr><th>Currency</th><th>amount</th><th>display</th></tr></thead><tbody><tr><td>NGN, USD</td><td><code>100</code>, <code>100.5</code></td><td><code>100.00</code>, <code>100.50</code></td></tr><tr><td>JPY</td><td><code>1500</code></td><td><code>1500</code></td></tr><tr><td>USDT, USDC</td><td><code>25.5</code></td><td><code>25.50</code></td></tr><tr><td>BTC (up to 8)</td><td><code>0.456</code></td><td><code>0.456</code></td></tr><tr><td>ETH (up to 6)</td><td><code>0.4567896</code></td><td><code>0.456789</code></td></tr></tbody></table></div>
 <p>Every built-in currency (every ISO 4217 code and major crypto) has a constant in package <code>currency</code>, so <code>ledger.Amount("500", currency.NGN)</code> works and a typo doesn’t compile. <code>currency.MustGet(currency.NGN)</code> gives its name, symbol, kind, precision and display rule; <code>Config.Currencies</code> changes them or adds your own.</p>
@@ -244,7 +244,7 @@ ledger.<span class="t">Minor</span>(<span class="n">125050</span>, <span class="
 <div class="tablewrap"><table class=""><thead><tr><th>Account</th><th>Type</th><th>Normal</th><th>Role</th></tr></thead><tbody><tr><td><code>@PaystackClearing</code> (any <code>@&lt;Provider&gt;Clearing</code>)</td><td>asset</td><td>debit</td><td>Money a provider collected for you, or paid out for you, not yet settled with your bank</td></tr><tr><td><code>@DepositClearing</code></td><td>asset</td><td>debit</td><td>Deposit source when no provider is named</td></tr><tr><td><code>@PayoutClearing</code></td><td>liability</td><td>credit</td><td>Withdrawal destination when no provider is named</td></tr><tr><td><code>@FeeIncome</code></td><td>income</td><td>credit</td><td>Every fee</td></tr><tr><td><code>@BankOperating</code></td><td>asset</td><td>debit</td><td>Your bank account</td></tr><tr><td><code>@ProviderFees</code></td><td>expense</td><td>debit</td><td>Fees providers keep at settlement</td></tr><tr><td><code>@FXPool</code></td><td>asset</td><td>debit</td><td>Your open position per currency from exchanges</td></tr><tr><td><code>@MerchantPayable</code></td><td>liability</td><td>credit</td><td>Captured card payments owed to the card network</td></tr><tr><td><code>@Suspense</code></td><td>liability</td><td>credit</td><td>Money that arrived but can’t be matched to a customer yet</td></tr><tr><td><code>@Adjustments</code></td><td>equity</td><td>credit</td><td>Counterparty of approved manual corrections</td></tr></tbody></table></div>
 <p>Blnk debits the source and credits the destination, so asset and expense accounts run negative and liability, income and equity accounts run positive. House accounts are their own type, <code>HouseAccount</code>, read through <code>ops.GetHouseAccount</code> and <code>ops.ListHouseAccounts</code>: it carries the account’s <code>Type</code> and <code>Normal</code> side from <code>ledger.Chart</code>, and <code>Natural</code>, the balance on its normal side, so an asset that is owed to you reads positive. Provider clearing accounts default to assets; add a payout-only provider to <code>Chart</code> as a liability if you prefer. Customer accounts are <code>Account</code>, whose <code>Kind</code> is <code>customer</code>, <code>pot</code> or <code>escrow</code>.</p>
 <figure class="code"><pre><code><span class="c">// House accounts are read through Ops(), never Wallet().</span>
-fees, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+fees, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 <span class="k">if</span> err != <span class="b">nil</span> {
 	<span class="k">return</span>
 }
@@ -259,16 +259,16 @@ fmt.<span class="t">Println</span>(fees.<span class="t">Type</span>, fees.<span 
 <figure class="code"><pre><code>ada, err := wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
 	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>,
 	<span class="t">Email</span>: <span class="s">&quot;ada@example.com&quot;</span>, <span class="t">Phone</span>: <span class="s">&quot;+2348030000000&quot;</span>, <span class="t">Country</span>: <span class="s">&quot;NG&quot;</span>,
-	<span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;USD&quot;</span>, <span class="s">&quot;BTC&quot;</span>},
+	<span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>, currency.<span class="t">USD</span>, currency.<span class="t">BTC</span>},
 	<span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,                     <span class="c">// your user id: retrying returns the same accounts</span>
 	<span class="t">MetaData</span>:   <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;tier&quot;</span>: <span class="s">&quot;tier2&quot;</span>}, <span class="c">// KYC tier: drives limits and pricing</span>
 })
 <span class="k">if</span> err != <span class="b">nil</span> {
 	<span class="k">return</span> <span class="c">// e.g. ErrInvalidInput, or ErrUnavailable if Blnk is down</span>
 }
-adaNGN := ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>] <span class="c">// *ledger.Account</span>
-adaUSD := ada.<span class="t">Accounts</span>[<span class="s">&quot;USD&quot;</span>]
-adaBTC := ada.<span class="t">Accounts</span>[<span class="s">&quot;BTC&quot;</span>]</code></pre></figure>
+adaNGN := ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>] <span class="c">// *ledger.Account</span>
+adaUSD := ada.<span class="t">Accounts</span>[currency.<span class="t">USD</span>]
+adaBTC := ada.<span class="t">Accounts</span>[currency.<span class="t">BTC</span>]</code></pre></figure>
 <p>This creates a Blnk identity and one account per currency. With <code>ExternalID</code> set (your own user id), calling it again after a timeout returns the same accounts and opens any new currencies, so signup is safe to retry. The <code>tier</code> metadata drives limits and pricing.</p>
 </section><section id="balance"><h2><a href="#balance">Read a balance</a></h2>
 <figure class="code"><pre><code>acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN.<span class="t">ID</span>)
@@ -306,7 +306,7 @@ _ = st.<span class="t">WriteCSV</span>(&amp;csv) <span class="c">// or straight 
 <span class="c">// Use their reference as yours, so a repeated webhook can&#x27;t credit twice.</span>
 r, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384756&quot;</span>, <span class="c">// Paystack&#x27;s reference</span>
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,            <span class="c">// debits @PaystackClearing</span>
 	<span class="c">// Fee left out: Config.Fees prices it (1.5%, capped at ₦2,000)</span>
@@ -320,7 +320,7 @@ fmt.<span class="t">Println</span>(r.<span class="t">Amount</span>.<span class="
 </section><section id="p2p"><h2><a href="#p2p">Send money to a friend</a></h2><p class="lede">Ada sends Tunde her share of the rent, seeing the fee before she confirms.</p>
 <figure class="code"><pre><code>transfer := ledger.<span class="t">TransferInput</span>{
 	<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:   <span class="s">&quot;p2p_01J8ZK2M4Q&quot;</span>, <span class="c">// generate once, when the user taps &quot;Send&quot;</span>
 	<span class="t">Description</span>: <span class="s">&quot;Rent share&quot;</span>,
 }
@@ -343,7 +343,7 @@ r, err = wallet.<span class="t">Transfer</span>(ctx, transfer) <span class="c">/
 <figure class="code"><pre><code><span class="c">// Ada withdraws ₦20,000 to her GTBank account through Flutterwave.</span>
 wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>:   adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// what reaches her bank</span>
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>), <span class="c">// what reaches her bank</span>
 	<span class="t">Reference</span>:   <span class="s">&quot;wd_01J8ZM7R2X&quot;</span>,
 	<span class="t">Provider</span>:    <span class="s">&quot;flutterwave&quot;</span>, <span class="c">// credits @FlutterwaveClearing</span>
 	<span class="t">Description</span>: <span class="s">&quot;Withdrawal to GTBank ****4410&quot;</span>,
@@ -364,7 +364,7 @@ _, err = wallet.<span class="t">Confirm</span>(ctx, wd.<span class="t">Transacti
 auth, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>:   adaNGN.<span class="t">ID</span>,
 	<span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>, <span class="c">// owed to the card network</span>
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;18500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;18500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:   <span class="s">&quot;card_auth_449201&quot;</span>,
 	<span class="t">ExpiresAt</span>:   time.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>), <span class="c">// released if never captured</span>
 	<span class="t">Description</span>: <span class="s">&quot;Mama Nkechi&#x27;s Kitchen&quot;</span>,
@@ -383,7 +383,7 @@ _, err = wallet.<span class="t">Cancel</span>(ctx, auth.<span class="t">Transact
 <figure class="code"><pre><code><span class="c">// Ada converts $100 to naira at the rate you quoted (₦1,532.40 per $1).</span>
 fx := ledger.<span class="t">ExchangeInput</span>{
 	<span class="t">From</span>: adaUSD.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Sell</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;USD&quot;</span>),
+	<span class="t">Sell</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">USD</span>),
 	<span class="t">Rate</span>:      <span class="s">&quot;1532.40&quot;</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ0T5C&quot;</span>,
 	<span class="c">// Fee from Config.Fees: 1% of the dollars sold, charged on top</span>
@@ -404,8 +404,8 @@ fmt.<span class="t">Println</span>(x.<span class="t">Sold</span>.<span class="t"
 <figure class="code"><pre><code><span class="c">// Your custody provider reports 0.0125 BTC arrived on-chain.</span>
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaBTC.<span class="t">ID</span>,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.0125&quot;</span>, <span class="s">&quot;BTC&quot;</span>), <span class="c">// exact: stored as 1,250,000 satoshi</span>
-	<span class="t">Reference</span>: <span class="s">&quot;btc_tx_9f2c1e…:0&quot;</span>,             <span class="c">// txid:vout, unique per output</span>
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.0125&quot;</span>, currency.<span class="t">BTC</span>), <span class="c">// exact: stored as 1,250,000 satoshi</span>
+	<span class="t">Reference</span>: <span class="s">&quot;btc_tx_9f2c1e…:0&quot;</span>,                    <span class="c">// txid:vout, unique per output</span>
 	<span class="t">Provider</span>:  <span class="s">&quot;custody&quot;</span>,
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>, <span class="c">// incoming crypto is free</span>
 })
@@ -414,13 +414,13 @@ _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">Depos
 }
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>: adaBTC.<span class="t">ID</span>,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.004567896&quot;</span>, <span class="s">&quot;BTC&quot;</span>), <span class="c">// 9 decimals: more than BTC has</span>
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.004567896&quot;</span>, currency.<span class="t">BTC</span>), <span class="c">// 9 decimals: more than BTC has</span>
 	<span class="t">Reference</span>: <span class="s">&quot;btc_out_77&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;onchain&quot;</span>,
 })
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>)) <span class="c">// true: rejected before reaching Blnk</span>
 out, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: adaBTC.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0.00456789&quot;</span>, <span class="s">&quot;BTC&quot;</span>),
+	<span class="t">AccountID</span>: adaBTC.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0.00456789&quot;</span>, currency.<span class="t">BTC</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;btc_out_77&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;onchain&quot;</span>, <span class="t">Immediate</span>: <span class="b">true</span>,
 })
 <span class="k">if</span> err != <span class="b">nil</span> {
@@ -434,7 +434,7 @@ fmt.<span class="t">Println</span>(out.<span class="t">Amount</span>.<span class
 order, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
 	<span class="t">From</span>:           ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>)), <span class="c">// money arriving from outside</span>
 	<span class="t">AllowOverdraft</span>: <span class="b">true</span>,
-	<span class="t">Amount</span>:         ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:         ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:      <span class="s">&quot;order_10442&quot;</span>,
 	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
 		{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Percent</span>: <span class="s">&quot;5&quot;</span>, <span class="t">Narration</span>: <span class="s">&quot;Oja commission&quot;</span>},
@@ -449,7 +449,7 @@ order, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">Sp
 <figure class="code"><pre><code><span class="c">// Ada buys a ₦80,000 phone from Chidi Stores with buyer protection.</span>
 esc, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{
 	<span class="t">Payer</span>: adaNGN.<span class="t">ID</span>, <span class="t">Beneficiary</span>: chidi.<span class="t">ID</span>,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;escrow_order_10450&quot;</span>,
 })
 <span class="k">if</span> err != <span class="b">nil</span> {
@@ -499,7 +499,7 @@ _, err = wallet.<span class="t">RefundPartial</span>(ctx, pay2.<span class="t">T
 plan, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
 	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{
 		<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: rent.<span class="t">ID</span>,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 		<span class="t">Reference</span>: <span class="s">&quot;rent_plan_ada_2026&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Rent savings&quot;</span>,
 	},
 	<span class="t">First</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">7</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos),
@@ -517,7 +517,7 @@ staff := <span class="k">map</span>[ledger.<span class="t">AccountID</span>]<spa
 <span class="k">var</span> items []ledger.<span class="t">TransferInput</span>
 <span class="k">for</span> accountID, salary := <span class="k">range</span> staff {
 	items = <span class="b">append</span>(items, ledger.<span class="t">TransferInput</span>{
-		<span class="t">From</span>: chidi.<span class="t">ID</span>, <span class="t">To</span>: accountID, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(salary, <span class="s">&quot;NGN&quot;</span>),
+		<span class="t">From</span>: chidi.<span class="t">ID</span>, <span class="t">To</span>: accountID, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(salary, currency.<span class="t">NGN</span>),
 		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payroll_2026_09_&quot;</span> + <span class="b">string</span>(accountID),
 	})
 }
@@ -533,10 +533,10 @@ batch, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">Bul
 		<span class="k">return</span> ledger.<span class="t">NoFee</span>, <span class="b">nil</span> <span class="c">// premium customers pay nothing</span>
 	}
 	rules := <span class="k">map</span>[ledger.<span class="t">FeeKind</span>]<span class="k">map</span>[<span class="b">string</span>]ledger.<span class="t">FeeRule</span>{
-		ledger.<span class="t">FeeDeposit</span>:    {<span class="s">&quot;NGN&quot;</span>: {<span class="t">Percent</span>: <span class="s">&quot;1.5&quot;</span>, <span class="t">Max</span>: <span class="s">&quot;2000&quot;</span>}},
-		ledger.<span class="t">FeeTransfer</span>:   {<span class="s">&quot;NGN&quot;</span>: {<span class="t">Fixed</span>: <span class="s">&quot;10&quot;</span>}, <span class="s">&quot;USD&quot;</span>: {<span class="t">Fixed</span>: <span class="s">&quot;0.10&quot;</span>}},
-		ledger.<span class="t">FeeWithdrawal</span>: {<span class="s">&quot;NGN&quot;</span>: {<span class="t">Fixed</span>: <span class="s">&quot;50&quot;</span>}, <span class="s">&quot;BTC&quot;</span>: {<span class="t">Fixed</span>: <span class="s">&quot;0.00002&quot;</span>}},
-		ledger.<span class="t">FeeExchange</span>:   {<span class="s">&quot;USD&quot;</span>: {<span class="t">Percent</span>: <span class="s">&quot;1&quot;</span>}},
+		ledger.<span class="t">FeeDeposit</span>:    {currency.<span class="t">NGN</span>: {<span class="t">Percent</span>: <span class="s">&quot;1.5&quot;</span>, <span class="t">Max</span>: <span class="s">&quot;2000&quot;</span>}},
+		ledger.<span class="t">FeeTransfer</span>:   {currency.<span class="t">NGN</span>: {<span class="t">Fixed</span>: <span class="s">&quot;10&quot;</span>}, currency.<span class="t">USD</span>: {<span class="t">Fixed</span>: <span class="s">&quot;0.10&quot;</span>}},
+		ledger.<span class="t">FeeWithdrawal</span>: {currency.<span class="t">NGN</span>: {<span class="t">Fixed</span>: <span class="s">&quot;50&quot;</span>}, currency.<span class="t">BTC</span>: {<span class="t">Fixed</span>: <span class="s">&quot;0.00002&quot;</span>}},
+		ledger.<span class="t">FeeExchange</span>:   {currency.<span class="t">USD</span>: {<span class="t">Percent</span>: <span class="s">&quot;1&quot;</span>}},
 	}
 	rule, ok := rules[r.<span class="t">Kind</span>][r.<span class="t">Amount</span>.<span class="t">Currency</span>]
 	<span class="k">if</span> !ok {
@@ -545,10 +545,10 @@ batch, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">Bul
 	<span class="k">return</span> ledger.<span class="t">ComputeFee</span>(rule, r.<span class="t">Amount</span>)
 }</code></pre></figure>
 <div class="tablewrap"><table class=""><thead><tr><th>FeeRule</th><th>Example</th><th>Meaning</th></tr></thead><tbody><tr><td><code>Percent</code></td><td><code>"1.5"</code></td><td>1.5% of the amount</td></tr><tr><td><code>Fixed</code></td><td><code>"10"</code></td><td>flat ₦10 (in the transaction’s currency)</td></tr><tr><td><code>Min</code>, <code>Max</code></td><td><code>"10"</code>, <code>"2000"</code></td><td>floor and cap</td></tr><tr><td><code>Tiers</code></td><td>≤ ₦5,000: ₦10, above: 0.1%</td><td>bands by amount</td></tr><tr><td><code>Rounding</code></td><td><code>RoundHalfUp</code></td><td>or <code>RoundUp</code> / <code>RoundDown</code></td></tr></tbody></table></div>
-<p>A fee is always in the transaction’s own currency. To price “$0.50 everywhere”, convert inside your function with <code>r.Convert(ledger.Amount("0.50", "USD"), rate, ledger.RoundUp)</code>. A fee passed on the call always wins over the function, which is how promotions and waivers work.</p>
+<p>A fee is always in the transaction’s own currency. To price “$0.50 everywhere”, convert inside your function with <code>r.Convert(ledger.Amount("0.50", currency.USD), rate, ledger.RoundUp)</code>. A fee passed on the call always wins over the function, which is how promotions and waivers work.</p>
 </section><section id="limits"><h2><a href="#limits">Limits and KYC tiers</a></h2><p class="lede">Per-tier caps, checked before any money moves.</p>
 <figure class="code"><pre><code>_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
-	<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: tundeNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_big&quot;</span>,
+	<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: tundeNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_big&quot;</span>,
 })
 <span class="k">if</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>) {
 	<span class="c">// tier2 allows ₦100,000 per transfer: offer Ada the upgrade to tier3</span>
@@ -557,7 +557,7 @@ u, err := wallet.<span class="t">LimitUsage</span>(ctx, adaNGN.<span class="t">I
 fmt.<span class="t">Printf</span>(<span class="s">&quot;You can send ₦%s more today\n&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)</code></pre></figure>
 <p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow (bulk batches are not checked). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
 </section><section id="trial"><h2><a href="#trial">Trial balance</a></h2><p class="lede">One call to prove the books add up.</p>
-<figure class="code"><pre><code>tb, err := ops.<span class="t">TrialBalance</span>(ctx, <span class="s">&quot;NGN&quot;</span>)
+<figure class="code"><pre><code>tb, err := ops.<span class="t">TrialBalance</span>(ctx, currency.<span class="t">NGN</span>)
 <span class="k">if</span> err != <span class="b">nil</span> {
 	<span class="k">return</span>
 }
@@ -577,7 +577,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;customers hold&quot;</s
 _, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
 	<span class="t">Direction</span>: ledger.<span class="t">SettlementCollection</span>,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;4880000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;4880000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;73200&quot;</span>, <span class="s">&quot;&quot;</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_settlement_2026_09_30&quot;</span>,
 })
@@ -586,7 +586,7 @@ _, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t"
 <p>Each provider has its own clearing account, so after recording settlements its balance is exactly what that provider still owes you (or you owe it) and can be ticked off against its report. Use <code>SettlementPayout</code> for payout providers you prefund.</p>
 </section><section id="suspense"><h2><a href="#suspense">Unidentified money</a></h2><p class="lede">Hold money you can’t match yet; claim it for its owner once support knows whose it is, or return it to the provider.</p><figure class="code"><pre><code><span class="c">// ₦15,000 arrived with no matching customer reference.</span>
 _, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>, <span class="t">Note</span>: <span class="s">&quot;sender: OKAFOR J., narration blank&quot;</span>,
 })
 <span class="k">if</span> err != <span class="b">nil</span> {
@@ -594,14 +594,14 @@ _, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">S
 }
 <span class="c">// Support identifies it as Tunde&#x27;s:</span>
 _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{
-	<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;alloc_7700011&quot;</span>, <span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>,
 })
 <span class="c">// Had Paystack reversed it instead, send it back with</span>
 <span class="c">// ops.ReturnFromSuspense(ctx, ledger.ReturnFromSuspenseInput{Provider: &quot;paystack&quot;, ...}).</span></code></pre></figure></section><section id="adjust"><h2><a href="#adjust">Manual corrections</a></h2><p class="lede">Corrections with a second pair of eyes.</p>
 <figure class="code"><pre><code>_, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
 	<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Type</span>: ledger.<span class="t">AdjustCredit</span>,
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reason</span>:      <span class="s">&quot;Cashback: September promo&quot;</span>,
 	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="c">// must be two different people</span>
 	<span class="t">Reference</span>: <span class="s">&quot;adj_cashback_ada_09&quot;</span>,
@@ -609,7 +609,7 @@ _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t
 <p>Every adjustment records its reason, requester and approver in metadata, and the same person can’t do both.</p>
 </section><section id="watch"><h2><a href="#watch">Balance alerts</a></h2><p class="lede">Get told when a float runs high or low.</p>
 <figure class="code"><pre><code>_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
-	<span class="t">House</span>:     ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FlutterwaveClearing&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>},
+	<span class="t">House</span>:     ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FlutterwaveClearing&quot;</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>},
 	<span class="t">Operator</span>:  <span class="s">&quot;&gt;&quot;</span>,
 	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000000&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="c">// ₦10m of payouts not yet settled</span>
 })
@@ -618,8 +618,8 @@ _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t
 <p>Watch a house account with <code>House</code>, as here, or a customer account with <code>AccountID</code>; set one, not both.</p>
 </section><section id="reconcile"><h2><a href="#reconcile">Reconciliation</a></h2><p class="lede">Match Paystack’s report against the ledger.</p>
 <figure class="code"><pre><code>report := []ledger.<span class="t">ExternalRecord</span>{ <span class="c">// parsed from Paystack&#x27;s settlement CSV</span>
-	{<span class="t">ID</span>: <span class="s">&quot;PSK-88120&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>, <span class="t">Date</span>: from},
-	{<span class="t">ID</span>: <span class="s">&quot;PSK-88121&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4300&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T0000404&quot;</span>, <span class="t">Date</span>: from},
+	{<span class="t">ID</span>: <span class="s">&quot;PSK-88120&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>, <span class="t">Date</span>: from},
+	{<span class="t">ID</span>: <span class="s">&quot;PSK-88121&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4300&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T0000404&quot;</span>, <span class="t">Date</span>: from},
 }
 run, err := ops.<span class="t">StartReconciliation</span>(ctx, ledger.<span class="t">ReconcileInput</span>{<span class="t">Source</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Records</span>: report})
 <span class="k">if</span> err != <span class="b">nil</span> {
@@ -635,14 +635,14 @@ fmt.<span class="t">Println</span>(run.<span class="t">Matched</span>, <span cla
 </section><section id="freeze"><h2><a href="#freeze">Freeze and close</a></h2>
 <figure class="code"><pre><code>_ = ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN.<span class="t">ID</span>, <span class="s">&quot;suspected account takeover&quot;</span>)
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_x1&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_x1&quot;</span>})
 <span class="c">// errors.Is(err, ledger.ErrAccountFrozen) == true</span>
 _ = ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)</code></pre></figure>
 <p>A whole ledger can be frozen too. Then no money can leave any of its customer accounts, while deposits into them and postings to house accounts carry on:</p>
 <figure class="code"><pre><code><span class="c">// The regulator orders a hold on everything in the Nigeria ledger.</span>
 _ = ops.<span class="t">FreezeLedger</span>(ctx, ng.<span class="t">ID</span>, <span class="s">&quot;CBN directive 2026/114&quot;</span>)
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ngWallet.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_x2&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_x2&quot;</span>})
 <span class="c">// errors.Is(err, ledger.ErrLedgerFrozen) == true: nothing can leave its accounts,</span>
 <span class="c">// but deposits into them still post.</span>
 _ = ops.<span class="t">UnfreezeLedger</span>(ctx, ng.<span class="t">ID</span>)</code></pre></figure>
@@ -678,13 +678,13 @@ http.<span class="t">Handle</span>(<span class="s">&quot;/webhooks/blnk&quot;</s
 	ctx := context.<span class="t">Background</span>()
 	wallet := svc.<span class="t">Wallet</span>()
 
-	ada, _ := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
-	landlord, _ := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	ada, _ := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
+	landlord, _ := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ada.<span class="t">ID</span>,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;seed&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;seed&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 
 	_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada.<span class="t">ID</span>, <span class="t">To</span>: landlord.<span class="t">ID</span>,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;250000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_sept&quot;</span>})
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;250000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_sept&quot;</span>})
 	<span class="k">if</span> err != <span class="b">nil</span> {
 		t.<span class="t">Fatal</span>(err)
 	}

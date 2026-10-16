@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
@@ -22,16 +23,16 @@ func TestTesting(t *testing.T) {
 	svc, core := ledgertest.New(t, ledger.Config{}) // closed when the test ends
 	wallet := svc.Wallet()
 
-	ada, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	ada, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 	check(err)
-	landlord, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	landlord, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 	check(err)
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: ada.ID, Amount: ledger.Amount("300000", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: ada.ID, Amount: ledger.Amount("300000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "seed", Provider: "paystack"})
 	check(err)
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: ada.ID, To: landlord.ID,
-		Amount: ledger.Amount("250000", "NGN"), Fee: ledger.NoFee, Reference: "rent_sept"})
+		Amount: ledger.Amount("250000", currency.NGN), Fee: ledger.NoFee, Reference: "rent_sept"})
 	check(err)
 
 	got, err := wallet.GetAccount(ctx, landlord.ID)
@@ -53,9 +54,9 @@ func TestTestingClock(t *testing.T) {
 	fmt.Println("starts at:", core.Now()) // always the same
 
 	core.SetNow(time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC))
-	acct, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	acct, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 	check(err)
-	r, err := svc.Wallet().Deposit(ctx, ledger.DepositInput{AccountID: acct.ID, Amount: ledger.Amount("1000", "NGN"),
+	r, err := svc.Wallet().Deposit(ctx, ledger.DepositInput{AccountID: acct.ID, Amount: ledger.Amount("1000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "seed", Provider: "paystack"})
 	check(err)
 	fmt.Println("posted at:", r.CreatedAt)
@@ -68,14 +69,14 @@ func TestTestingClock(t *testing.T) {
 
 func TestTestingExpiry(t *testing.T) {
 	svc, core, wallet, _ := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN").Accounts["NGN"].ID
-	shop := customer(wallet, "merchant_311", "Chidi", "NGN").Accounts["NGN"].ID
-	fund(wallet, ada, "50000", "NGN", "paystack_T9001")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN).Accounts[currency.NGN].ID
+	shop := customer(wallet, "merchant_311", "Chidi", currency.NGN).Accounts[currency.NGN].ID
+	fund(wallet, ada, "50000", currency.NGN, "paystack_T9001")
 
 	begin("testing/hold-expiry")
 	// sample: testing/hold-expiry
 	hold, err := wallet.Hold(ctx, ledger.HoldInput{
-		AccountID: ada, Destination: shop, Amount: ledger.Amount("20000", "NGN"),
+		AccountID: ada, Destination: shop, Amount: ledger.Amount("20000", currency.NGN),
 		Reference: "card_auth_4410", ExpiresAt: core.Now().Add(2 * time.Hour),
 	})
 	check(err)
@@ -104,7 +105,7 @@ func TestTestingExpiry(t *testing.T) {
 	begin("testing/withdrawal-ttl")
 	// sample: testing/withdrawal-ttl
 	wd, err := wallet.Withdraw(ctx, ledger.WithdrawInput{
-		AccountID: ada, Amount: ledger.Amount("10000", "NGN"), Fee: ledger.NoFee,
+		AccountID: ada, Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "wd_9001", Provider: "flutterwave", // pending until Flutterwave answers
 	})
 	check(err)
@@ -130,16 +131,16 @@ func TestTestingExpiry(t *testing.T) {
 
 func TestTestingScheduled(t *testing.T) {
 	_, core, wallet, _ := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	adaNGN := ada.Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	adaNGN := ada.Accounts[currency.NGN].ID
 	pot, err := wallet.OpenPot(ctx, ledger.PotInput{ParentID: adaNGN, Name: "Rent"})
 	check(err)
-	fund(wallet, adaNGN, "25000", "NGN", "paystack_T9101")
+	fund(wallet, adaNGN, "25000", currency.NGN, "paystack_T9101")
 
 	begin("testing/scheduled")
 	// sample: testing/scheduled
 	plan, err := wallet.Schedule(ctx, ledger.RecurringInput{
-		Transfer: ledger.TransferInput{From: adaNGN, To: pot.ID, Amount: ledger.Amount("10000", "NGN"),
+		Transfer: ledger.TransferInput{From: adaNGN, To: pot.ID, Amount: ledger.Amount("10000", currency.NGN),
 			Fee: ledger.NoFee, Reference: "rent_plan_ada"},
 		First: core.Now().Add(24 * time.Hour), Every: ledger.Monthly, Count: 3,
 	})
@@ -166,17 +167,17 @@ func TestTestingScheduled(t *testing.T) {
 
 func TestTestingEvents(t *testing.T) {
 	svc, core, wallet, _ := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN").Accounts["NGN"].ID
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN").Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN).Accounts[currency.NGN].ID
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN).Accounts[currency.NGN].ID
 
 	begin("testing/events")
 	// sample: testing/events
 	var names []string
 	core.OnEvent(func(e ledgertest.Event) { names = append(names, e.Event) }) // as each is sent
 
-	fund(wallet, ada, "5000", "NGN", "paystack_T9201")
+	fund(wallet, ada, "5000", currency.NGN, "paystack_T9201")
 	hold, err := wallet.Hold(ctx, ledger.HoldInput{AccountID: ada, Destination: tunde,
-		Amount: ledger.Amount("1000", "NGN"), Reference: "card_auth_9201"})
+		Amount: ledger.Amount("1000", currency.NGN), Reference: "card_auth_9201"})
 	check(err)
 	_, err = wallet.Cancel(ctx, hold.TransactionID)
 	check(err)
@@ -231,7 +232,7 @@ func TestTestingServer(t *testing.T) {
 	api := ledger.Instrument(ledger.New(core.Client(), ledger.Config{LedgerID: ng, Now: core.Now}), spy)
 	backOffice := ledger.New(core.Client(), ledger.Config{LedgerID: gh, Now: core.Now})
 
-	acct, err := api.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	acct, err := api.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 	check(err)
 	check(backOffice.Ops().FreezeAccount(ctx, acct.ID, "test"))
 	a, err := api.Wallet().GetAccount(ctx, acct.ID)

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -18,16 +19,16 @@ func potBalance(w ledger.Wallet, id ledger.AccountID) string {
 
 func TestSavingsPots(t *testing.T) {
 	_, core, wallet, ops := setup(t, ledger.Config{}) // the clock starts at 1 Sep 2026, 09:00 UTC
-	ada := customer(wallet, "user_ada", "Ada", "NGN")
-	adaNGN := ada.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "100000", "NGN", "seed_ada")
+	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
+	adaNGN := ada.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "100000", currency.NGN, "seed_ada")
 
 	begin("savings-pots/open")
 	// sample: savings-pots/open
 	rent, err := wallet.OpenPot(ctx, ledger.PotInput{
 		ParentID: adaNGN,
 		Name:     "Rent", // unique per parent; opening it again returns this pot
-		Goal:     ledger.Amount("600000", "NGN"),
+		Goal:     ledger.Amount("600000", currency.NGN),
 	})
 	check(err)
 	travel, err := wallet.OpenPot(ctx, ledger.PotInput{ParentID: adaNGN, Name: "Travel"}) // no goal
@@ -48,7 +49,7 @@ func TestSavingsPots(t *testing.T) {
 	// Into the pot: an ordinary transfer from Ada's main account.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
 		From: adaNGN, To: rent.ID,
-		Amount: ledger.Amount("40000", "NGN"), Fee: ledger.NoFee,
+		Amount: ledger.Amount("40000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "pot_in_0901", Description: "Save for rent",
 	})
 	check(err)
@@ -56,7 +57,7 @@ func TestSavingsPots(t *testing.T) {
 	// Out of the pot: the same call the other way.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{
 		From: rent.ID, To: adaNGN,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee,
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee,
 		Reference: "pot_out_0903",
 	})
 	check(err)
@@ -74,7 +75,7 @@ func TestSavingsPots(t *testing.T) {
 	plan, err := wallet.Schedule(ctx, ledger.RecurringInput{
 		Transfer: ledger.TransferInput{
 			From: adaNGN, To: rent.ID,
-			Amount: ledger.Amount("25000", "NGN"), Fee: ledger.NoFee,
+			Amount: ledger.Amount("25000", currency.NGN), Fee: ledger.NoFee,
 			Reference:   "rent_plan_ada", // occurrence i gets "rent_plan_ada_i"
 			Description: "Rent savings",
 		},
@@ -95,7 +96,7 @@ func TestSavingsPots(t *testing.T) {
 	// sample: savings-pots/retry
 	// The app timed out and sends the same plan again.
 	again, err := wallet.Schedule(ctx, ledger.RecurringInput{
-		Transfer: ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("25000", "NGN"),
+		Transfer: ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("25000", currency.NGN),
 			Fee: ledger.NoFee, Reference: "rent_plan_ada", Description: "Rent savings"},
 		First: time.Date(2026, 10, 1, 7, 0, 0, 0, lagos), Every: ledger.Monthly, Count: 12,
 	})
@@ -118,7 +119,7 @@ func TestSavingsPots(t *testing.T) {
 
 	// The same plan sent again after it started still replays: nothing runs twice.
 	again, err = wallet.Schedule(ctx, ledger.RecurringInput{
-		Transfer: ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("25000", "NGN"),
+		Transfer: ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("25000", currency.NGN),
 			Fee: ledger.NoFee, Reference: "rent_plan_ada", Description: "Rent savings"},
 		First: time.Date(2026, 10, 1, 7, 0, 0, 0, lagos), Every: ledger.Monthly, Count: 12,
 	})
@@ -131,7 +132,7 @@ func TestSavingsPots(t *testing.T) {
 	// sample: savings-pots/short
 	// Ada spends most of her balance before 1 December.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: travel.ID,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "pot_in_1120"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "pot_in_1120"})
 	check(err)
 	fmt.Println("Ada before:", potBalance(wallet, adaNGN))
 
@@ -151,7 +152,7 @@ func TestSavingsPots(t *testing.T) {
 	first := time.Date(2027, 1, 4, 8, 0, 0, 0, lagos)
 	for _, every := range []ledger.Interval{ledger.Daily, ledger.Weekly, {Days: 14}, ledger.Monthly, {Months: 3}} {
 		occ, err := wallet.Schedule(ctx, ledger.RecurringInput{
-			Transfer: ledger.TransferInput{From: adaNGN, To: travel.ID, Amount: ledger.Amount("500", "NGN"),
+			Transfer: ledger.TransferInput{From: adaNGN, To: travel.ID, Amount: ledger.Amount("500", currency.NGN),
 				Fee: ledger.NoFee, Reference: fmt.Sprintf("travel_%dm%dd", every.Months, every.Days)},
 			First: first, Every: every, Count: 2,
 		})
@@ -163,7 +164,7 @@ func TestSavingsPots(t *testing.T) {
 
 	begin("savings-pots/errors")
 	// sample: savings-pots/errors
-	base := ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("1000", "NGN"),
+	base := ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("1000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "plan_bad"}
 	later := core.Now().Add(24 * time.Hour)
 

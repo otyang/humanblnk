@@ -41,7 +41,7 @@
 wallet := l.<span class="t">Wallet</span>() <span class="c">// hand this to the rest of the app, as before</span>
 
 ada, err := wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
-	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>}, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,
+	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{currency.<span class="t">NGN</span>}, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,
 	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;tier&quot;</span>: <span class="s">&quot;tier2&quot;</span>},
 })
 check(err)
@@ -66,12 +66,12 @@ logger := slog.<span class="t">New</span>(slog.<span class="t">NewTextHandler</s
 logged := ledger.<span class="t">Instrument</span>(svc, ledger.<span class="t">LogObserver</span>(logger))
 
 _, err = logged.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T8001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T8001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 check(err)
 _, _ = logged.<span class="t">Wallet</span>().<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>, <span class="c">// more than she has</span>
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_8001&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_8001&quot;</span>})
 _, _ = logged.<span class="t">Wallet</span>().<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>, <span class="c">// no reference: a bug</span>
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>})
 check(logged.<span class="t">Ops</span>().<span class="t">FreezeAccount</span>(ctx, tunde.<span class="t">ID</span>, <span class="s">&quot;chargeback&quot;</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>level=INFO msg=&quot;ledger call&quot; op=Wallet.Deposit
 level=WARN msg=&quot;ledger call refused&quot; op=Wallet.Transfer error=&quot;ledger.Wallet.Transfer: ledger: insufficient funds: blnk: 400 TXN_INSUFFICIENT_FUNDS: insufficient funds in source balance bln_000003&quot;
@@ -103,10 +103,10 @@ m := ledger.<span class="t">Instrument</span>(svc, metrics).<span class="t">Wall
 
 <span class="k">for</span> i, amount := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;500&quot;</span>, <span class="s">&quot;700&quot;</span>, <span class="s">&quot;90000&quot;</span>} {
 	_, _ = m.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprint</span>(<span class="s">&quot;p2p_820&quot;</span>, i)})
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprint</span>(<span class="s">&quot;p2p_820&quot;</span>, i)})
 }
 _, _ = m.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>}) <span class="c">// no reference</span>
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>}) <span class="c">// no reference</span>
 _, _ = m.<span class="t">GetAccount</span>(ctx, adaNGN)
 
 keys := <span class="b">make</span>([]<span class="b">string</span>, <span class="n">0</span>, <span class="b">len</span>(counts))
@@ -168,7 +168,7 @@ svc := ledger.<span class="t">New</span>(client, cfg)
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

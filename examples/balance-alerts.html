@@ -60,9 +60,9 @@ fmt.<span class="t">Println</span>(low.<span class="t">ID</span>, <span class="s
 <figure class="code"><figcaption>Paystack owes Oja more than ₦100,000</figcaption><pre><code><span class="c">// Alert finance when Paystack owes Oja more than ₦100,000 not yet settled.</span>
 <span class="c">// @PaystackClearing is an asset: Blnk stores it negative, so &quot;owes more&quot; is &quot;below -100,000&quot;.</span>
 psk, err := ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
-	<span class="t">House</span>:     ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>), <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>},
+	<span class="t">House</span>:     ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>), <span class="t">Currency</span>: currency.<span class="t">NGN</span>},
 	<span class="t">Operator</span>:  <span class="s">&quot;&lt;&quot;</span>,
-	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;-100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;-100000&quot;</span>, currency.<span class="t">NGN</span>),
 })
 check(err)
 fmt.<span class="t">Println</span>(psk.<span class="t">ID</span>, <span class="s">&quot;on&quot;</span>, psk.<span class="t">AccountID</span>, psk.<span class="t">Field</span>, psk.<span class="t">Operator</span>, psk.<span class="t">Threshold</span>.<span class="t">Display</span>)</code></pre></figure>
@@ -73,7 +73,7 @@ fmt.<span class="t">Println</span>(psk.<span class="t">ID</span>, <span class="s
 <figure class="code"><figcaption>Ada pays Chidi Stores ₦4,500, then ₦200</figcaption><pre><code><span class="c">// Ada pays Chidi Stores twice: ₦4,500, then ₦200.</span>
 <span class="k">for</span> i, amt := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;4500&quot;</span>, <span class="s">&quot;200&quot;</span>} {
 	_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amt, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;pay_%d&quot;</span>, i)})
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amt, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;pay_%d&quot;</span>, i)})
 	check(err)
 }
 
@@ -131,14 +131,14 @@ deliver := <span class="k">func</span>(step <span class="b">string</span>) { <sp
 
 <span class="k">for</span> i := <span class="n">0</span>; i &lt; <span class="n">3</span>; i++ { <span class="c">// three small payments while below ₦1,000</span>
 	_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;small_%d&quot;</span>, i)})
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;small_%d&quot;</span>, i)})
 	check(err)
 	deliver(fmt.<span class="t">Sprintf</span>(<span class="s">&quot;pays ₦50 (small_%d)&quot;</span>, i))
 }
-fund(wallet, adaNGN, <span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T101&quot;</span>)
+fund(wallet, adaNGN, <span class="s">&quot;3000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;paystack_T101&quot;</span>)
 deliver(<span class="s">&quot;tops up ₦3,000&quot;</span>)
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_big&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_big&quot;</span>})
 check(err)
 deliver(<span class="s">&quot;pays ₦2,500&quot;</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>push to Ada: your balance is below 1000.00
@@ -155,7 +155,7 @@ pend, err := ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t"
 	<span class="t">AccountID</span>: chidiNGN,
 	<span class="t">Field</span>:     <span class="s">&quot;inflight_debit_balance&quot;</span>,
 	<span class="t">Operator</span>:  <span class="s">&quot;&gt;&quot;</span>,
-	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 })
 check(err)
 fmt.<span class="t">Println</span>(pend.<span class="t">Field</span>, pend.<span class="t">Operator</span>, pend.<span class="t">Threshold</span>.<span class="t">Display</span>)
@@ -174,7 +174,7 @@ balance == 0.00</pre></figure>
 check(ops.<span class="t">UnwatchBalance</span>(ctx, exact.<span class="t">ID</span>))
 
 before := <span class="b">len</span>(core.<span class="t">Events</span>())
-w, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+w, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payout_7001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
 check(err)
 alerts := <span class="n">0</span>
@@ -193,7 +193,7 @@ unwatch twice: true</pre></figure>
 <h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
 <p>No money moves. <code>WatchBalance</code> creates one balance monitor (<code>POST /balance-monitors</code>) on the account's Blnk balance, with <code>field</code>, <code>operator</code>, <code>value</code> in the smallest unit and <code>precision: 1</code>. <code>UnwatchBalance</code> deletes it (<code>DELETE /balance-monitors/{id}</code>). The monitor stays until you delete it: it isn't removed when it fires.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<figure class="code"><pre><code>fees := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}
+<figure class="code"><pre><code>fees := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>}
 th := ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;&quot;</span>)
 
 _, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">House</span>: fees, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: th})
@@ -208,7 +208,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;bad operator:&quot;</sp
 _, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Field</span>: <span class="s">&quot;available&quot;</span>, <span class="t">Operator</span>: <span class="s">&quot;&lt;&quot;</span>, <span class="t">Threshold</span>: th})
 fmt.<span class="t">Println</span>(<span class="s">&quot;bad field:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Operator</span>: <span class="s">&quot;&lt;&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>)})
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Operator</span>: <span class="s">&quot;&lt;&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, currency.<span class="t">USD</span>)})
 fmt.<span class="t">Println</span>(<span class="s">&quot;wrong currency:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
 _, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">House</span>: fees, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: th})
@@ -231,7 +231,7 @@ house account as AccountID: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

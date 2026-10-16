@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/otyang/humanblnk/blnk"
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
@@ -29,7 +30,7 @@ func webhooksLast(core *ledgertest.Server) ledgertest.Event {
 
 func TestWebhooks(t *testing.T) {
 	svc, core, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN").Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN).Accounts[currency.NGN].ID
 	secret := "blnk_secret_key" // Blnk's server.secret_key
 
 	begin("webhooks/handler")
@@ -49,7 +50,7 @@ func TestWebhooks(t *testing.T) {
 	// In main: http.Handle("/webhooks/blnk", handler)
 
 	// Paystack confirms Ada's top-up, and Oja records it.
-	fund(wallet, ada, "50000", "NGN", "paystack_T7001")
+	fund(wallet, ada, "50000", currency.NGN, "paystack_T7001")
 
 	// Blnk then POSTs the event to the handler. The emulator builds that request.
 	rec := httptest.NewRecorder()
@@ -127,10 +128,10 @@ func TestWebhooks(t *testing.T) {
 	begin("webhooks/alert")
 	// sample: webhooks/alert
 	_, err = ops.WatchBalance(ctx, ledger.WatchInput{
-		AccountID: ada, Operator: ">", Threshold: ledger.Amount("100000", "NGN"),
+		AccountID: ada, Operator: ">", Threshold: ledger.Amount("100000", currency.NGN),
 	})
 	check(err)
-	fund(wallet, ada, "60000", "NGN", "paystack_T7002") // Ada now has ₦110,000
+	fund(wallet, ada, "60000", currency.NGN, "paystack_T7002") // Ada now has ₦110,000
 
 	for _, ev := range core.Events() {
 		if ev.Event != ledger.EventBalanceAlert {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -17,18 +18,18 @@ func disputeShow(w ledger.Wallet, name string, id ledger.AccountID) {
 
 func TestDisputes(t *testing.T) {
 	_, _, wallet, _ := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_ada", "Ada", "NGN")
-	tunde := customer(wallet, "user_tunde", "Tunde", "NGN")
+	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_tunde", "Tunde", currency.NGN)
 	shop, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", OrganizationName: "Chidi Stores Ltd",
-		Currencies: []string{"NGN"}, ExternalID: "merchant_311"})
+		Currencies: []string{currency.NGN}, ExternalID: "merchant_311"})
 	check(err)
-	adaNGN, tundeNGN, chidi := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID, shop.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "100000", "NGN", "seed_ada")
+	adaNGN, tundeNGN, chidi := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID, shop.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "100000", currency.NGN, "seed_ada")
 
 	begin("disputes/open")
 	// sample: disputes/open
 	pay, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("9800", "NGN"), Fee: ledger.NoFee, Reference: "pay_10461"})
+		Amount: ledger.Amount("9800", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10461"})
 	check(err)
 
 	// Ada says the item never arrived. Hold that money at Chidi Stores.
@@ -62,7 +63,7 @@ func TestDisputes(t *testing.T) {
 	begin("disputes/rejected")
 	// sample: disputes/rejected
 	pay2, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "pay_10462"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10462"})
 	check(err)
 	d2, err := wallet.OpenDispute(ctx, ledger.DisputeInput{TransactionID: pay2.TransactionID,
 		Reference: "dispute_2232", Reason: "wrong colour"})
@@ -79,13 +80,13 @@ func TestDisputes(t *testing.T) {
 	begin("disputes/partial")
 	// sample: disputes/partial
 	pay3, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("12000", "NGN"), Fee: ledger.NoFee, Reference: "pay_10463"})
+		Amount: ledger.Amount("12000", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10463"})
 	check(err)
 
 	// Ada disputes one ₦4,000 item of a ₦12,000 order.
 	d3, err := wallet.OpenDispute(ctx, ledger.DisputeInput{
 		TransactionID: pay3.TransactionID,
-		Amount:        ledger.Amount("4000", "NGN"), // zero = the whole payment
+		Amount:        ledger.Amount("4000", currency.NGN), // zero = the whole payment
 		Reference:     "dispute_2233",
 		Reason:        "one item damaged",
 	})
@@ -93,7 +94,7 @@ func TestDisputes(t *testing.T) {
 	disputeShow(wallet, "Chidi Stores", chidi)
 
 	// Oja finds half of it justified: ₦2,000 back to Ada, the rest stays held.
-	half := ledger.Amount("2000", "NGN")
+	half := ledger.Amount("2000", currency.NGN)
 	r, err := wallet.ResolveDispute(ctx, d3.TransactionID, ledger.DisputeUpheld, &half)
 	check(err)
 	fmt.Println("to Ada:", r.Amount.Display)
@@ -111,7 +112,7 @@ func TestDisputes(t *testing.T) {
 	// sample: disputes/legs
 	// A payment with a fee: the dispute holds the ₦7,000 Chidi Stores got, not the ₦50 fee.
 	feePay, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("7000", "NGN"), Fee: ledger.Amount("50", "NGN"), Reference: "pay_10464"})
+		Amount: ledger.Amount("7000", currency.NGN), Fee: ledger.Amount("50", currency.NGN), Reference: "pay_10464"})
 	check(err)
 	d4, err := wallet.OpenDispute(ctx, ledger.DisputeInput{TransactionID: feePay.TransactionID, Reference: "dispute_2234"})
 	check(err)
@@ -120,9 +121,9 @@ func TestDisputes(t *testing.T) {
 	// A split paying two recipients: name the leg.
 	order, err := wallet.Split(ctx, ledger.SplitInput{
 		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
-		Amount: ledger.Amount("20000", "NGN"), Reference: "order_10465",
+		Amount: ledger.Amount("20000", currency.NGN), Reference: "order_10465",
 		Parts: []ledger.SplitPart{
-			{To: tundeNGN, Amount: ledger.Amount("1500", "NGN"), Narration: "Delivery"},
+			{To: tundeNGN, Amount: ledger.Amount("1500", currency.NGN), Narration: "Delivery"},
 			{To: chidi, Rest: true},
 		},
 	})
@@ -143,27 +144,27 @@ func TestDisputes(t *testing.T) {
 	begin("disputes/errors")
 	// sample: disputes/errors
 	pay6, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN,
-		Amount: ledger.Amount("3000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_601"})
+		Amount: ledger.Amount("3000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_601"})
 	check(err)
 
 	_, err = wallet.OpenDispute(ctx, ledger.DisputeInput{TransactionID: pay6.TransactionID,
-		Amount: ledger.Amount("3500", "NGN"), Reference: "dispute_2240"})
+		Amount: ledger.Amount("3500", currency.NGN), Reference: "dispute_2240"})
 	fmt.Println("more than paid:", errors.Is(err, ledger.ErrAmountExceeded))
 
 	// Tunde has already spent part of the money.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: chidi,
-		Amount: ledger.Amount("2000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_602"})
+		Amount: ledger.Amount("2000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_602"})
 	check(err)
 	_, err = wallet.OpenDispute(ctx, ledger.DisputeInput{TransactionID: pay6.TransactionID, Reference: "dispute_2241"})
 	fmt.Println("recipient short:", errors.Is(err, ledger.ErrInsufficientFunds))
 
 	held, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidi,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "pay_10466", Pending: true})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "pay_10466", Pending: true})
 	check(err)
 	_, err = wallet.OpenDispute(ctx, ledger.DisputeInput{TransactionID: held.TransactionID, Reference: "dispute_2242"})
 	fmt.Println("still pending:", errors.Is(err, ledger.ErrInvalidInput))
 
-	part := ledger.Amount("100", "NGN")
+	part := ledger.Amount("100", currency.NGN)
 	_, err = wallet.ResolveDispute(ctx, d4.TransactionID, ledger.DisputeRejected, &part)
 	fmt.Println("partial reject:", errors.Is(err, ledger.ErrInvalidInput))
 

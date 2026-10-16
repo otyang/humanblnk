@@ -225,10 +225,10 @@ section('money', 'Money', f'''
  ['<code>Display</code> / JSON <code>display</code>', '<code>"1250.50"</code>', 'showing to people'],
  ['<code>PreciseAmount</code> + <code>Precision</code>', '<code>125050</code> × <code>100</code>', 'what Blnk stores: the integer in the smallest unit'],
 ])}
-{raw("""ledger.Amount("1250.50", "NGN")   // what the user typed
-ledger.Amount("0.0125", "BTC")    // 1,250,000 satoshi
-ledger.Amount("17250.50", "")     // currency taken from context (fees, partial captures, splits)
-ledger.Minor(125050, "NGN")       // if you already hold the integer""", 'go')}
+{raw("""ledger.Amount("1250.50", currency.NGN) // what the user typed
+ledger.Amount("0.0125", currency.BTC)  // 1,250,000 satoshi
+ledger.Amount("17250.50", "")          // currency taken from context (fees, partial captures, splits)
+ledger.Minor(125050, currency.NGN)     // if you already hold the integer""", 'go')}
 <p><code>Display</code> follows a rule per currency: fiat and stablecoins are padded to their decimals; crypto is trimmed and <strong>cut, never rounded up</strong>, so a displayed balance can always be withdrawn in full.</p>
 {table(['Currency', 'amount', 'display'], [
  ['NGN, USD', '<code>100</code>, <code>100.5</code>', '<code>100.00</code>, <code>100.50</code>'],
@@ -404,7 +404,7 @@ section('fees', 'Fees', f'''
  ['<code>Tiers</code>', '≤ ₦5,000: ₦10, above: 0.1%', 'bands by amount'],
  ['<code>Rounding</code>', '<code>RoundHalfUp</code>', 'or <code>RoundUp</code> / <code>RoundDown</code>'],
 ])}
-<p>A fee is always in the transaction’s own currency. To price “$0.50 everywhere”, convert inside your function with <code>r.Convert(ledger.Amount("0.50", "USD"), rate, ledger.RoundUp)</code>. A fee passed on the call always wins over the function, which is how promotions and waivers work.</p>
+<p>A fee is always in the transaction’s own currency. To price “$0.50 everywhere”, convert inside your function with <code>r.Convert(ledger.Amount("0.50", currency.USD), rate, ledger.RoundUp)</code>. A fee passed on the call always wins over the function, which is how promotions and waivers work.</p>
 ''')
 
 section('limits', 'Limits and KYC tiers', f'''

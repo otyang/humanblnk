@@ -28,7 +28,7 @@
 <h2 id="quote-then-execute"><a href="#quote-then-execute">Quote, then execute</a></h2>
 <figure class="code"><figcaption>The confirm screen for Ada's rent share</figcaption><pre><code>send := ledger.<span class="t">TransferInput</span>{
 	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:   <span class="s">&quot;p2p_01J8ZK2M4Q&quot;</span>, <span class="c">// generated when Ada opens the confirm screen</span>
 	<span class="t">Description</span>: <span class="s">&quot;Rent share&quot;</span>,
 }
@@ -55,7 +55,7 @@ debited: 12510.00 matches the quote: true</pre></figure>
 <figure class="code"><figcaption>"Top up ₦50,000": the fee before Ada pays Paystack</figcaption><pre><code><span class="c">// &quot;Top up ₦50,000 with your card&quot;: show the fee before sending her to Paystack.</span>
 q, err = wallet.<span class="t">QuoteDeposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384756&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
 })
@@ -67,7 +67,7 @@ Available: 47490.00 -&gt; 96740.00 | Allowed: true</pre></figure>
 <p>For a deposit, <code>Debit</code> is the gross amount and <code>Credit</code> the amount Ada will get, so <code>AvailableAfter</code> goes up by the net.</p>
 <figure class="code"><figcaption>"Withdraw ₦20,000": what reaches the bank and what it costs</figcaption><pre><code>q, err = wallet.<span class="t">QuoteWithdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZM7R2X&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;flutterwave&quot;</span>,
 })
@@ -79,7 +79,7 @@ Available: 47490.00 -&gt; 27440.00 | Allowed: true</pre></figure>
 <h2 id="exchanges-exchangequote"><a href="#exchanges-exchangequote">Exchanges: ExchangeQuote</a></h2>
 <figure class="code"><figcaption>"Convert $100 at ₦1,532.40"</figcaption><pre><code>xq, err := wallet.<span class="t">QuoteExchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
 	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN,
-	<span class="t">Sell</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;USD&quot;</span>),
+	<span class="t">Sell</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">USD</span>),
 	<span class="t">Rate</span>:      <span class="s">&quot;1532.40&quot;</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ0T5C&quot;</span>,
 })
@@ -97,27 +97,27 @@ Allowed: true | CheckedByLedger: true</pre></figure>
 <h2 id="when-the-answer-is-no"><a href="#when-the-answer-is-no">When the answer is no</a></h2>
 <p>A business-rule refusal is not an error. The quote comes back with <code>Allowed: false</code> and the reason, so the app can explain it.</p>
 <figure class="code"><figcaption>Too much, over the limit, a frozen recipient</figcaption><pre><code>tooMuch := send
-tooMuch.<span class="t">Amount</span>, tooMuch.<span class="t">Reference</span> = ledger.<span class="t">Amount</span>(<span class="s">&quot;55000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="s">&quot;p2p_01J8ZKA001&quot;</span>
+tooMuch.<span class="t">Amount</span>, tooMuch.<span class="t">Reference</span> = ledger.<span class="t">Amount</span>(<span class="s">&quot;55000&quot;</span>, currency.<span class="t">NGN</span>), <span class="s">&quot;p2p_01J8ZKA001&quot;</span>
 q, err = wallet.<span class="t">QuoteTransfer</span>(ctx, tooMuch)
 check(err) <span class="c">// a refusal is not an error</span>
 fmt.<span class="t">Println</span>(q.<span class="t">Allowed</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrInsufficientFunds</span>), <span class="s">&quot;after:&quot;</span>, q.<span class="t">AvailableAfter</span>.<span class="t">Display</span>)
 
 overLimit := send
-overLimit.<span class="t">Amount</span>, overLimit.<span class="t">Reference</span> = ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="s">&quot;p2p_01J8ZKA002&quot;</span>
+overLimit.<span class="t">Amount</span>, overLimit.<span class="t">Reference</span> = ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="s">&quot;p2p_01J8ZKA002&quot;</span>
 q, err = wallet.<span class="t">QuoteTransfer</span>(ctx, overLimit)
 check(err)
 fmt.<span class="t">Println</span>(q.<span class="t">Allowed</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrLimitExceeded</span>))
 
 check(ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN, <span class="s">&quot;KYC review&quot;</span>))
 q, err = wallet.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
-	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_01J8ZKA003&quot;</span>,
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_01J8ZKA003&quot;</span>,
 })
 check(err)
 fmt.<span class="t">Println</span>(q.<span class="t">Allowed</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrAccountFrozen</span>), <span class="s">&quot;CheckedByLedger:&quot;</span>, q.<span class="t">CheckedByLedger</span>)
 check(ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN))
 
 xq, err = wallet.<span class="t">QuoteExchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
-	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;400&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ0T6D&quot;</span>,
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;400&quot;</span>, currency.<span class="t">USD</span>), <span class="t">Rate</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ0T6D&quot;</span>,
 })
 check(err)
 fmt.<span class="t">Println</span>(xq.<span class="t">Allowed</span>, errors.<span class="t">Is</span>(xq.<span class="t">Reason</span>, ledger.<span class="t">ErrInsufficientFunds</span>))</code></pre></figure>
@@ -131,15 +131,15 @@ false true</pre></figure>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <p>Malformed input is an error, as it would be on the real call.</p>
 <figure class="code"><pre><code>_, err = wallet.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
-	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12.345&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_x1&quot;</span>,
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12.345&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_x1&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;3 decimals in naira:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-_, err = wallet.<span class="t">QuoteWithdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>)})
+_, err = wallet.<span class="t">QuoteWithdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>)})
 fmt.<span class="t">Println</span>(<span class="s">&quot;no reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
 _, err = wallet.<span class="t">QuoteExchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
-	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;-1&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;fx_x1&quot;</span>,
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, currency.<span class="t">USD</span>), <span class="t">Rate</span>: <span class="s">&quot;-1&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;fx_x1&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;bad rate:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
@@ -157,7 +157,7 @@ reference already used: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

@@ -21,7 +21,7 @@
 <nav class="toc" aria-label="On this page"><span>On this page</span><a href="#when-money-has-no-owner">When money has no owner</a><a href="#park-it-ops-holdinsuspense">Park it: ops.HoldInSuspense</a><a href="#pay-it-to-its-owner-ops-claimfromsuspense">Pay it to its owner: ops.ClaimFromSuspense</a><a href="#part-of-the-money">Part of the money</a><a href="#send-it-back-ops-returnfromsuspense">Send it back: ops.ReturnFromSuspense</a><a href="#money-for-a-closed-account">Money for a closed account</a><a href="#the-fields">The fields</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
 <details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// suspenseHouse prints a house account&#x27;s balance on its normal side.</span>
 <span class="k">func</span> suspenseHouse(ops ledger.<span class="t">Ops</span>, indicator <span class="b">string</span>) {
-	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: indicator, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: indicator, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	check(err)
 	fmt.<span class="t">Println</span>(<span class="s">&quot; &quot;</span>, h.<span class="t">Indicator</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>, <span class="s">&quot;(&quot;</span>+<span class="b">string</span>(h.<span class="t">Type</span>)+<span class="s">&quot;)&quot;</span>)
 }</code></pre></figure></details>
@@ -33,7 +33,7 @@
 <figure class="code"><figcaption>₦15,000 with no matching customer</figcaption><pre><code><span class="c">// Paystack reports ₦15,000 paid into Oja&#x27;s collection account. The narration is blank</span>
 <span class="c">// and the sender name matches no customer.</span>
 r, err := ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>, <span class="c">// it arrived through @PaystackClearing</span>
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>,
 	<span class="t">Note</span>:      <span class="s">&quot;sender OKAFOR J., narration blank&quot;</span>,
@@ -53,7 +53,7 @@ metadata: suspense_in / sender OKAFOR J., narration blank / OKAFOR J.
 <figure class="code"><figcaption>Support matches it to Tunde</figcaption><pre><code><span class="c">// Tunde writes in: &quot;I sent ₦15,000 from my Access account, it hasn&#x27;t shown up.&quot;</span>
 r, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{
 	<span class="t">AccountID</span>:         tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>:            ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:            ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:         <span class="s">&quot;claim_7700011&quot;</span>,
 	<span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700011&quot;</span>, <span class="c">// links the claim to what was held</span>
 	<span class="t">Note</span>:              <span class="s">&quot;identified by support ticket 4410&quot;</span>,
@@ -72,20 +72,20 @@ Tunde: 15000.00
 <h2 id="part-of-the-money"><a href="#part-of-the-money">Part of the money</a></h2>
 <p>One transfer can cover more than one customer. Claim each part separately with its own <code>Reference</code> and the same <code>SuspenseReference</code>.</p>
 <figure class="code"><figcaption>One ₦30,000 transfer split between Ada and Tunde</figcaption><pre><code><span class="c">// One ₦30,000 bank transfer, narration &quot;ADA AND TUNDE RENT SHARE&quot;.</span>
-_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700020&quot;</span>, <span class="t">Note</span>: <span class="s">&quot;narration: ADA AND TUNDE RENT SHARE&quot;</span>})
 check(err)
 
 <span class="c">// Ada&#x27;s share is confirmed first.</span>
 _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;18000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_7700020_ada&quot;</span>, <span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700020&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;18000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_7700020_ada&quot;</span>, <span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700020&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;after Ada&#x27;s share:&quot;</span>)
 suspenseHouse(ops, ledger.<span class="t">SuspenseAccount</span>)
 
 <span class="c">// Tunde&#x27;s the next day.</span>
 _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_7700020_tunde&quot;</span>, <span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700020&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_7700020_tunde&quot;</span>, <span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700020&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;after Tunde&#x27;s share:&quot;</span>)
 suspenseHouse(ops, ledger.<span class="t">SuspenseAccount</span>)</code></pre></figure>
@@ -95,7 +95,7 @@ after Tunde&#x27;s share:
   @Suspense 0.00 (liability)</pre></figure>
 <aside class="warn"><code>@Suspense</code> is one pool per currency. humanblnk checks a claim against what the pool holds, not against the item named in <code>SuspenseReference</code>. Track what is left of each item in your own back office, for example by summing claims per <code>suspense_reference</code>.</aside>
 <h2 id="send-it-back-ops-returnfromsuspense"><a href="#send-it-back-ops-returnfromsuspense">Send it back: ops.ReturnFromSuspense</a></h2>
-<figure class="code"><figcaption>Unclaimed after 14 days, reversed to the sender</figcaption><pre><code>_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+<figure class="code"><figcaption>Unclaimed after 14 days, reversed to the sender</figcaption><pre><code>_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700031&quot;</span>, <span class="t">Note</span>: <span class="s">&quot;sender NWOSU K., no match&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;held:&quot;</span>)
@@ -105,7 +105,7 @@ suspenseHouse(ops, <span class="s">&quot;@PaystackClearing&quot;</span>)
 <span class="c">// Nobody claims it in 14 days, so Oja asks Paystack to reverse it to the sender.</span>
 r, err = ops.<span class="t">ReturnFromSuspense</span>(ctx, ledger.<span class="t">ReturnFromSuspenseInput</span>{
 	<span class="t">Provider</span>:          <span class="s">&quot;paystack&quot;</span>, <span class="c">// back to @PaystackClearing</span>
-	<span class="t">Amount</span>:            ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:            ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:         <span class="s">&quot;return_7700031&quot;</span>,
 	<span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700031&quot;</span>,
 	<span class="t">Note</span>:              <span class="s">&quot;unclaimed after 14 days, reversed to sender&quot;</span>,
@@ -124,19 +124,19 @@ returned: APPLIED suspense_return
 <h2 id="money-for-a-closed-account"><a href="#money-for-a-closed-account">Money for a closed account</a></h2>
 <p>A closed account refuses every deposit with <code>ErrAccountClosed</code>, but a late payment can still reach the provider. Hold it in suspense, then claim it for the customer's new account.</p>
 <figure class="code"><figcaption>A late payment for Chidi Stores' old account</figcaption><pre><code><span class="c">// A customer&#x27;s Paystack payment to Chidi Stores&#x27; old account comes in late.</span>
-_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: oldShop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;6500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: oldShop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;6500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700042&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;deposit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
 
 _, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;6500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700042&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;6500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700042&quot;</span>,
 	<span class="t">Note</span>:     <span class="s">&quot;payment for closed account &quot;</span> + <span class="b">string</span>(oldShop.<span class="t">ID</span>),
 	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;intended_account&quot;</span>: <span class="b">string</span>(oldShop.<span class="t">ID</span>)},
 })
 check(err)
 
 r, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{
-	<span class="t">AccountID</span>: newShop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;6500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: newShop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;6500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;claim_7700042&quot;</span>, <span class="t">SuspenseReference</span>: <span class="s">&quot;paystack_T7700042&quot;</span>,
 	<span class="t">Note</span>: <span class="s">&quot;moved from closed account&quot;</span>,
 })
@@ -159,32 +159,32 @@ claimed: APPLIED new account: 6500.00</pre></figure>
 <div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>@Suspense</code></td><td>8,000</td><td></td></tr><tr><td><code>@PaystackClearing</code></td><td></td><td>8,000</td></tr></tbody></table></div>
 <p>The hold is posted with overdraft allowed on the clearing account, as deposits are. Claims and returns are not, so <code>@Suspense</code> can never go below zero.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<figure class="code"><pre><code>_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+<figure class="code"><pre><code>_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T7700050&quot;</span>})
 check(err)
 
 _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_x1&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_x1&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;more than suspense holds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
 
 _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{<span class="t">AccountID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>),
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_x2&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_x2&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;claim to a house account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
 
 check(ops.<span class="t">FreezeAccount</span>(ctx, adaNGN.<span class="t">ID</span>, <span class="s">&quot;review&quot;</span>))
 _, err = ops.<span class="t">ClaimFromSuspense</span>(ctx, ledger.<span class="t">ClaimFromSuspenseInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_x3&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;claim_x3&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;claim to a frozen account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 
 _, err = ops.<span class="t">ReturnFromSuspense</span>(ctx, ledger.<span class="t">ReturnFromSuspenseInput</span>{<span class="t">ClearingAccount</span>: <span class="b">string</span>(tundeNGN.<span class="t">ID</span>),
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;return_x4&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;return_x4&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;return to a customer account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
 
 _, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">ClearingAccount</span>: <span class="b">string</span>(tundeNGN.<span class="t">ID</span>),
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;suspense_x5&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;suspense_x5&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;hold from a customer account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
 
-_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+_, err = ops.<span class="t">HoldInSuspense</span>(ctx, ledger.<span class="t">SuspenseInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;no reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>more than suspense holds: true
 claim to a house account: true
@@ -200,7 +200,7 @@ no reference: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

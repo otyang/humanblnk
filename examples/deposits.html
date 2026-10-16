@@ -29,7 +29,7 @@
 <figure class="code"><figcaption>Ada tops up ₦50,000 through Paystack</figcaption><pre><code><span class="c">// Paystack&#x27;s charge.success webhook says ₦50,000 arrived for Ada.</span>
 r, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,          <span class="c">// free top-up (see below for fees)</span>
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384756&quot;</span>, <span class="c">// Paystack&#x27;s own reference</span>
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,            <span class="c">// debits @PaystackClearing</span>
@@ -40,7 +40,7 @@ fmt.<span class="t">Println</span>(r.<span class="t">Amount</span>.<span class="
 <span class="c">// A bank transfer to Ada&#x27;s virtual account, booked against an exact clearing account.</span>
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>:       adaNGN,
-	<span class="t">Amount</span>:          ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:          ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:             ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>:       <span class="s">&quot;va_credit_88120&quot;</span>,
 	<span class="t">ClearingAccount</span>: <span class="s">&quot;@WemaVirtualClearing&quot;</span>, <span class="c">// overrides Provider</span>
@@ -48,7 +48,7 @@ _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">Depos
 check(err)
 
 <span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;@PaystackClearing&quot;</span>, <span class="s">&quot;@WemaVirtualClearing&quot;</span>} {
-	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	check(err)
 	fmt.<span class="t">Println</span>(name, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;natural:&quot;</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
 }
@@ -63,8 +63,8 @@ fmt.<span class="t">Println</span>(ledger.<span class="t">ClearingAccount</span>
 <h3 id="a-fee-on-the-call">A fee on the call</h3>
 <figure class="code"><figcaption>Tunde tops up ₦10,000 and pays a ₦100 fee</figcaption><pre><code>r, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: tundeNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// gross: what Paystack collected</span>
-	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;&quot;</span>),      <span class="c">// deducted; currency taken from Amount</span>
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>), <span class="c">// gross: what Paystack collected</span>
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;&quot;</span>),             <span class="c">// deducted; currency taken from Amount</span>
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384801&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
 })
@@ -97,7 +97,7 @@ Tunde&#x27;s balance: 9900.00</pre></figure>
 <figure class="code"><figcaption>Oja charges 1.5%, capped at ₦2,000</figcaption><pre><code><span class="c">// Fee left out: Config.Fees prices it (1.5%, capped at ₦2,000).</span>
 r, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: tundeNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;200000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;200000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384900&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
 })
@@ -107,7 +107,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;priced fee:&quot;</span
 <span class="c">// An explicit Fee wins over Config.Fees, e.g. a promotion.</span>
 r, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: tundeNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384950&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
@@ -115,7 +115,7 @@ r, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">Depos
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;promo legs:&quot;</span>, <span class="b">len</span>(r.<span class="t">Legs</span>), <span class="s">&quot;fee meta set:&quot;</span>, r.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>] != <span class="b">nil</span>)
 
-fees, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+fees, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;@FeeIncome:&quot;</span>, fees.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>priced fee: 2000 net: 198000
@@ -127,7 +127,7 @@ promo legs: 0 fee meta set: false
 <figure class="code"><pre><code><span class="c">// Paystack sends the same webhook twice.</span>
 again, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384756&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
@@ -138,7 +138,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;replayed:&quot;</span>,
 <span class="c">// Same reference, different amount: a real conflict, not a retry.</span>
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T629384756&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
@@ -157,7 +157,7 @@ Ada&#x27;s balance: 70000.00</pre></figure>
 <figure class="code"><figcaption>Compliance checks a ₦900,000 transfer before it counts</figcaption><pre><code><span class="c">// A large transfer arrives: hold it until compliance has looked at it.</span>
 held, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T700000001&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
@@ -176,7 +176,7 @@ fmt.<span class="t">Println</span>(ok.<span class="t">EntryStatus</span>, <span 
 
 <span class="c">// Another one fails the checks: cancel it and nothing is credited.</span>
 bad, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;750000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;750000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T700000002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Pending</span>: <span class="b">true</span>,
 })
 check(err)
@@ -194,7 +194,7 @@ voided balance: 970000.00 pending in: 0.00</pre></figure>
 <figure class="code"><figcaption>0.0125 BTC arrives on-chain</figcaption><pre><code><span class="c">// Your custody provider reports 0.0125 BTC arrived on-chain.</span>
 r, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaBTC,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.0125&quot;</span>, <span class="s">&quot;BTC&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.0125&quot;</span>, currency.<span class="t">BTC</span>),
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;btc_9f2c1e77:0&quot;</span>, <span class="c">// txid:vout, unique per output</span>
 	<span class="t">Provider</span>:  <span class="s">&quot;custody&quot;</span>,        <span class="c">// debits @CustodyClearing</span>
@@ -204,7 +204,7 @@ fmt.<span class="t">Println</span>(r.<span class="t">Amount</span>.<span class="
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
 	<span class="t">AccountID</span>: adaBTC,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.000000001&quot;</span>, <span class="s">&quot;BTC&quot;</span>), <span class="c">// 9 decimals: BTC has 8</span>
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;0.000000001&quot;</span>, currency.<span class="t">BTC</span>), <span class="c">// 9 decimals: BTC has 8</span>
 	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;btc_9f2c1e77:1&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;custody&quot;</span>,
@@ -216,20 +216,20 @@ true ledger.Wallet.Deposit: ledger: invalid input: amount &quot;0.000000001&quot
 <h2 id="frozen-and-closed-accounts"><a href="#frozen-and-closed-accounts">Frozen and closed accounts</a></h2>
 <figure class="code"><pre><code>check(ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN, <span class="s">&quot;KYC review&quot;</span>))
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T800000001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;frozen account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 check(ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN))
 
 <span class="c">// A frozen ledger stops money leaving, not money arriving.</span>
-check(ops.<span class="t">FreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">LedgerID</span>, <span class="s">&quot;incident 42&quot;</span>))
+check(ops.<span class="t">FreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">LedgerID</span>, <span class="s">&quot;incident 42&quot;</span>))
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;paystack_T800000002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;frozen ledger, deposit ok:&quot;</span>, err == <span class="b">nil</span>)
-check(ops.<span class="t">UnfreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">LedgerID</span>))</code></pre></figure>
+check(ops.<span class="t">UnfreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">LedgerID</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>frozen account: true
 frozen ledger, deposit ok: true</pre></figure>
 <ul><li>A frozen account takes no money in or out. A deposit to it fails with <code>ErrAccountFrozen</code>.</li><li>A closed account takes nothing, for good: <code>ErrAccountClosed</code>.</li><li>A frozen ledger only stops money leaving its accounts. Deposits still go through.</li><li>For money that arrives for a frozen or closed account, hold it with <code>ops.HoldInSuspense</code> and claim it or send it back later. See <a href="freeze.html">Freeze and unfreeze</a>, <a href="close-account.html">Close an account</a> and <a href="suspense.html">Suspense</a>.</li></ul>
@@ -240,35 +240,35 @@ frozen ledger, deposit ok: true</pre></figure>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <figure class="code"><pre><code><span class="c">// plainWallet belongs to a service with no Config.Fees.</span>
 _, err = plainWallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{ <span class="c">// and no Fee</span>
-	<span class="t">AccountID</span>: bola, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;dep_1&quot;</span>,
+	<span class="t">AccountID</span>: bola, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;dep_1&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;no fee:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;no reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;&quot;</span>),
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;&quot;</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;dep_2&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;fee &gt;= amount:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dep_3&quot;</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">USD</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dep_3&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;wrong currency:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>)) <span class="c">// refused by Blnk</span>
 
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">AccountID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dep_4&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;house account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
 
 <span class="c">// Tunde&#x27;s NGN account has been closed with ops.CloseAccount.</span>
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dep_5&quot;</span>,
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dep_5&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;closed account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>no fee: true ledger.Wallet.Deposit: ledger: invalid input: fee is required; pass ledger.NoFee for a free transaction, or set Config.Fees
@@ -285,7 +285,7 @@ closed account: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

@@ -6,30 +6,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 func TestFreeze(t *testing.T) {
 	_, core, wallet, ops := setup(t, ledger.Config{})
-	adaNGN := customer(wallet, "user_ada", "Ada", "NGN").Accounts["NGN"]
-	tundeNGN := customer(wallet, "user_tunde", "Tunde", "NGN").Accounts["NGN"]
-	fund(wallet, adaNGN.ID, "50000", "NGN", "seed_ada")
-	fund(wallet, tundeNGN.ID, "80000", "NGN", "seed_tunde")
+	adaNGN := customer(wallet, "user_ada", "Ada", currency.NGN).Accounts[currency.NGN]
+	tundeNGN := customer(wallet, "user_tunde", "Tunde", currency.NGN).Accounts[currency.NGN]
+	fund(wallet, adaNGN.ID, "50000", currency.NGN, "seed_ada")
+	fund(wallet, tundeNGN.ID, "80000", currency.NGN, "seed_tunde")
 
 	// Tunde asks for a payout before the alert fires.
-	payout, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: tundeNGN.ID, Amount: ledger.Amount("20000", "NGN"),
+	payout, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: tundeNGN.ID, Amount: ledger.Amount("20000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "wd_tunde_501", Provider: "flutterwave"})
 	check(err)
 	// A card hold at Chidi Stores, and a standing order to Ada due tomorrow.
-	shop := customer(wallet, "merchant_311", "Chidi", "NGN").Accounts["NGN"]
+	shop := customer(wallet, "merchant_311", "Chidi", currency.NGN).Accounts[currency.NGN]
 	cardHold, err := wallet.Hold(ctx, ledger.HoldInput{AccountID: tundeNGN.ID, Destination: shop.ID,
-		Amount: ledger.Amount("10000", "NGN"), Reference: "card_auth_9001"})
+		Amount: ledger.Amount("10000", currency.NGN), Reference: "card_auth_9001"})
 	check(err)
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID, Amount: ledger.Amount("2000", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID, Amount: ledger.Amount("2000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "so_tunde_rent_1", ScheduledFor: core.Now().Add(24 * time.Hour)})
 	check(err)
 	// Ada starts a pending ₦1,500 transfer to Tunde.
-	incoming, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: tundeNGN.ID, Amount: ledger.Amount("1500", "NGN"),
+	incoming, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: tundeNGN.ID, Amount: ledger.Amount("1500", currency.NGN),
 		Fee: ledger.NoFee, Reference: "p2p_ada_pending_9", Pending: true})
 	check(err)
 
@@ -40,23 +41,23 @@ func TestFreeze(t *testing.T) {
 	check(err)
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_tunde_77"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_tunde_77"})
 	fmt.Println("send out:", errors.Is(err, ledger.ErrAccountFrozen))
 
 	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: tundeNGN.ID,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "wd_tunde_502", Provider: "flutterwave"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "wd_tunde_502", Provider: "flutterwave"})
 	fmt.Println("cash out:", errors.Is(err, ledger.ErrAccountFrozen))
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: tundeNGN.ID,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_ada_12"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_ada_12"})
 	fmt.Println("receive from Ada:", errors.Is(err, ledger.ErrAccountFrozen))
 
 	_, err = wallet.Hold(ctx, ledger.HoldInput{AccountID: adaNGN.ID, Destination: tundeNGN.ID,
-		Amount: ledger.Amount("1000", "NGN"), Reference: "hold_ada_12"})
+		Amount: ledger.Amount("1000", currency.NGN), Reference: "hold_ada_12"})
 	fmt.Println("hold paying Tunde:", errors.Is(err, ledger.ErrAccountFrozen))
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: tundeNGN.ID,
-		Amount: ledger.Amount("3000", "NGN"), Fee: ledger.NoFee, Reference: "paystack_T5501", Provider: "paystack"})
+		Amount: ledger.Amount("3000", currency.NGN), Fee: ledger.NoFee, Reference: "paystack_T5501", Provider: "paystack"})
 	fmt.Println("top up:", errors.Is(err, ledger.ErrAccountFrozen))
 	fmt.Println(err)
 	// end
@@ -72,7 +73,7 @@ func TestFreeze(t *testing.T) {
 	fmt.Println("balance:", acct.Balance.Display, "available:", acct.Available.Display)
 
 	q, err := wallet.QuoteTransfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_tunde_78"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_tunde_78"})
 	check(err) // a refusal is not an error here: it is in the quote
 	fmt.Println("quote allowed:", q.Allowed, "frozen:", errors.Is(q.Reason, ledger.ErrAccountFrozen))
 	// end
@@ -118,7 +119,7 @@ func TestFreeze(t *testing.T) {
 	check(err)
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_tunde_77"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_tunde_77"})
 	check(err)
 
 	acct, err = wallet.GetAccount(ctx, tundeNGN.ID)
@@ -132,9 +133,9 @@ func TestFreeze(t *testing.T) {
 	// Agent floats live in their own ledger. A regulator orders a hold on all of them.
 	agents, err := ops.CreateLedger(ctx, ledger.CreateLedgerInput{Key: "oja-agents", Name: "Oja Agents"})
 	check(err)
-	ikeja, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", LedgerID: agents.ID, ExternalID: "agent_ikeja"})
+	ikeja, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, LedgerID: agents.ID, ExternalID: "agent_ikeja"})
 	check(err)
-	fund(wallet, ikeja.ID, "200000", "NGN", "seed_ikeja")
+	fund(wallet, ikeja.ID, "200000", currency.NGN, "seed_ikeja")
 
 	err = ops.FreezeLedger(ctx, agents.ID, "CBN directive 2026/114")
 	check(err)
@@ -144,26 +145,26 @@ func TestFreeze(t *testing.T) {
 
 	// Out of the ledger: refused.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: ikeja.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "float_out_1"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "float_out_1"})
 	fmt.Println("agent pays Ada:", errors.Is(err, ledger.ErrLedgerFrozen))
 
 	// Into the ledger: allowed.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: ikeja.ID,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "float_in_1"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "float_in_1"})
 	fmt.Println("Ada pays agent:", err == nil)
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: ikeja.ID, Amount: ledger.Amount("50000", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: ikeja.ID, Amount: ledger.Amount("50000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "paystack_T5520", Provider: "paystack"})
 	fmt.Println("agent tops up:", err == nil)
 
 	// House postings carry on.
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack",
-		Amount: ledger.Amount("100000", "NGN"), Reference: "paystack_stl_0901"})
+		Amount: ledger.Amount("100000", currency.NGN), Reference: "paystack_stl_0901"})
 	fmt.Println("Paystack settlement:", err == nil)
 
 	err = ops.UnfreezeLedger(ctx, agents.ID)
 	check(err)
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: ikeja.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "float_out_1"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "float_out_1"})
 	fmt.Println("after unfreeze, agent pays Ada:", err == nil)
 	// end
 	end()
@@ -178,12 +179,12 @@ func TestFreeze(t *testing.T) {
 	check(err)
 
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: ikeja.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "float_out_2"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "float_out_2"})
 	fmt.Println("API server, same moment:", err == nil)
 
 	core.Advance(31 * time.Second) // past the default 30s LedgerStatusTTL
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: ikeja.ID, To: adaNGN.ID,
-		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "float_out_3"})
+		Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "float_out_3"})
 	fmt.Println("API server, 31s later:", errors.Is(err, ledger.ErrLedgerFrozen))
 	// end
 	end()
@@ -191,7 +192,7 @@ func TestFreeze(t *testing.T) {
 	begin("freeze/errors")
 	// sample: freeze/errors
 	// A closed account can't be frozen or unfrozen.
-	old, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", ExternalID: "user_ada_old"})
+	old, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, ExternalID: "user_ada_old"})
 	check(err)
 	_, err = ops.CloseAccount(ctx, old.ID, ledger.CloseInput{Reason: "duplicate account",
 		RequestedBy: "ops.kemi", ApprovedBy: "lead.femi"})

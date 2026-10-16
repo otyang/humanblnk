@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -14,47 +15,47 @@ func TestStatements(t *testing.T) {
 	_, core, wallet, _ := setup(t, ledger.Config{})
 	lagos := time.FixedZone("WAT", 3600)
 	core.SetNow(time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)) // Ada joined in August
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	adaNGN := ada.Accounts["NGN"].ID
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN")
-	tundeNGN := tunde.Accounts["NGN"].ID
-	shop := customer(wallet, "merchant_311", "Chidi Stores", "NGN")
-	chidiNGN := shop.Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	adaNGN := ada.Accounts[currency.NGN].ID
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN)
+	tundeNGN := tunde.Accounts[currency.NGN].ID
+	shop := customer(wallet, "merchant_311", "Chidi Stores", currency.NGN)
+	chidiNGN := shop.Accounts[currency.NGN].ID
 	rent, err := wallet.OpenPot(ctx, ledger.PotInput{ParentID: adaNGN, Name: "Rent"})
 	check(err)
 
-	fund(wallet, adaNGN, "15000", "NGN", "paystack_T100100")
+	fund(wallet, adaNGN, "15000", currency.NGN, "paystack_T100100")
 
 	// September, day by day.
 	at := func(day, hour int) { core.SetNow(time.Date(2026, 9, day, hour, 0, 0, 0, time.UTC)) }
 	at(1, 9)
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("50000", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("50000", currency.NGN),
 		Fee: ledger.Amount("750", ""), Reference: "paystack_T100201", Provider: "paystack", Description: "Card top-up"})
 	check(err)
 	at(3, 12)
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN, Amount: ledger.Amount("5000", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tundeNGN, Amount: ledger.Amount("5000", currency.NGN),
 		Fee: ledger.Amount("10", ""), Reference: "p2p_20001", Description: "To Tunde: suya money"})
 	check(err)
 	at(5, 15)
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidiNGN, Amount: ledger.Amount("12500", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidiNGN, Amount: ledger.Amount("12500", currency.NGN),
 		Fee: ledger.NoFee, Reference: "order_5101", Description: "Chidi Stores order 5101"})
 	check(err)
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("20000", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("20000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "rent_sep", Description: "Rent pot",
 		ScheduledFor: time.Date(2026, 9, 25, 8, 0, 0, 0, time.UTC)}) // created today, posts on the 25th
 	check(err)
 	at(10, 11)
-	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN, Amount: ledger.Amount("10000", "NGN"),
+	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN, Amount: ledger.Amount("10000", currency.NGN),
 		Fee: ledger.Amount("50", ""), Reference: "payout_7001", Provider: "flutterwave", Description: "To GTBank"})
 	check(err)
 	at(11, 9)
 	_, err = wallet.Confirm(ctx, w.TransactionID, nil) // Flutterwave reports success the next day
 	check(err)
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: adaNGN, Amount: ledger.Amount("2500", "NGN"),
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: adaNGN, Amount: ledger.Amount("2500", currency.NGN),
 		Fee: ledger.NoFee, Reference: "p2p_20002", Description: "From Tunde: half of the cab"})
 	check(err)
 	at(18, 14)
-	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN, Amount: ledger.Amount("3000", "NGN"),
+	_, err = wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: adaNGN, Amount: ledger.Amount("3000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "payout_7002", Provider: "flutterwave"}) // never confirmed: expires after 24 hours
 	check(err)
 
@@ -96,7 +97,7 @@ func TestStatements(t *testing.T) {
 
 	at(25, 9) // the rent transfer posts on the 25th
 	core.SetNow(time.Date(2026, 10, 2, 10, 0, 0, 0, time.UTC))
-	fund(wallet, adaNGN, "8000", "NGN", "paystack_T100301") // October
+	fund(wallet, adaNGN, "8000", currency.NGN, "paystack_T100301") // October
 
 	begin("statements/statement")
 	// sample: statements/statement

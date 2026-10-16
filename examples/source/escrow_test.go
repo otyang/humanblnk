@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -17,12 +18,12 @@ func escrowBalance(w ledger.Wallet, id ledger.AccountID) string {
 
 func TestEscrow(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_ada", "Ada", "NGN")
+	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
 	shop, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", OrganizationName: "Chidi Stores Ltd",
-		Currencies: []string{"NGN"}, ExternalID: "merchant_311"})
+		Currencies: []string{currency.NGN}, ExternalID: "merchant_311"})
 	check(err)
-	adaNGN, chidi := ada.Accounts["NGN"].ID, shop.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "300000", "NGN", "seed_ada")
+	adaNGN, chidi := ada.Accounts[currency.NGN].ID, shop.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "300000", currency.NGN, "seed_ada")
 
 	begin("escrow/open")
 	// sample: escrow/open
@@ -30,7 +31,7 @@ func TestEscrow(t *testing.T) {
 	esc, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{
 		Payer:       adaNGN,
 		Beneficiary: chidi,
-		Amount:      ledger.Amount("80000", "NGN"),
+		Amount:      ledger.Amount("80000", currency.NGN),
 		Reference:   "escrow_10450", // required; a retry returns the same escrow
 		Description: "Order 10450",
 		MetaData:    map[string]any{"order_id": "10450"},
@@ -41,7 +42,7 @@ func TestEscrow(t *testing.T) {
 	fmt.Println("Ada:", escrowBalance(wallet, adaNGN), "Chidi Stores:", escrowBalance(wallet, chidi))
 
 	retry, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("80000", "NGN"), Reference: "escrow_10450"})
+		Amount: ledger.Amount("80000", currency.NGN), Reference: "escrow_10450"})
 	check(err)
 	fmt.Println("retry returns it:", retry.ID == esc.ID)
 	// end
@@ -67,7 +68,7 @@ func TestEscrow(t *testing.T) {
 	// sample: escrow/refund
 	// The order is cancelled before it ships: everything goes back to Ada.
 	esc2, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("30000", "NGN"), Reference: "escrow_10451"})
+		Amount: ledger.Amount("30000", currency.NGN), Reference: "escrow_10451"})
 	check(err)
 	back, err := wallet.RefundEscrow(ctx, esc2.ID, ledger.EscrowSettleInput{Reference: "escrow_10451_refund"})
 	check(err)
@@ -79,11 +80,11 @@ func TestEscrow(t *testing.T) {
 	// sample: escrow/partial
 	// A ₦50,000 order of two items. One arrives broken.
 	esc3, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("50000", "NGN"), Reference: "escrow_10452"})
+		Amount: ledger.Amount("50000", currency.NGN), Reference: "escrow_10452"})
 	check(err)
 
 	_, err = wallet.RefundEscrow(ctx, esc3.ID, ledger.EscrowSettleInput{
-		Amount: ledger.Amount("12000", "NGN"), Reference: "escrow_10452_refund_1", Description: "Broken item",
+		Amount: ledger.Amount("12000", currency.NGN), Reference: "escrow_10452_refund_1", Description: "Broken item",
 	})
 	check(err)
 	e, err := wallet.GetEscrow(ctx, esc3.ID)
@@ -91,7 +92,7 @@ func TestEscrow(t *testing.T) {
 	fmt.Println(e.Status, "still held:", e.Held.Display)
 
 	_, err = wallet.ReleaseEscrow(ctx, esc3.ID, ledger.EscrowSettleInput{
-		Amount: ledger.Amount("20000", "NGN"), Reference: "escrow_10452_release_1",
+		Amount: ledger.Amount("20000", currency.NGN), Reference: "escrow_10452_release_1",
 	})
 	check(err)
 	e, err = wallet.GetEscrow(ctx, esc3.ID)
@@ -109,10 +110,10 @@ func TestEscrow(t *testing.T) {
 	begin("escrow/over-release")
 	// sample: escrow/over-release
 	esc4, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("10000", "NGN"), Reference: "escrow_10453"})
+		Amount: ledger.Amount("10000", currency.NGN), Reference: "escrow_10453"})
 	check(err)
 	_, err = wallet.ReleaseEscrow(ctx, esc4.ID, ledger.EscrowSettleInput{
-		Amount: ledger.Amount("15000", "NGN"), Reference: "escrow_10453_release"})
+		Amount: ledger.Amount("15000", currency.NGN), Reference: "escrow_10453_release"})
 	fmt.Println("more than held:", errors.Is(err, ledger.ErrInsufficientFunds))
 
 	_, err = wallet.RefundEscrow(ctx, esc4.ID, ledger.EscrowSettleInput{Reference: "escrow_10453_refund"})
@@ -128,13 +129,13 @@ func TestEscrow(t *testing.T) {
 	booking, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{
 		Payer:       adaNGN,
 		Beneficiary: ledger.AccountID(ledger.FeeIncomeAccount),
-		Amount:      ledger.Amount("2500", "NGN"),
+		Amount:      ledger.Amount("2500", currency.NGN),
 		Reference:   "booking_771",
 	})
 	check(err)
 	_, err = wallet.ReleaseEscrow(ctx, booking.ID, ledger.EscrowSettleInput{Reference: "booking_771_done"})
 	check(err)
-	income, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	income, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN})
 	check(err)
 	fmt.Println("@FeeIncome:", income.Balance.Display)
 	// end
@@ -143,19 +144,19 @@ func TestEscrow(t *testing.T) {
 	begin("escrow/errors")
 	// sample: escrow/errors
 	_, err = wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: adaNGN,
-		Amount: ledger.Amount("100", "NGN"), Reference: "escrow_bad_1"})
+		Amount: ledger.Amount("100", currency.NGN), Reference: "escrow_bad_1"})
 	fmt.Println("same payer and beneficiary:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: ledger.AccountID("@PaystackClearing"), Beneficiary: chidi,
-		Amount: ledger.Amount("100", "NGN"), Reference: "escrow_bad_2"})
+		Amount: ledger.Amount("100", currency.NGN), Reference: "escrow_bad_2"})
 	fmt.Println("house payer:", errors.Is(err, ledger.ErrWrongKind))
 
 	_, err = wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("100", "NGN"), Reference: "seed_ada"})
+		Amount: ledger.Amount("100", currency.NGN), Reference: "seed_ada"})
 	fmt.Println("reference of another transaction:", errors.Is(err, ledger.ErrDuplicateReference))
 
 	_, err = wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("9000000", "NGN"), Reference: "escrow_bad_3"})
+		Amount: ledger.Amount("9000000", currency.NGN), Reference: "escrow_bad_3"})
 	fmt.Println("not enough money:", errors.Is(err, ledger.ErrInsufficientFunds))
 	left, err := wallet.FindAccounts(ctx, ledger.AccountQuery{Kind: ledger.EscrowAccount,
 		MetaData: map[string]string{"escrow_reference": "escrow_bad_3"}})
@@ -166,7 +167,7 @@ func TestEscrow(t *testing.T) {
 	fmt.Println("not an escrow:", errors.Is(err, ledger.ErrInvalidInput))
 
 	esc5, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
-		Amount: ledger.Amount("5000", "NGN"), Reference: "escrow_10454"})
+		Amount: ledger.Amount("5000", currency.NGN), Reference: "escrow_10454"})
 	check(err)
 	check(ops.FreezeAccount(ctx, chidi, "KYC review"))
 	_, err = wallet.ReleaseEscrow(ctx, esc5.ID, ledger.EscrowSettleInput{Reference: "escrow_10454_release"})

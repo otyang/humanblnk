@@ -13,15 +13,15 @@ import (
 
 func TestMoney(t *testing.T) {
 	svc, _, wallet, _ := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN", "USD", "BTC")
-	adaNGN := ada.Accounts["NGN"].ID
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN, currency.USD, currency.BTC)
+	adaNGN := ada.Accounts[currency.NGN].ID
 
 	begin("money/amount")
 	// sample: money/amount
 	typed := ledger.Amount("0.456", "btc") // what the user typed; currency upper-cased
 	fmt.Println(typed.Value, typed.Currency, "resolved:", typed.PreciseAmount != nil)
 
-	m, err := svc.Parse("0.456", "BTC") // fills both forms from the currency's precision
+	m, err := svc.Parse("0.456", currency.BTC) // fills both forms from the currency's precision
 	check(err)
 	fmt.Println("Value:", m.Value, "PreciseAmount:", m.PreciseAmount, "Precision:", m.Precision, "Display:", m.Display)
 	fmt.Println("String:", m.String(), "Fixed:", m.Fixed())
@@ -31,8 +31,8 @@ func TestMoney(t *testing.T) {
 	begin("money/currencies")
 	// sample: money/currencies
 	for _, in := range [][2]string{
-		{"100.56", "USD"}, {"10000", "NGN"}, {"1,500.50", "NGN"}, {"5000", "JPY"},
-		{"1.250", "KWD"}, {"20.5", "USDT"}, {"0.00012345", "BTC"},
+		{"100.56", currency.USD}, {"10000", currency.NGN}, {"1,500.50", currency.NGN}, {"5000", currency.JPY},
+		{"1.250", currency.KWD}, {"20.5", currency.USDT}, {"0.00012345", currency.BTC},
 	} {
 		m, err := svc.Parse(in[0], in[1])
 		check(err)
@@ -45,14 +45,14 @@ func TestMoney(t *testing.T) {
 	// sample: money/other-forms
 	// You already hold the integer in the smallest unit:
 	r, err := wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Minor(1050075, "NGN"), // ₦10,500.75
+		AccountID: adaNGN, Amount: ledger.Minor(1050075, currency.NGN), // ₦10,500.75
 		Fee: ledger.NoFee, Reference: "paystack_T1001", Provider: "paystack",
 	})
 	check(err)
 	fmt.Println("Minor:", r.Amount.Value, r.Amount.Display)
 
 	// You hold the integer and the precision:
-	p := ledger.Precise(big.NewInt(45600000), 100000000, "BTC")
+	p := ledger.Precise(big.NewInt(45600000), 100000000, currency.BTC)
 	fmt.Println("Precise:", p.Value, p.PreciseAmount, p.Precision, p.Display)
 
 	// A decimal against a precision you choose, without a Service:
@@ -65,12 +65,12 @@ func TestMoney(t *testing.T) {
 	begin("money/rejected")
 	// sample: money/rejected
 	for _, in := range []string{"100.567", "1e3", "12abc", ""} {
-		_, err := svc.Parse(in, "NGN")
+		_, err := svc.Parse(in, currency.NGN)
 		fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 	}
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("250.505", "NGN"),
+		AccountID: adaNGN, Amount: ledger.Amount("250.505", currency.NGN),
 		Fee: ledger.NoFee, Reference: "paystack_T1002", Provider: "paystack",
 	})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
@@ -81,7 +81,7 @@ func TestMoney(t *testing.T) {
 	// sample: money/fee
 	r, err = wallet.Deposit(ctx, ledger.DepositInput{
 		AccountID: adaNGN,
-		Amount:    ledger.Amount("50000", "NGN"),
+		Amount:    ledger.Amount("50000", currency.NGN),
 		Fee:       ledger.Amount("750", ""), // empty currency: takes the amount's (NGN)
 		Reference: "paystack_T1003",
 		Provider:  "paystack",
@@ -90,8 +90,8 @@ func TestMoney(t *testing.T) {
 	fmt.Println("gross:", r.Amount.Display, "fee:", r.MetaData["fee"], "net:", r.MetaData["net_amount"])
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: adaNGN, Amount: ledger.Amount("50000", "NGN"),
-		Fee: ledger.Amount("2", "USD"), Reference: "paystack_T1004", Provider: "paystack",
+		AccountID: adaNGN, Amount: ledger.Amount("50000", currency.NGN),
+		Fee: ledger.Amount("2", currency.USD), Reference: "paystack_T1004", Provider: "paystack",
 	})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 	fmt.Println("NoFee is zero:", ledger.NoFee.IsZero())
@@ -112,7 +112,7 @@ func TestMoney(t *testing.T) {
 	fmt.Println("decoded:", req.Amount.Value, req.Amount.Currency)
 
 	tr, err := wallet.Deposit(ctx, ledger.DepositInput{
-		AccountID: ada.Accounts["USD"].ID, Amount: req.Amount,
+		AccountID: ada.Accounts[currency.USD].ID, Amount: req.Amount,
 		Fee: ledger.NoFee, Reference: "paystack_T1005", Provider: "paystack",
 	})
 	check(err)

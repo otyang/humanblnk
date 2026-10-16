@@ -22,12 +22,12 @@ func Example() {
 	ctx := context.Background()
 	var l ledger.Ledger = newExample()
 
-	ada, _ := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
-	tunde, _ := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	ada, _ := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
+	tunde, _ := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 
 	// Paystack confirmed ₦50,000; their reference makes a repeated webhook harmless.
 	_, err := l.Wallet().Deposit(ctx, ledger.DepositInput{
-		AccountID: ada.ID, Amount: ledger.Amount("50000", "NGN"), Fee: ledger.Amount("750", ""),
+		AccountID: ada.ID, Amount: ledger.Amount("50000", currency.NGN), Fee: ledger.Amount("750", ""),
 		Reference: "paystack_T629384756", Provider: "paystack",
 	})
 	if err != nil {
@@ -35,7 +35,7 @@ func Example() {
 		return
 	}
 	_, err = l.Wallet().Transfer(ctx, ledger.TransferInput{
-		From: ada.ID, To: tunde.ID, Amount: ledger.Amount("12500", "NGN"), Fee: ledger.Amount("10", ""),
+		From: ada.ID, To: tunde.ID, Amount: ledger.Amount("12500", currency.NGN), Fee: ledger.Amount("10", ""),
 		Reference: "p2p_01J8ZK2M4Q",
 	})
 	if err != nil {
@@ -56,12 +56,12 @@ func Example() {
 func ExampleWallet() {
 	ctx := context.Background()
 	l := newExample()
-	acct, _ := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
-	l.Wallet().Deposit(ctx, ledger.DepositInput{AccountID: acct.ID, Amount: ledger.Amount("20000", "NGN"),
+	acct, _ := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
+	l.Wallet().Deposit(ctx, ledger.DepositInput{AccountID: acct.ID, Amount: ledger.Amount("20000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "seed", Provider: "paystack"})
 
 	auth, _ := l.Wallet().Hold(ctx, ledger.HoldInput{AccountID: acct.ID, Destination: ledger.MerchantPayableAccount,
-		Amount: ledger.Amount("18500", "NGN"), Reference: "card_auth_449201"})
+		Amount: ledger.Amount("18500", currency.NGN), Reference: "card_auth_449201"})
 	a, _ := l.Wallet().GetAccount(ctx, acct.ID)
 	fmt.Println("held:     ", a.PendingOut.Display, "available", a.Available.Display)
 
@@ -77,10 +77,10 @@ func ExampleWallet() {
 
 // Exact decimals: what the user typed, the integer Blnk stores, and what to show.
 func ExampleParseDecimal() {
-	m, _ := ledger.ParseDecimal("0.456", "BTC", 100_000_000)
+	m, _ := ledger.ParseDecimal("0.456", currency.BTC, 100_000_000)
 	fmt.Println(m.Value, m.PreciseAmount, m.Fixed())
 
-	_, err := ledger.ParseDecimal("100.567", "NGN", 100)
+	_, err := ledger.ParseDecimal("100.567", currency.NGN, 100)
 	fmt.Println(err)
 	// Output:
 	// 0.456 45600000 0.45600000
@@ -91,7 +91,7 @@ func ExampleParseDecimal() {
 func ExampleComputeFee() {
 	rule := ledger.FeeRule{Percent: "1.5", Min: "10", Max: "2000"}
 	for _, typed := range []string{"500", "50000", "500000"} {
-		amount, _ := ledger.ParseDecimal(typed, "NGN", 100)
+		amount, _ := ledger.ParseDecimal(typed, currency.NGN, 100)
 		fee, _ := ledger.ComputeFee(rule, amount)
 		fmt.Printf("₦%s → fee ₦%s\n", typed, fee.Value)
 	}

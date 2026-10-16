@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -17,12 +18,12 @@ func splitBalance(w ledger.Wallet, id ledger.AccountID) string {
 
 func TestSplitPayments(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_ada", "Ada", "NGN")
-	tunde := customer(wallet, "user_tunde", "Tunde", "NGN")
+	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_tunde", "Tunde", currency.NGN)
 	shop, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", OrganizationName: "Chidi Stores Ltd",
-		Currencies: []string{"NGN"}, ExternalID: "merchant_311"})
+		Currencies: []string{currency.NGN}, ExternalID: "merchant_311"})
 	check(err)
-	adaNGN, tundeNGN, chidi := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID, shop.Accounts["NGN"].ID
+	adaNGN, tundeNGN, chidi := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID, shop.Accounts[currency.NGN].ID
 
 	begin("split-payments/card-order")
 	// sample: split-payments/card-order
@@ -30,12 +31,12 @@ func TestSplitPayments(t *testing.T) {
 	order, err := wallet.Split(ctx, ledger.SplitInput{
 		From:           ledger.AccountID(ledger.ClearingAccount("paystack")), // @PaystackClearing
 		AllowOverdraft: true,                                                 // money arriving from outside
-		Amount:         ledger.Amount("25000", "NGN"),
+		Amount:         ledger.Amount("25000", currency.NGN),
 		Reference:      "order_10442", // Paystack's payment id
 		Description:    "Order 10442",
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "5", Narration: "Oja commission"},
-			{To: tundeNGN, Amount: ledger.Amount("1500", "NGN"), Narration: "Delivery"},
+			{To: tundeNGN, Amount: ledger.Amount("1500", currency.NGN), Narration: "Delivery"},
 			{To: chidi, Rest: true, Narration: "Order 10442"},
 		},
 	})
@@ -43,7 +44,7 @@ func TestSplitPayments(t *testing.T) {
 	fmt.Println(order.Status, order.Amount.Display, "in", len(order.Legs), "legs")
 	fmt.Println("Chidi Stores:", splitBalance(wallet, chidi))
 	fmt.Println("Tunde (rider):", splitBalance(wallet, tundeNGN))
-	fee, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"})
+	fee, err := ops.GetHouseAccount(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN})
 	check(err)
 	fmt.Println("@FeeIncome:", fee.Balance.Display)
 	// end
@@ -52,10 +53,10 @@ func TestSplitPayments(t *testing.T) {
 	// Not shown: a retry with the same parts replays the original.
 	replay, err := wallet.Split(ctx, ledger.SplitInput{
 		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
-		Amount: ledger.Amount("25000", "NGN"), Reference: "order_10442", Description: "Order 10442",
+		Amount: ledger.Amount("25000", currency.NGN), Reference: "order_10442", Description: "Order 10442",
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "5", Narration: "Oja commission"},
-			{To: tundeNGN, Amount: ledger.Amount("1500", "NGN"), Narration: "Delivery"},
+			{To: tundeNGN, Amount: ledger.Amount("1500", currency.NGN), Narration: "Delivery"},
 			{To: chidi, Rest: true, Narration: "Order 10442"},
 		},
 	})
@@ -101,7 +102,7 @@ func TestSplitPayments(t *testing.T) {
 	// ₦100.01 shared 50/50 between two sellers: 50.005 each is not a real amount.
 	odd, err := wallet.Split(ctx, ledger.SplitInput{
 		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
-		Amount: ledger.Amount("100.01", "NGN"), Reference: "order_10443",
+		Amount: ledger.Amount("100.01", currency.NGN), Reference: "order_10443",
 		Parts: []ledger.SplitPart{
 			{To: chidi, Percent: "50"},
 			{To: tundeNGN, Percent: "50"},
@@ -115,7 +116,7 @@ func TestSplitPayments(t *testing.T) {
 	// With a Rest part, the Rest part gets the dust instead.
 	withRest, err := wallet.Split(ctx, ledger.SplitInput{
 		From: ledger.AccountID(ledger.ClearingAccount("paystack")), AllowOverdraft: true,
-		Amount: ledger.Amount("100.01", "NGN"), Reference: "order_10444",
+		Amount: ledger.Amount("100.01", currency.NGN), Reference: "order_10444",
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "7.5"}, // 7.50075 → 7.50
 			{To: chidi, Rest: true},
@@ -128,17 +129,17 @@ func TestSplitPayments(t *testing.T) {
 	// end
 	end()
 
-	fund(wallet, adaNGN, "50000", "NGN", "seed_ada")
+	fund(wallet, adaNGN, "50000", currency.NGN, "seed_ada")
 
 	begin("split-payments/from-customer")
 	// sample: split-payments/from-customer
 	// Ada pays ₦12,000 from her wallet balance. Customer accounts never go negative.
 	paid, err := wallet.Split(ctx, ledger.SplitInput{
 		From:      adaNGN,
-		Amount:    ledger.Amount("12000", "NGN"),
+		Amount:    ledger.Amount("12000", currency.NGN),
 		Reference: "order_10445",
 		Parts: []ledger.SplitPart{
-			{To: ledger.FeeIncomeAccount, Amount: ledger.Amount("200", "NGN"), Narration: "Service charge"},
+			{To: ledger.FeeIncomeAccount, Amount: ledger.Amount("200", currency.NGN), Narration: "Service charge"},
 			{To: chidi, Rest: true, Narration: "Order 10445"},
 		},
 	})
@@ -146,7 +147,7 @@ func TestSplitPayments(t *testing.T) {
 	fmt.Println(paid.Status, "Ada now:", splitBalance(wallet, adaNGN))
 
 	_, err = wallet.Split(ctx, ledger.SplitInput{
-		From: adaNGN, Amount: ledger.Amount("90000", "NGN"), Reference: "order_10446",
+		From: adaNGN, Amount: ledger.Amount("90000", currency.NGN), Reference: "order_10446",
 		Parts: []ledger.SplitPart{{To: ledger.FeeIncomeAccount, Percent: "5"}, {To: chidi, Rest: true}},
 	})
 	fmt.Println("too much:", errors.Is(err, ledger.ErrInsufficientFunds))
@@ -157,7 +158,7 @@ func TestSplitPayments(t *testing.T) {
 	// sample: split-payments/pending
 	// Hold the money while Chidi Stores confirms the stock.
 	held, err := wallet.Split(ctx, ledger.SplitInput{
-		From: adaNGN, Amount: ledger.Amount("8000", "NGN"), Reference: "order_10447",
+		From: adaNGN, Amount: ledger.Amount("8000", currency.NGN), Reference: "order_10447",
 		Pending: true,
 		Parts: []ledger.SplitPart{
 			{To: ledger.FeeIncomeAccount, Percent: "5"},
@@ -169,7 +170,7 @@ func TestSplitPayments(t *testing.T) {
 	check(err)
 	fmt.Println(held.Status, "Ada balance:", acct.Balance.Display, "available:", acct.Available.Display)
 
-	part := ledger.Amount("4000", "NGN")
+	part := ledger.Amount("4000", currency.NGN)
 	_, err = wallet.Confirm(ctx, held.TransactionID, &part)
 	fmt.Println("partial confirm of the whole split:", errors.Is(err, ledger.ErrInvalidInput))
 
@@ -184,18 +185,18 @@ func TestSplitPayments(t *testing.T) {
 	clearing := ledger.AccountID(ledger.ClearingAccount("paystack"))
 	try := func(parts ...ledger.SplitPart) error {
 		_, err := wallet.Split(ctx, ledger.SplitInput{From: clearing, AllowOverdraft: true,
-			Amount: ledger.Amount("1000", "NGN"), Reference: "order_bad", Parts: parts})
+			Amount: ledger.Amount("1000", currency.NGN), Reference: "order_bad", Parts: parts})
 		return err
 	}
-	err = try(ledger.SplitPart{To: chidi, Amount: ledger.Amount("600", "NGN")},
-		ledger.SplitPart{To: tundeNGN, Amount: ledger.Amount("300", "NGN")})
+	err = try(ledger.SplitPart{To: chidi, Amount: ledger.Amount("600", currency.NGN)},
+		ledger.SplitPart{To: tundeNGN, Amount: ledger.Amount("300", currency.NGN)})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 
-	err = try(ledger.SplitPart{To: chidi, Amount: ledger.Amount("1000", "NGN")},
+	err = try(ledger.SplitPart{To: chidi, Amount: ledger.Amount("1000", currency.NGN)},
 		ledger.SplitPart{To: tundeNGN, Rest: true})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 
-	err = try(ledger.SplitPart{To: chidi, Percent: "80", Amount: ledger.Amount("800", "NGN")},
+	err = try(ledger.SplitPart{To: chidi, Percent: "80", Amount: ledger.Amount("800", currency.NGN)},
 		ledger.SplitPart{To: tundeNGN, Rest: true})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 

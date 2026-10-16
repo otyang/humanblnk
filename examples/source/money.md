@@ -22,10 +22,10 @@ Only `precise_amount` and `precision` are sent to Blnk, never its float `amount`
 
 | You have | Use |
 |---|---|
-| What the user typed | `ledger.Amount("1,500.50", "NGN")` |
-| The same, resolved now so you can read `PreciseAmount` | `svc.Parse("1500.50", "NGN")` |
-| An integer in the smallest unit, e.g. from a provider's webhook in kobo | `ledger.Minor(1050075, "NGN")` |
-| An integer and its precision | `ledger.Precise(big.NewInt(45600000), 100000000, "BTC")` |
+| What the user typed | `ledger.Amount("1,500.50", currency.NGN)` |
+| The same, resolved now so you can read `PreciseAmount` | `svc.Parse("1500.50", currency.NGN)` |
+| An integer in the smallest unit, e.g. from a provider's webhook in kobo | `ledger.Minor(1050075, currency.NGN)` |
+| An integer and its precision | `ledger.Precise(big.NewInt(45600000), 100000000, currency.BTC)` |
 | A decimal and a precision of your choice, without a `Service` | `ledger.ParseDecimal("12.3456", "OJA", 10000)` |
 | A JSON body from your app's client | `json.Unmarshal` into a `ledger.Money` |
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -17,15 +18,15 @@ func bulkBalance(w ledger.Wallet, id ledger.AccountID) string {
 
 func TestBulkPayouts(t *testing.T) {
 	svc, core, wallet, _ := setup(t, ledger.Config{
-		Limits: []ledger.Limit{{Tier: "*", Currency: "NGN", PerTransaction: "100000"}},
+		Limits: []ledger.Limit{{Tier: "*", Currency: currency.NGN, PerTransaction: "100000"}},
 	})
-	ada := customer(wallet, "user_ada", "Ada", "NGN")
-	tunde := customer(wallet, "user_tunde", "Tunde", "NGN")
+	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_tunde", "Tunde", currency.NGN)
 	shop, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", OrganizationName: "Chidi Stores Ltd",
-		Currencies: []string{"NGN"}, ExternalID: "merchant_311", MetaData: map[string]any{"tier": "business"}})
+		Currencies: []string{currency.NGN}, ExternalID: "merchant_311", MetaData: map[string]any{"tier": "business"}})
 	check(err)
-	adaNGN, tundeNGN, chidi := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID, shop.Accounts["NGN"].ID
-	fund(wallet, chidi, "600000", "NGN", "chidi_bank_transfer_0925")
+	adaNGN, tundeNGN, chidi := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID, shop.Accounts[currency.NGN].ID
+	fund(wallet, chidi, "600000", currency.NGN, "chidi_bank_transfer_0925")
 
 	begin("bulk-payouts/payroll")
 	// sample: bulk-payouts/payroll
@@ -39,7 +40,7 @@ func TestBulkPayouts(t *testing.T) {
 	for i, s := range staff {
 		items = append(items, ledger.TransferInput{
 			From: chidi, To: s.account,
-			Amount: ledger.Amount(s.salary, "NGN"), Fee: ledger.NoFee,
+			Amount: ledger.Amount(s.salary, currency.NGN), Fee: ledger.NoFee,
 			Reference:   fmt.Sprintf("payroll_2026_09_%d", i+1), // unique per item
 			Description: "September salary",
 		})
@@ -59,8 +60,8 @@ func TestBulkPayouts(t *testing.T) {
 	// sample: bulk-payouts/atomic-fail
 	// October: the second salary is more than Chidi Stores has left.
 	_, err = wallet.Bulk(ctx, ledger.BulkTransferInput{Atomic: true, Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("85000", "NGN"), Fee: ledger.NoFee, Reference: "payroll_2026_10_1"},
-		{From: chidi, To: adaNGN, Amount: ledger.Amount("900000", "NGN"), Fee: ledger.NoFee, Reference: "payroll_2026_10_2"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("85000", currency.NGN), Fee: ledger.NoFee, Reference: "payroll_2026_10_1"},
+		{From: chidi, To: adaNGN, Amount: ledger.Amount("900000", currency.NGN), Fee: ledger.NoFee, Reference: "payroll_2026_10_2"},
 	}})
 	fmt.Println("refused:", errors.Is(err, ledger.ErrInsufficientFunds))
 	fmt.Println("Chidi Stores unchanged:", bulkBalance(wallet, chidi), "Tunde unchanged:", bulkBalance(wallet, tundeNGN))
@@ -71,8 +72,8 @@ func TestBulkPayouts(t *testing.T) {
 	// sample: bulk-payouts/non-atomic
 	// Without Atomic, each item stands alone and a bad one is skipped.
 	b, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10000", "NGN"), Fee: ledger.NoFee, Reference: "bonus_1"},
-		{From: chidi, To: adaNGN, Amount: ledger.Amount("900000", "NGN"), Fee: ledger.NoFee, Reference: "bonus_2"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.NoFee, Reference: "bonus_1"},
+		{From: chidi, To: adaNGN, Amount: ledger.Amount("900000", currency.NGN), Fee: ledger.NoFee, Reference: "bonus_2"},
 	}})
 	check(err)
 	fmt.Println(b.Status, "count:", b.Count)
@@ -86,8 +87,8 @@ func TestBulkPayouts(t *testing.T) {
 	// sample: bulk-payouts/pending
 	// Hold the batch until the finance lead approves it.
 	held, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Atomic: true, Pending: true, Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("20000", "NGN"), Fee: ledger.NoFee, Reference: "commission_q3_1"},
-		{From: chidi, To: adaNGN, Amount: ledger.Amount("30000", "NGN"), Fee: ledger.NoFee, Reference: "commission_q3_2"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("20000", currency.NGN), Fee: ledger.NoFee, Reference: "commission_q3_1"},
+		{From: chidi, To: adaNGN, Amount: ledger.Amount("30000", currency.NGN), Fee: ledger.NoFee, Reference: "commission_q3_2"},
 	}})
 	check(err)
 	acct, err := wallet.GetAccount(ctx, chidi)
@@ -99,7 +100,7 @@ func TestBulkPayouts(t *testing.T) {
 	fmt.Println("after confirm:", bulkBalance(wallet, chidi))
 
 	held2, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Pending: true, Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "refund_run_1"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "refund_run_1"},
 	}})
 	check(err)
 	_, err = wallet.Cancel(ctx, held2.BatchID) // turned down: every item is released
@@ -113,8 +114,8 @@ func TestBulkPayouts(t *testing.T) {
 	begin("bulk-payouts/async")
 	// sample: bulk-payouts/async
 	queued, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Atomic: true, Async: true, Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "tips_0930_1"},
-		{From: chidi, To: adaNGN, Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "tips_0930_2"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "tips_0930_1"},
+		{From: chidi, To: adaNGN, Amount: ledger.Amount("1000", currency.NGN), Fee: ledger.NoFee, Reference: "tips_0930_2"},
 	}})
 	check(err)
 	fmt.Println(queued.Status)
@@ -132,11 +133,11 @@ func TestBulkPayouts(t *testing.T) {
 	// sample: bulk-payouts/limits
 	// Every account here may send at most ₦100,000 per transaction.
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: chidi, To: tundeNGN,
-		Amount: ledger.Amount("150000", "NGN"), Fee: ledger.NoFee, Reference: "big_one"})
+		Amount: ledger.Amount("150000", currency.NGN), Fee: ledger.NoFee, Reference: "big_one"})
 	fmt.Println("Transfer:", errors.Is(err, ledger.ErrLimitExceeded))
 
 	big, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("150000", "NGN"), Fee: ledger.NoFee, Reference: "big_one_bulk"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("150000", currency.NGN), Fee: ledger.NoFee, Reference: "big_one_bulk"},
 	}})
 	check(err)
 	fmt.Println("Bulk:", big.Status) // not checked against limits
@@ -149,13 +150,13 @@ func TestBulkPayouts(t *testing.T) {
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 
 	_, err = wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10", "NGN"), Fee: ledger.NoFee, Reference: "dup"},
-		{From: chidi, To: adaNGN, Amount: ledger.Amount("10", "NGN"), Fee: ledger.NoFee, Reference: "dup"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10", currency.NGN), Fee: ledger.NoFee, Reference: "dup"},
+		{From: chidi, To: adaNGN, Amount: ledger.Amount("10", currency.NGN), Fee: ledger.NoFee, Reference: "dup"},
 	}})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 
 	_, err = wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10", "NGN"), Reference: "no_fee"},
+		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10", currency.NGN), Reference: "no_fee"},
 	}})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 

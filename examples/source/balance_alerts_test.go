@@ -7,15 +7,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 func TestBalanceAlerts(t *testing.T) {
 	svc, core, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	chidi := customer(wallet, "merchant_311", "Chidi Stores", "NGN")
-	adaNGN, chidiNGN := ada.Accounts["NGN"].ID, chidi.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "5000", "NGN", "paystack_T100")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	chidi := customer(wallet, "merchant_311", "Chidi Stores", currency.NGN)
+	adaNGN, chidiNGN := ada.Accounts[currency.NGN].ID, chidi.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "5000", currency.NGN, "paystack_T100")
 
 	begin("balance-alerts/account")
 	// sample: balance-alerts/account
@@ -37,9 +38,9 @@ func TestBalanceAlerts(t *testing.T) {
 	// Alert finance when Paystack owes Oja more than ₦100,000 not yet settled.
 	// @PaystackClearing is an asset: Blnk stores it negative, so "owes more" is "below -100,000".
 	psk, err := ops.WatchBalance(ctx, ledger.WatchInput{
-		House:     ledger.HouseRef{Indicator: ledger.ClearingAccount("paystack"), Currency: "NGN"},
+		House:     ledger.HouseRef{Indicator: ledger.ClearingAccount("paystack"), Currency: currency.NGN},
 		Operator:  "<",
-		Threshold: ledger.Amount("-100000", "NGN"),
+		Threshold: ledger.Amount("-100000", currency.NGN),
 	})
 	check(err)
 	fmt.Println(psk.ID, "on", psk.AccountID, psk.Field, psk.Operator, psk.Threshold.Display)
@@ -51,7 +52,7 @@ func TestBalanceAlerts(t *testing.T) {
 	// Ada pays Chidi Stores twice: ₦4,500, then ₦200.
 	for i, amt := range []string{"4500", "200"} {
 		_, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidiNGN,
-			Amount: ledger.Amount(amt, "NGN"), Fee: ledger.NoFee, Reference: fmt.Sprintf("pay_%d", i)})
+			Amount: ledger.Amount(amt, currency.NGN), Fee: ledger.NoFee, Reference: fmt.Sprintf("pay_%d", i)})
 		check(err)
 	}
 
@@ -109,14 +110,14 @@ func TestBalanceAlerts(t *testing.T) {
 
 	for i := 0; i < 3; i++ { // three small payments while below ₦1,000
 		_, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidiNGN,
-			Amount: ledger.Amount("50", "NGN"), Fee: ledger.NoFee, Reference: fmt.Sprintf("small_%d", i)})
+			Amount: ledger.Amount("50", currency.NGN), Fee: ledger.NoFee, Reference: fmt.Sprintf("small_%d", i)})
 		check(err)
 		deliver(fmt.Sprintf("pays ₦50 (small_%d)", i))
 	}
-	fund(wallet, adaNGN, "3000", "NGN", "paystack_T101")
+	fund(wallet, adaNGN, "3000", currency.NGN, "paystack_T101")
 	deliver("tops up ₦3,000")
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: chidiNGN,
-		Amount: ledger.Amount("2500", "NGN"), Fee: ledger.NoFee, Reference: "pay_big"})
+		Amount: ledger.Amount("2500", currency.NGN), Fee: ledger.NoFee, Reference: "pay_big"})
 	check(err)
 	deliver("pays ₦2,500")
 	// end
@@ -129,7 +130,7 @@ func TestBalanceAlerts(t *testing.T) {
 		AccountID: chidiNGN,
 		Field:     "inflight_debit_balance",
 		Operator:  ">",
-		Threshold: ledger.Amount("1000", "NGN"),
+		Threshold: ledger.Amount("1000", currency.NGN),
 	})
 	check(err)
 	fmt.Println(pend.Field, pend.Operator, pend.Threshold.Display)
@@ -147,7 +148,7 @@ func TestBalanceAlerts(t *testing.T) {
 	check(ops.UnwatchBalance(ctx, exact.ID))
 
 	before := len(core.Events())
-	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: chidiNGN, Amount: ledger.Amount("2000", "NGN"),
+	w, err := wallet.Withdraw(ctx, ledger.WithdrawInput{AccountID: chidiNGN, Amount: ledger.Amount("2000", currency.NGN),
 		Fee: ledger.NoFee, Reference: "payout_7001", Provider: "flutterwave"})
 	check(err)
 	alerts := 0
@@ -165,7 +166,7 @@ func TestBalanceAlerts(t *testing.T) {
 
 	begin("balance-alerts/errors")
 	// sample: balance-alerts/errors
-	fees := ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"}
+	fees := ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN}
 	th := ledger.Amount("1000", "")
 
 	_, err = ops.WatchBalance(ctx, ledger.WatchInput{AccountID: adaNGN, House: fees, Operator: ">", Threshold: th})
@@ -180,7 +181,7 @@ func TestBalanceAlerts(t *testing.T) {
 	_, err = ops.WatchBalance(ctx, ledger.WatchInput{AccountID: adaNGN, Field: "available", Operator: "<", Threshold: th})
 	fmt.Println("bad field:", errors.Is(err, ledger.ErrInvalidInput))
 
-	_, err = ops.WatchBalance(ctx, ledger.WatchInput{AccountID: adaNGN, Operator: "<", Threshold: ledger.Amount("10", "USD")})
+	_, err = ops.WatchBalance(ctx, ledger.WatchInput{AccountID: adaNGN, Operator: "<", Threshold: ledger.Amount("10", currency.USD)})
 	fmt.Println("wrong currency:", errors.Is(err, ledger.ErrInvalidInput))
 
 	_, err = ops.WatchBalance(ctx, ledger.WatchInput{House: fees, Operator: ">", Threshold: th})

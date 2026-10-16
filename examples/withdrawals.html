@@ -33,9 +33,9 @@
 <figure class="code"><figcaption>Ada withdraws ₦20,000 through Flutterwave</figcaption><pre><code><span class="c">// Ada withdraws ₦20,000 to her GTBank account through Flutterwave.</span>
 wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>:   adaNGN,
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// what reaches her bank</span>
-	<span class="t">Reference</span>:   <span class="s">&quot;wd_01J8ZM7R2X&quot;</span>,               <span class="c">// generate once, when she taps &quot;Withdraw&quot;</span>
-	<span class="t">Provider</span>:    <span class="s">&quot;flutterwave&quot;</span>,                 <span class="c">// credits @FlutterwaveClearing</span>
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>), <span class="c">// what reaches her bank</span>
+	<span class="t">Reference</span>:   <span class="s">&quot;wd_01J8ZM7R2X&quot;</span>,                      <span class="c">// generate once, when she taps &quot;Withdraw&quot;</span>
+	<span class="t">Provider</span>:    <span class="s">&quot;flutterwave&quot;</span>,                        <span class="c">// credits @FlutterwaveClearing</span>
 	<span class="t">Description</span>: <span class="s">&quot;Withdrawal to GTBank ****4410&quot;</span>,
 	<span class="c">// Fee left out: Config.Fees charges ₦50 on top</span>
 })
@@ -50,7 +50,7 @@ check(err)
 fmt.<span class="t">Println</span>(done.<span class="t">EntryStatus</span>)
 show(adaNGN, <span class="s">&quot;Ada&quot;</span>)
 <span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;@FlutterwaveClearing&quot;</span>, ledger.<span class="t">FeeIncomeAccount</span>} {
-	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	check(err)
 	fmt.<span class="t">Println</span>(name, h.<span class="t">Balance</span>.<span class="t">Display</span>)
 }</code></pre></figure>
@@ -64,7 +64,7 @@ Ada: 179950.00 available: 179950.00 pending out: 0.00
 <h2 id="when-the-provider-fails"><a href="#when-the-provider-fails">When the provider fails</a></h2>
 <figure class="code"><figcaption>Flutterwave rejects Tunde's payout</figcaption><pre><code>wd, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>: tundeNGN,
-	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZM9K4T&quot;</span>,
 	<span class="t">Provider</span>:  <span class="s">&quot;flutterwave&quot;</span>,
 })
@@ -84,7 +84,7 @@ Tunde: 30000.00 available: 30000.00 pending out: 0.00</pre></figure>
 <figure class="code"><figcaption>An agent pays Ada ₦5,000 in cash</figcaption><pre><code><span class="c">// An agent paid Ada ₦5,000 cash over the counter: there is nothing to wait for.</span>
 wd, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
 	<span class="t">AccountID</span>:       adaNGN,
-	<span class="t">Amount</span>:          ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:          ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>:             ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>:       <span class="s">&quot;cashout_agent17_5521&quot;</span>,
 	<span class="t">ClearingAccount</span>: <span class="s">&quot;@AgentCashPayable&quot;</span>, <span class="c">// exact account, overrides Provider</span>
@@ -101,13 +101,13 @@ Ada: 174950.00 available: 174950.00 pending out: 0.00</pre></figure>
 <figure class="code"><figcaption>Two payouts that never get an answer</figcaption><pre><code><span class="c">// Default: a withdrawal the provider never answers is cancelled after</span>
 <span class="c">// Config.WithdrawalHoldTTL (24h).</span>
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZMB1C2&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 })
 check(err)
 <span class="c">// ExpiresIn sets a shorter window for this one.</span>
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZMB3D4&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 	<span class="t">ExpiresIn</span>: <span class="n">2</span> * time.<span class="t">Hour</span>,
 })
@@ -129,7 +129,7 @@ after 25h: 30000.00 available: 30000.00 pending out: 0.00</pre></figure>
 <span class="k">var</span> ids []<span class="b">string</span>
 <span class="k">for</span> i, amount := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;2000&quot;</span>, <span class="s">&quot;3000&quot;</span>} {
 	wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-		<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, <span class="s">&quot;NGN&quot;</span>),
+		<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency.<span class="t">NGN</span>),
 		<span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;wd_batch_%d&quot;</span>, i+<span class="n">1</span>), <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 	})
 	check(err)
@@ -163,12 +163,12 @@ Ada: 171850.00 available: 171850.00 pending out: 0.00</pre></figure>
 <aside class="note"><code>ledger.Chart</code> treats any <code>@…Clearing</code> account it doesn't list as an asset. For a provider you only pay out through, add it as a liability at start-up, e.g. <code>ledger.Chart[&quot;@FlutterwaveClearing&quot;] = ledger.GLDef{Type: ledger.GLLiability, Normal: ledger.CreditNormal}</code>, so reports read it the right way round.</aside>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <figure class="code"><pre><code>_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
 
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;limit (100,000 + 50 fee):&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
 
@@ -176,16 +176,16 @@ _, err = wallet.<span class="t">Confirm</span>(ctx, ids[<span class="n">0</span>
 fmt.<span class="t">Println</span>(<span class="s">&quot;confirmed twice:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))
 
 wd, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 })
 check(err)
 part := ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;&quot;</span>)
 _, err = wallet.<span class="t">Confirm</span>(ctx, wd.<span class="t">TransactionID</span>, &amp;part)
 fmt.<span class="t">Println</span>(<span class="s">&quot;partial with a fee:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-check(ops.<span class="t">FreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">LedgerID</span>, <span class="s">&quot;incident 42&quot;</span>))
+check(ops.<span class="t">FreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[currency.<span class="t">NGN</span>].<span class="t">LedgerID</span>, <span class="s">&quot;incident 42&quot;</span>))
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
-	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;ledger frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
@@ -201,7 +201,7 @@ ledger frozen: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

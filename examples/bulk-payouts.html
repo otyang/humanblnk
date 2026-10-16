@@ -42,7 +42,7 @@ staff := []<span class="k">struct</span> {
 <span class="k">for</span> i, s := <span class="k">range</span> staff {
 	items = <span class="b">append</span>(items, ledger.<span class="t">TransferInput</span>{
 		<span class="t">From</span>: chidi, <span class="t">To</span>: s.account,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(s.salary, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(s.salary, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 		<span class="t">Reference</span>:   fmt.<span class="t">Sprintf</span>(<span class="s">&quot;payroll_2026_09_%d&quot;</span>, i+<span class="n">1</span>), <span class="c">// unique per item</span>
 		<span class="t">Description</span>: <span class="s">&quot;September salary&quot;</span>,
 	})
@@ -65,8 +65,8 @@ payroll_2026_09_2 APPLIED 120000.00</pre></figure>
 <p>With <code>Atomic</code>, one item Blnk can't post fails the whole batch and nothing moves.</p>
 <figure class="code"><figcaption>October's run asks for more than Chidi Stores has</figcaption><pre><code><span class="c">// October: the second salary is more than Chidi Stores has left.</span>
 _, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Atomic</span>: <span class="b">true</span>, <span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;85000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payroll_2026_10_1&quot;</span>},
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payroll_2026_10_2&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;85000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payroll_2026_10_1&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payroll_2026_10_2&quot;</span>},
 }})
 fmt.<span class="t">Println</span>(<span class="s">&quot;refused:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
 fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores unchanged:&quot;</span>, bulkBalance(wallet, chidi), <span class="s">&quot;Tunde unchanged:&quot;</span>, bulkBalance(wallet, tundeNGN))</code></pre></figure>
@@ -75,8 +75,8 @@ Chidi Stores unchanged: 395000.00 Tunde unchanged: 85000.00</pre></figure>
 <p>Without <code>Atomic</code>, the items that can post do, and the others are left out. <code>Count</code> tells you how many went through. Check each item by its reference to find the ones that didn't.</p>
 <figure class="code"><pre><code><span class="c">// Without Atomic, each item stands alone and a bad one is skipped.</span>
 b, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_1&quot;</span>},
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_2&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_1&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_2&quot;</span>},
 }})
 check(err)
 fmt.<span class="t">Println</span>(b.<span class="t">Status</span>, <span class="s">&quot;count:&quot;</span>, b.<span class="t">Count</span>)
@@ -90,8 +90,8 @@ bonus_2 not posted: true</pre></figure>
 <p><code>Pending: true</code> creates every item INFLIGHT. The money is reserved at the sender but not moved. Pass the <code>BatchID</code> to <code>Confirm</code> to post every item, or to <code>Cancel</code> to release them all.</p>
 <figure class="code"><figcaption>Quarterly commissions approved; a refund run turned down</figcaption><pre><code><span class="c">// Hold the batch until the finance lead approves it.</span>
 held, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Atomic</span>: <span class="b">true</span>, <span class="t">Pending</span>: <span class="b">true</span>, <span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;commission_q3_1&quot;</span>},
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;commission_q3_2&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;commission_q3_1&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;commission_q3_2&quot;</span>},
 }})
 check(err)
 acct, err := wallet.<span class="t">GetAccount</span>(ctx, chidi)
@@ -103,7 +103,7 @@ check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;after confirm:&quot;</span>, bulkBalance(wallet, chidi))
 
 held2, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Pending</span>: <span class="b">true</span>, <span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;refund_run_1&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;refund_run_1&quot;</span>},
 }})
 check(err)
 _, err = wallet.<span class="t">Cancel</span>(ctx, held2.<span class="t">BatchID</span>) <span class="c">// turned down: every item is released</span>
@@ -118,8 +118,8 @@ after cancel: 335000.00 available: 335000.00</pre></figure>
 <h2 id="large-batches-async"><a href="#large-batches-async">Large batches: Async</a></h2>
 <p><code>Async: true</code> returns at once with status <code>processing</code>. Blnk works through the batch in the background and sends the outcome to your webhook as <code>bulk_transaction.applied</code>, <code>bulk_transaction.inflight</code> or <code>bulk_transaction.failed</code>.</p>
 <figure class="code"><figcaption>The webhook carries the batch id</figcaption><pre><code>queued, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Atomic</span>: <span class="b">true</span>, <span class="t">Async</span>: <span class="b">true</span>, <span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;tips_0930_1&quot;</span>},
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;tips_0930_2&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;tips_0930_1&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;tips_0930_2&quot;</span>},
 }})
 check(err)
 fmt.<span class="t">Println</span>(queued.<span class="t">Status</span>)
@@ -137,11 +137,11 @@ bulk_transaction.applied same batch: true</pre></figure>
 <p><code>Config.Limits</code> apply to transfers, but not to bulk items. The same ₦150,000 that a transfer refuses goes through in a batch.</p>
 <figure class="code"><figcaption>Every account may send at most ₦100,000 per transaction</figcaption><pre><code><span class="c">// Every account here may send at most ₦100,000 per transaction.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;Transfer:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
 
 big, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one_bulk&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one_bulk&quot;</span>},
 }})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Bulk:&quot;</span>, big.<span class="t">Status</span>) <span class="c">// not checked against limits</span></code></pre></figure>
@@ -159,13 +159,13 @@ Bulk: applied</pre></figure>
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dup&quot;</span>},
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dup&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dup&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;dup&quot;</span>},
 }})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
 _, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;no_fee&quot;</span>},
+	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;no_fee&quot;</span>},
 }})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
@@ -184,7 +184,7 @@ true ledger.Wallet.Bulk: ledger: invalid input: a batch holds at most 10,000 tra
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

@@ -34,7 +34,7 @@
 <figure class="code"><figcaption>A rent pot with a goal, and a travel pot without one</figcaption><pre><code>rent, err := wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{
 	<span class="t">ParentID</span>: adaNGN,
 	<span class="t">Name</span>:     <span class="s">&quot;Rent&quot;</span>, <span class="c">// unique per parent; opening it again returns this pot</span>
-	<span class="t">Goal</span>:     ledger.<span class="t">Amount</span>(<span class="s">&quot;600000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Goal</span>:     ledger.<span class="t">Amount</span>(<span class="s">&quot;600000&quot;</span>, currency.<span class="t">NGN</span>),
 })
 check(err)
 travel, err := wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{<span class="t">ParentID</span>: adaNGN, <span class="t">Name</span>: <span class="s">&quot;Travel&quot;</span>}) <span class="c">// no goal</span>
@@ -57,7 +57,7 @@ pot: Travel parent is Ada&#x27;s account: true</pre></figure>
 <figure class="code"><pre><code><span class="c">// Into the pot: an ordinary transfer from Ada&#x27;s main account.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
 	<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;40000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;40000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;pot_in_0901&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Save for rent&quot;</span>,
 })
 check(err)
@@ -65,7 +65,7 @@ check(err)
 <span class="c">// Out of the pot: the same call the other way.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
 	<span class="t">From</span>: rent.<span class="t">ID</span>, <span class="t">To</span>: adaNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 	<span class="t">Reference</span>: <span class="s">&quot;pot_out_0903&quot;</span>,
 })
 check(err)
@@ -83,7 +83,7 @@ Ada&#x27;s main account: 65000.00</pre></figure>
 plan, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
 	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{
 		<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>,
-		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
 		<span class="t">Reference</span>:   <span class="s">&quot;rent_plan_ada&quot;</span>, <span class="c">// occurrence i gets &quot;rent_plan_ada_i&quot;</span>
 		<span class="t">Description</span>: <span class="s">&quot;Rent savings&quot;</span>,
 	},
@@ -110,7 +110,7 @@ Ada still has: 65000.00</pre></figure>
 <figure class="code"><figcaption>The second run for each interval, starting 4 January 2027</figcaption><pre><code>first := time.<span class="t">Date</span>(<span class="n">2027</span>, <span class="n">1</span>, <span class="n">4</span>, <span class="n">8</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos)
 <span class="k">for</span> _, every := <span class="k">range</span> []ledger.<span class="t">Interval</span>{ledger.<span class="t">Daily</span>, ledger.<span class="t">Weekly</span>, {<span class="t">Days</span>: <span class="n">14</span>}, ledger.<span class="t">Monthly</span>, {<span class="t">Months</span>: <span class="n">3</span>}} {
 	occ, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
-		<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: travel.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+		<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: travel.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, currency.<span class="t">NGN</span>),
 			<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;travel_%dm%dd&quot;</span>, every.<span class="t">Months</span>, every.<span class="t">Days</span>)},
 		<span class="t">First</span>: first, <span class="t">Every</span>: every, <span class="t">Count</span>: <span class="n">2</span>,
 	})
@@ -127,7 +127,7 @@ Ada still has: 65000.00</pre></figure>
 <p>Calling <code>Schedule</code> again with the same input returns the occurrences already created, each with <code>Replayed</code> set. Nothing is scheduled twice.</p>
 <figure class="code"><pre><code><span class="c">// The app timed out and sends the same plan again.</span>
 again, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
-	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>),
 		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_plan_ada&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Rent savings&quot;</span>},
 	<span class="t">First</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">7</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos), <span class="t">Every</span>: ledger.<span class="t">Monthly</span>, <span class="t">Count</span>: <span class="n">12</span>,
 })
@@ -149,7 +149,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;Rent pot:&quot;</span>,
 
 <span class="c">// The same plan sent again after it started still replays: nothing runs twice.</span>
 again, err = wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
-	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, currency.<span class="t">NGN</span>),
 		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_plan_ada&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Rent savings&quot;</span>},
 	<span class="t">First</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">7</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos), <span class="t">Every</span>: ledger.<span class="t">Monthly</span>, <span class="t">Count</span>: <span class="n">12</span>,
 })
@@ -164,7 +164,7 @@ retry: 12 occurrences, replayed: true Rent pot: 85000.00</pre></figure>
 <p>An occurrence that runs when Ada's balance is too low is refused by Blnk with status <code>REJECTED</code>. The later occurrences are not affected.</p>
 <figure class="code"><figcaption>Ada is ₦15,000 short on 1 December</figcaption><pre><code><span class="c">// Ada spends most of her balance before 1 December.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: travel.<span class="t">ID</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pot_in_1120&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pot_in_1120&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Ada before:&quot;</span>, potBalance(wallet, adaNGN))
 
@@ -186,7 +186,7 @@ rent_plan_ada_4 scheduled</pre></figure>
 <div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada</td><td>₦25,000.00</td><td></td></tr><tr><td>Rent pot</td><td></td><td>₦25,000.00</td></tr></tbody></table></div>
 <p>Opening a pot makes a Blnk balance with <code>account_kind: pot</code>, <code>parent_account</code> and <code>pot_name</code> in its metadata, and <code>pot_goal</code> when there is a goal. No money moves when a pot is opened.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<figure class="code"><pre><code>base := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+<figure class="code"><pre><code>base := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;plan_bad&quot;</span>}
 later := core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)
 
@@ -225,7 +225,7 @@ close with a plan running: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

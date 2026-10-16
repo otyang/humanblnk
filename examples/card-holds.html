@@ -20,7 +20,7 @@
 <p class="lead">Reserve money on an account like a card authorisation, then capture all or part of it, release the rest, or let it lapse on a timer.</p>
 <nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#authorise-wallet-hold">Authorise: wallet.Hold</a><a href="#capture-in-full">Capture in full</a><a href="#capture-part-release-the-rest">Capture part, release the rest</a><a href="#paying-a-merchant-s-own-account">Paying a merchant's own account</a><a href="#timers-expiresat-and-captureat">Timers: ExpiresAt and CaptureAt</a><a href="#holds-and-limits">Holds and limits</a><a href="#options">Options</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
 <details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code>payable := <span class="k">func</span>() {
-	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">MerchantPayableAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">MerchantPayableAccount</span>, <span class="t">Currency</span>: currency.<span class="t">NGN</span>})
 	check(err)
 	fmt.<span class="t">Println</span>(<span class="s">&quot;@MerchantPayable:&quot;</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;pending in:&quot;</span>, h.<span class="t">PendingIn</span>.<span class="t">Display</span>)
 }</code></pre></figure><figure class="code"><pre><code>show := <span class="k">func</span>(who <span class="b">string</span>) {
@@ -38,7 +38,7 @@
 auth, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>:   adaNGN,
 	<span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>, <span class="c">// owed to the card network once captured</span>
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;18500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;18500&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:   <span class="s">&quot;card_auth_449201&quot;</span>, <span class="c">// the network&#x27;s authorisation id</span>
 	<span class="t">ExpiresAt</span>:   now.<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>),
 	<span class="t">Description</span>: <span class="s">&quot;Mama Nkechi&#x27;s Kitchen&quot;</span>,
@@ -66,7 +66,7 @@ Ada: 81500.00 available: 81500.00 pending out: 0.00
 <figure class="code"><figcaption>A fuel station captures twice, then releases the rest</figcaption><pre><code><span class="c">// A fuel station authorises ₦30,000, then pumps ₦12,000 and ₦6,250.50 on two captures.</span>
 fuel, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449305&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449305&quot;</span>,
 })
 check(err)
 first := ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;&quot;</span>) <span class="c">// currency taken from the hold</span>
@@ -90,7 +90,7 @@ after release: 63249.50 available: 63249.50 pending out: 0.00</pre></figure>
 h, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>:   adaNGN,
 	<span class="t">Destination</span>: chidiNGN, <span class="c">// a customer account works too</span>
-	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>),
 	<span class="t">Reference</span>:   <span class="s">&quot;hold_order_10450&quot;</span>,
 })
 check(err)
@@ -111,14 +111,14 @@ Chidi Stores pending in: 0.00 balance: 10000.00</pre></figure>
 <figure class="code"><figcaption>A hotel hold that lapses and a subscription that captures itself</figcaption><pre><code><span class="c">// A hotel holds ₦5,000; if it never captures, the hold lapses after 3 days.</span>
 _, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449410&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449410&quot;</span>,
 	<span class="t">ExpiresAt</span>: now.<span class="t">Add</span>(<span class="n">72</span> * time.<span class="t">Hour</span>),
 })
 check(err)
 <span class="c">// A subscription authorised now and captured automatically tomorrow.</span>
 _, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449411&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449411&quot;</span>,
 	<span class="t">CaptureAt</span>: now.<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>),
 	<span class="t">ExpiresAt</span>: now.<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>), <span class="c">// CaptureAt must come before ExpiresAt</span>
 })
@@ -146,7 +146,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;used today:&quot;</span
 
 atm, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;40000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449500&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;40000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449500&quot;</span>,
 })
 check(err)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, adaNGN)
@@ -171,23 +171,23 @@ after release: 0.00 left: 150000.00</pre></figure>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <figure class="code"><pre><code>_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>,
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
 
 _, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>,
 	<span class="t">CaptureAt</span>: now.<span class="t">Add</span>(<span class="n">10</span> * <span class="n">24</span> * time.<span class="t">Hour</span>), <span class="t">ExpiresAt</span>: now.<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>),
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;CaptureAt after ExpiresAt:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
-_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>})
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;no destination:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
 
 small, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
 	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>,
 })
 check(err)
 tooMuch := ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;&quot;</span>)
@@ -204,11 +204,11 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;not a hold:&quot;</span
 
 <span class="c">// A merchant under review: no new hold pays it, and an open one can&#x27;t be captured into it.</span>
 held, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e5&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e5&quot;</span>})
 check(err)
 check(ops.<span class="t">FreezeAccount</span>(ctx, chidiNGN, <span class="s">&quot;merchant review&quot;</span>))
 _, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: chidiNGN,
-	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e6&quot;</span>})
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Reference</span>: <span class="s">&quot;e6&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;hold paying a frozen merchant:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 _, err = wallet.<span class="t">Confirm</span>(ctx, held.<span class="t">TransactionID</span>, <span class="b">nil</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;capture into a frozen merchant:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
@@ -231,7 +231,7 @@ release: true</pre></figure>
 </main>
 <footer class="foot"><div class="wrap">
   <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
-  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling, and <code>ledger</code> and <code>currency</code> are <code>github.com/otyang/humanblnk/ledger</code> and <code>github.com/otyang/humanblnk/currency</code>.</p>
 </div></footer>
 </body>
 </html>

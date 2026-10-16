@@ -11,8 +11,8 @@ Pick the input by what the customer fixes:
 
 | The customer says | Use |
 |---|---|
-| "Convert $100" | `Sell: ledger.Amount("100", "USD")`; the naira is worked out |
-| "I need exactly $25" | `Buy: ledger.Amount("25", "USD")`; the naira to sell is worked out |
+| "Convert $100" | `Sell: ledger.Amount("100", currency.USD)`; the naira is worked out |
+| "I need exactly $25" | `Buy: ledger.Amount("25", currency.USD)`; the naira to sell is worked out |
 | "What would I get?" | `wallet.QuoteExchange` with the same input, see [Quotes](quotes.html) |
 | Money to another person in another currency | an exchange into your own account, then a [transfer](transfers.html) |
 

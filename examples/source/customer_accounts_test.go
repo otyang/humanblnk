@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -20,16 +21,16 @@ func TestCustomerAccounts(t *testing.T) {
 		Email:      "ada@example.com",
 		Phone:      "+2348030000000",
 		Country:    "NG",
-		Currencies: []string{"NGN", "USD"},          // at least one
-		ExternalID: "user_8812",                     // your user id: makes the call safe to retry
-		MetaData:   map[string]any{"tier": "tier2"}, // stored on the identity and on each account
+		Currencies: []string{currency.NGN, currency.USD}, // at least one
+		ExternalID: "user_8812",                          // your user id: makes the call safe to retry
+		MetaData:   map[string]any{"tier": "tier2"},      // stored on the identity and on each account
 	})
 	check(err)
 
-	adaNGN := ada.Accounts["NGN"] // *ledger.Account
+	adaNGN := ada.Accounts[currency.NGN] // *ledger.Account
 	fmt.Println("identity:", ada.ID)
 	fmt.Println("NGN account:", adaNGN.ID, adaNGN.Kind, adaNGN.Status, "tier:", adaNGN.MetaData["tier"])
-	fmt.Println("USD account:", ada.Accounts["USD"].ID, "precision:", ada.Accounts["USD"].Precision)
+	fmt.Println("USD account:", ada.Accounts[currency.USD].ID, "precision:", ada.Accounts[currency.USD].Precision)
 	// end
 	end()
 
@@ -40,11 +41,11 @@ func TestCustomerAccounts(t *testing.T) {
 		OrganizationName: "Chidi Stores Ltd", // required for organizations
 		Email:            "accounts@chidistores.ng",
 		Country:          "NG",
-		Currencies:       []string{"NGN"},
+		Currencies:       []string{currency.NGN},
 		ExternalID:       "merchant_311",
 	})
 	check(err)
-	fmt.Println(shop.Identity.IdentityType, shop.Identity.OrganizationName, shop.Accounts["NGN"].ID)
+	fmt.Println(shop.Identity.IdentityType, shop.Identity.OrganizationName, shop.Accounts[currency.NGN].ID)
 	// end
 	end()
 
@@ -53,20 +54,20 @@ func TestCustomerAccounts(t *testing.T) {
 	// The sign-up timed out and the app tries again, now also asking for BTC.
 	again, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{
 		FirstName: "Ada", LastName: "Obi",
-		Currencies: []string{"NGN", "USD", "BTC"},
+		Currencies: []string{currency.NGN, currency.USD, currency.BTC},
 		ExternalID: "user_8812", // same user id as before
 	})
 	check(err)
 	fmt.Println("same identity:", again.ID == ada.ID)
-	fmt.Println("same NGN account:", again.Accounts["NGN"].ID == adaNGN.ID)
-	fmt.Println("accounts now:", len(again.Accounts), "BTC precision:", again.Accounts["BTC"].Precision)
+	fmt.Println("same NGN account:", again.Accounts[currency.NGN].ID == adaNGN.ID)
+	fmt.Println("accounts now:", len(again.Accounts), "BTC precision:", again.Accounts[currency.BTC].Precision)
 	// end
 	end()
 
 	begin("customer-accounts/existing-identity")
 	// sample: customer-accounts/existing-identity
 	usdt, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{
-		Currency:   "USDT",
+		Currency:   currency.USDT,
 		IdentityID: ada.ID,      // link it to Ada
 		ExternalID: "user_8812", // retry-safe per ExternalID and currency
 	})
@@ -78,12 +79,12 @@ func TestCustomerAccounts(t *testing.T) {
 	begin("customer-accounts/no-identity")
 	// sample: customer-accounts/no-identity
 	float, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{
-		Currency:   "NGN",
+		Currency:   currency.NGN,
 		ExternalID: "agent_float_17",
 		MetaData:   map[string]any{"purpose": "agent float"},
 	})
 	check(err)
-	retry, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN", ExternalID: "agent_float_17"})
+	retry, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN, ExternalID: "agent_float_17"})
 	check(err)
 	fmt.Println(float.ID, "no identity:", float.IdentityID == "", "retry returns it:", retry.ID == float.ID)
 	// end
@@ -95,14 +96,14 @@ func TestCustomerAccounts(t *testing.T) {
 	check(err)
 
 	kofi, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{
-		Currency:   "GHS",
+		Currency:   currency.GHS,
 		LedgerID:   gh.ID, // overrides Config.LedgerID
 		ExternalID: "user_9100",
 	})
 	check(err)
 	fmt.Println(kofi.ID, "in", kofi.LedgerID == gh.ID)
 
-	_, err = wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "GHS", LedgerID: "ldg_doesnotexist"})
+	_, err = wallet.OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.GHS, LedgerID: "ldg_doesnotexist"})
 	fmt.Println("missing ledger:", errors.Is(err, ledger.ErrLedgerNotFound))
 	// end
 	end()
@@ -111,8 +112,8 @@ func TestCustomerAccounts(t *testing.T) {
 	// sample: customer-accounts/pot
 	rent, err := wallet.OpenPot(ctx, ledger.PotInput{
 		ParentID: adaNGN.ID,
-		Name:     "Rent",                         // unique per parent
-		Goal:     ledger.Amount("600000", "NGN"), // optional
+		Name:     "Rent",                                // unique per parent
+		Goal:     ledger.Amount("600000", currency.NGN), // optional
 	})
 	check(err)
 	fmt.Println(rent.ID, rent.Kind, rent.Currency, "goal:", rent.Goal.Display, "Ada's:", rent.IdentityID == ada.ID)
@@ -123,14 +124,14 @@ func TestCustomerAccounts(t *testing.T) {
 	// end
 	end()
 
-	fund(wallet, adaNGN.ID, "100000", "NGN", "seed_ada")
+	fund(wallet, adaNGN.ID, "100000", currency.NGN, "seed_ada")
 
 	begin("customer-accounts/escrow")
 	// sample: customer-accounts/escrow
 	esc, err := wallet.OpenEscrow(ctx, ledger.EscrowInput{
 		Payer:       adaNGN.ID,
-		Beneficiary: shop.Accounts["NGN"].ID,
-		Amount:      ledger.Amount("80000", "NGN"),
+		Beneficiary: shop.Accounts[currency.NGN].ID,
+		Amount:      ledger.Amount("80000", currency.NGN),
 		Reference:   "escrow_10450", // a retry returns the same escrow
 	})
 	check(err)
@@ -163,7 +164,7 @@ func TestCustomerAccounts(t *testing.T) {
 	_, err = wallet.OpenCustomer(ctx, ledger.CustomerInput{FirstName: "Bola"})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 
-	_, err = wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", Currencies: []string{"NGN"}})
+	_, err = wallet.OpenCustomer(ctx, ledger.CustomerInput{Type: "organization", Currencies: []string{currency.NGN}})
 	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 
 	_, err = wallet.OpenPot(ctx, ledger.PotInput{ParentID: ledger.AccountID(ledger.FeeIncomeAccount), Name: "Fees"})
@@ -174,7 +175,7 @@ func TestCustomerAccounts(t *testing.T) {
 	begin("customer-accounts/reserved")
 	// sample: customer-accounts/reserved
 	acc, err := wallet.OpenAccount(ctx, ledger.OpenAccountInput{
-		Currency: "NGN",
+		Currency: currency.NGN,
 		MetaData: map[string]any{"status": "frozen", "account_kind": "pot", "branch": "Ikeja"},
 	})
 	check(err)

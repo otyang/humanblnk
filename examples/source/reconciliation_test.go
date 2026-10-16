@@ -7,25 +7,26 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
 func TestReconciliation(t *testing.T) {
 	_, _, wallet, ops := setup(t, ledger.Config{})
-	ada := customer(wallet, "user_8812", "Ada", "NGN")
-	tunde := customer(wallet, "user_9034", "Tunde", "NGN")
-	adaNGN, tundeNGN := ada.Accounts["NGN"].ID, tunde.Accounts["NGN"].ID
-	fund(wallet, adaNGN, "50000", "NGN", "paystack_T100")
-	fund(wallet, tundeNGN, "30000", "NGN", "paystack_T200")
+	ada := customer(wallet, "user_8812", "Ada", currency.NGN)
+	tunde := customer(wallet, "user_9034", "Tunde", currency.NGN)
+	adaNGN, tundeNGN := ada.Accounts[currency.NGN].ID, tunde.Accounts[currency.NGN].ID
+	fund(wallet, adaNGN, "50000", currency.NGN, "paystack_T100")
+	fund(wallet, tundeNGN, "30000", currency.NGN, "paystack_T200")
 	day := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 
 	begin("reconciliation/inline")
 	// sample: reconciliation/inline
 	// Paystack's report for 1 September, parsed from its CSV.
 	report := []ledger.ExternalRecord{
-		{ID: "PSK-88120", Amount: ledger.Amount("50000", "NGN"), Reference: "paystack_T100", Date: day},
-		{ID: "PSK-88121", Amount: ledger.Amount("30000", "NGN"), Reference: "paystack_T200", Date: day},
-		{ID: "PSK-88122", Amount: ledger.Amount("4300", "NGN"), Reference: "paystack_T404", Date: day},
+		{ID: "PSK-88120", Amount: ledger.Amount("50000", currency.NGN), Reference: "paystack_T100", Date: day},
+		{ID: "PSK-88121", Amount: ledger.Amount("30000", currency.NGN), Reference: "paystack_T200", Date: day},
+		{ID: "PSK-88122", Amount: ledger.Amount("4300", currency.NGN), Reference: "paystack_T404", Date: day},
 	}
 	run, err := ops.StartReconciliation(ctx, ledger.ReconcileInput{
 		Source:  "paystack",
@@ -44,7 +45,7 @@ func TestReconciliation(t *testing.T) {
 	end()
 
 	// Flutterwave reports what it paid, after rounding its own way.
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("12345.67", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("12345.67", currency.NGN),
 		Fee: ledger.NoFee, Reference: "flw_in_5501", Provider: "flutterwave"})
 	check(err)
 
@@ -64,7 +65,7 @@ func TestReconciliation(t *testing.T) {
 	fmt.Println("rule:", ruleID)
 
 	flw := []ledger.ExternalRecord{
-		{ID: "FLW-3001", Amount: ledger.Amount("12346", "NGN"), Reference: "flw_in_5501", Date: day},
+		{ID: "FLW-3001", Amount: ledger.Amount("12346", currency.NGN), Reference: "flw_in_5501", Date: day},
 	}
 	strict, err := ops.StartReconciliation(ctx, ledger.ReconcileInput{Source: "flutterwave", Records: flw})
 	check(err)
@@ -89,14 +90,14 @@ func TestReconciliation(t *testing.T) {
 	begin("reconciliation/fee-legs")
 	// sample: reconciliation/fee-legs
 	// Oja charges Ada ₦300 on a ₦20,000 Paystack deposit.
-	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("20000", "NGN"),
+	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: adaNGN, Amount: ledger.Amount("20000", currency.NGN),
 		Fee: ledger.Amount("300", ""), Reference: "paystack_T300", Provider: "paystack"})
 	check(err)
 
 	// Blnk stores it as two legs, each with its own reference.
 	adaSide, err := wallet.History(ctx, adaNGN, ledger.HistoryQuery{Limit: 1})
 	check(err)
-	feeSide, err := ops.HouseHistory(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: "NGN"},
+	feeSide, err := ops.HouseHistory(ctx, ledger.HouseRef{Indicator: ledger.FeeIncomeAccount, Currency: currency.NGN},
 		ledger.HistoryQuery{Limit: 1})
 	check(err)
 	fmt.Println("Ada's leg:", adaSide.Items[0].Reference, adaSide.Items[0].Amount.Display)
@@ -104,7 +105,7 @@ func TestReconciliation(t *testing.T) {
 
 	// Paystack reports one line of ₦20,000 under paystack_T300.
 	one, err := ops.StartReconciliation(ctx, ledger.ReconcileInput{Source: "paystack",
-		Records: []ledger.ExternalRecord{{ID: "PSK-88130", Amount: ledger.Amount("20000", "NGN"),
+		Records: []ledger.ExternalRecord{{ID: "PSK-88130", Amount: ledger.Amount("20000", currency.NGN),
 			Reference: "paystack_T300", Date: day}}})
 	check(err)
 	fmt.Println("one_to_one:", one.Matched, "matched,", one.Unmatched, "unmatched")
@@ -113,7 +114,7 @@ func TestReconciliation(t *testing.T) {
 
 	begin("reconciliation/errors")
 	// sample: reconciliation/errors
-	line := []ledger.ExternalRecord{{ID: "PSK-1", Amount: ledger.Amount("100", "NGN"), Reference: "r", Date: day}}
+	line := []ledger.ExternalRecord{{ID: "PSK-1", Amount: ledger.Amount("100", currency.NGN), Reference: "r", Date: day}}
 
 	_, err = ops.StartReconciliation(ctx, ledger.ReconcileInput{Records: line})
 	fmt.Println("no source:", errors.Is(err, ledger.ErrInvalidInput))

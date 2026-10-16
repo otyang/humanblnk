@@ -9,6 +9,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -28,7 +29,7 @@ func TestObservability(t *testing.T) {
 	wallet := l.Wallet() // hand this to the rest of the app, as before
 
 	ada, err := wallet.OpenCustomer(ctx, ledger.CustomerInput{
-		FirstName: "Ada", LastName: "Obi", Currencies: []string{"NGN"}, ExternalID: "user_8812",
+		FirstName: "Ada", LastName: "Obi", Currencies: []string{currency.NGN}, ExternalID: "user_8812",
 		MetaData: map[string]any{"tier": "tier2"},
 	})
 	check(err)
@@ -37,8 +38,8 @@ func TestObservability(t *testing.T) {
 	// end
 	end()
 
-	adaNGN := ada.Accounts["NGN"].ID
-	tunde, err := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGN"})
+	adaNGN := ada.Accounts[currency.NGN].ID
+	tunde, err := l.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
 	check(err)
 
 	begin("observability/log")
@@ -55,12 +56,12 @@ func TestObservability(t *testing.T) {
 	logged := ledger.Instrument(svc, ledger.LogObserver(logger))
 
 	_, err = logged.Wallet().Deposit(ctx, ledger.DepositInput{AccountID: adaNGN,
-		Amount: ledger.Amount("5000", "NGN"), Fee: ledger.NoFee, Reference: "paystack_T8001", Provider: "paystack"})
+		Amount: ledger.Amount("5000", currency.NGN), Fee: ledger.NoFee, Reference: "paystack_T8001", Provider: "paystack"})
 	check(err)
 	_, _ = logged.Wallet().Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tunde.ID, // more than she has
-		Amount: ledger.Amount("9000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_8001"})
+		Amount: ledger.Amount("9000", currency.NGN), Fee: ledger.NoFee, Reference: "p2p_8001"})
 	_, _ = logged.Wallet().Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tunde.ID, // no reference: a bug
-		Amount: ledger.Amount("100", "NGN"), Fee: ledger.NoFee})
+		Amount: ledger.Amount("100", currency.NGN), Fee: ledger.NoFee})
 	check(logged.Ops().FreezeAccount(ctx, tunde.ID, "chargeback"))
 	// end
 	end()
@@ -87,10 +88,10 @@ func TestObservability(t *testing.T) {
 
 	for i, amount := range []string{"500", "700", "90000"} {
 		_, _ = m.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tunde.ID,
-			Amount: ledger.Amount(amount, "NGN"), Fee: ledger.NoFee, Reference: fmt.Sprint("p2p_820", i)})
+			Amount: ledger.Amount(amount, currency.NGN), Fee: ledger.NoFee, Reference: fmt.Sprint("p2p_820", i)})
 	}
 	_, _ = m.Transfer(ctx, ledger.TransferInput{From: adaNGN, To: tunde.ID,
-		Amount: ledger.Amount("100", "NGN"), Fee: ledger.NoFee}) // no reference
+		Amount: ledger.Amount("100", currency.NGN), Fee: ledger.NoFee}) // no reference
 	_, _ = m.GetAccount(ctx, adaNGN)
 
 	keys := make([]string, 0, len(counts))
