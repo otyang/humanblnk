@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Close an account · humanblnk</title>
+<meta name="description" content="Close a customer account for good: sweep what is left to another account or out through a provider, with a reason and a second person&#x27;s approval.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>Close an account</h1>
+<p class="lead">Close a customer account for good: sweep what is left to another account or out through a provider, with a reason and a second person's approval.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#when-to-close">When to close</a><a href="#sweep-to-another-account">Sweep to another account</a><a href="#pay-the-balance-out">Pay the balance out</a><a href="#an-empty-account">An empty account</a><a href="#the-fields">The fields</a><a href="#approvals">Approvals</a><a href="#what-blocks-a-closure">What blocks a closure</a><a href="#after-the-closure">After the closure</a><a href="#money-that-arrives-late">Money that arrives late</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure></details>
+<article>
+<h2 id="when-to-close"><a href="#when-to-close">When to close</a></h2>
+<p>A customer leaves Oja, an account was opened twice by mistake, or a merchant is offboarded. Closing is final. A closed account is never reopened, and every later movement into or out of it is refused. If the customer comes back, open a new account.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Stop money for a while during a review</td><td><code>ops.FreezeAccount</code>. See <a href="freeze.html">Freeze and unfreeze</a></td></tr><tr><td>Move the balance to the customer's other account, then close</td><td><code>ops.CloseAccount</code> with <code>SweepTo</code> set to that account</td></tr><tr><td>Pay the balance out to the customer's bank, then close</td><td><code>ops.CloseAccount</code> with <code>SweepTo</code> set to the payout clearing account, or <code>wallet.Withdraw</code> first and close at zero</td></tr><tr><td>Close an account with nothing in it</td><td><code>ops.CloseAccount</code> without <code>SweepTo</code></td></tr><tr><td>A savings pot under an account</td><td><code>ops.CloseAccount</code> on the pot, sweeping to its parent</td></tr></tbody></table></div>
+<h2 id="sweep-to-another-account"><a href="#sweep-to-another-account">Sweep to another account</a></h2>
+<figure class="code"><figcaption>Ada closes her side-business account</figcaption><pre><code><span class="c">// Ada no longer needs her side-business account. The rest goes to her main account.</span>
+closed, err := ops.<span class="t">CloseAccount</span>(ctx, side.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{
+	<span class="t">Reason</span>:      <span class="s">&quot;customer request&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">SweepTo</span>:     adaNGN.<span class="t">ID</span>,
+	<span class="t">Reference</span>:   <span class="s">&quot;close_ada_side&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, closed.<span class="t">Status</span>, <span class="s">&quot;balance:&quot;</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;reason:&quot;</span>, closed.<span class="t">MetaData</span>[<span class="s">&quot;status_reason&quot;</span>])
+fmt.<span class="t">Println</span>(<span class="s">&quot;requested by:&quot;</span>, closed.<span class="t">MetaData</span>[<span class="s">&quot;closed_requested_by&quot;</span>], <span class="s">&quot;approved by:&quot;</span>, closed.<span class="t">MetaData</span>[<span class="s">&quot;closed_approved_by&quot;</span>])
+
+main, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s main account:&quot;</span>, main.<span class="t">Balance</span>.<span class="t">Display</span>)
+
+sweep, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;close_ada_side&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;sweep:&quot;</span>, sweep.<span class="t">Amount</span>.<span class="t">Display</span>, sweep.<span class="t">Source</span>, <span class="s">&quot;-&gt;&quot;</span>, sweep.<span class="t">Destination</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;sweep metadata:&quot;</span>, sweep.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>], <span class="s">&quot;/&quot;</span>, sweep.<span class="t">MetaData</span>[<span class="s">&quot;close_reason&quot;</span>])</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>status: closed balance: 0.00
+reason: customer request
+requested by: ops.kemi approved by: lead.femi
+Ada&#x27;s main account: 55500.00
+sweep: 15500.00 bln_000011 -&gt; bln_000003
+sweep metadata: account_closure / customer request</pre></figure>
+<ul><li>The remaining balance moves to <code>SweepTo</code> in one transfer, then the account is marked <code>closed</code>.</li><li>The returned <code>*Account</code> is read back after the closure, so <code>Status</code> is <code>closed</code> and <code>Balance</code> is zero.</li><li><code>Reason</code>, <code>RequestedBy</code> and <code>ApprovedBy</code> are stored on the account as <code>status_reason</code>, <code>closed_requested_by</code> and <code>closed_approved_by</code>.</li><li>The sweep is an ordinary Blnk transaction. Its <code>Reference</code> is the one you gave, its description is <code>Account closure</code>, and it carries <code>txn_type: account_closure</code> and <code>close_reason</code>.</li></ul>
+<h2 id="pay-the-balance-out"><a href="#pay-the-balance-out">Pay the balance out</a></h2>
+<p><code>SweepTo</code> also takes a house account. Sweep to a provider's clearing account when the money goes to the customer's bank.</p>
+<figure class="code"><figcaption>Tunde leaves; Flutterwave pays his bank</figcaption><pre><code><span class="c">// Tunde leaves Oja. His ₦125,000 is paid to his bank through Flutterwave.</span>
+payout := ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;flutterwave&quot;</span>)) <span class="c">// &quot;@FlutterwaveClearing&quot;</span>
+closed, err = ops.<span class="t">CloseAccount</span>(ctx, tundeNGN.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{
+	<span class="t">Reason</span>:      <span class="s">&quot;customer left: final payout to GTBank ****4410&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">SweepTo</span>:     payout,
+	<span class="t">Reference</span>:   <span class="s">&quot;close_tunde&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, closed.<span class="t">Status</span>, <span class="s">&quot;balance:&quot;</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)
+
+fw, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="b">string</span>(payout), <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(fw.<span class="t">Indicator</span>, <span class="s">&quot;balance:&quot;</span>, fw.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>status: closed balance: 0.00
+@FlutterwaveClearing balance: 125000.00</pre></figure>
+<ul><li><code>ledger.ClearingAccount(&quot;flutterwave&quot;)</code> gives <code>@FlutterwaveClearing</code>. <code>ledger.AccountID(&quot;@PayoutClearing&quot;)</code> works the same way when you don't track payouts per provider.</li><li>The sweep posts at once. It is not a pending withdrawal, so there is nothing to <code>Confirm</code> or <code>Cancel</code>. Send the bank transfer yourself, then clear it against your bank with <code>ops.RecordSettlement</code> as usual. See <a href="settlement.html">Provider settlement</a>.</li><li>If you want the payout to go through your normal withdrawal flow (pending until Flutterwave confirms, auto-cancel on timeout), call <code>wallet.Withdraw</code> for the full balance first, <code>Confirm</code> it when Flutterwave reports success, then close the empty account.</li></ul>
+<h2 id="an-empty-account"><a href="#an-empty-account">An empty account</a></h2>
+<figure class="code"><figcaption>A duplicate account opened by mistake</figcaption><pre><code><span class="c">// An account opened by mistake and never used: no SweepTo or Reference needed.</span>
+spare, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_ada_dup&quot;</span>})
+check(err)
+closed, err = ops.<span class="t">CloseAccount</span>(ctx, spare.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{
+	<span class="t">Reason</span>:      <span class="s">&quot;duplicate account&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(closed.<span class="t">ID</span>, closed.<span class="t">Status</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>bln_000016 closed 0.00</pre></figure>
+<p>With a zero balance there is nothing to move, so <code>SweepTo</code> and <code>Reference</code> can be left out. <code>Reason</code> and <code>ApprovedBy</code> are still required.</p>
+<h2 id="the-fields"><a href="#the-fields">The fields</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Required</th><th>What it does</th></tr></thead><tbody><tr><td><code>Reason</code></td><td>yes</td><td>why the account is closed, e.g. <code>customer request</code> or <code>dormant 24 months</code>. Stored as <code>status_reason</code> and on the sweep as <code>close_reason</code></td></tr><tr><td><code>ApprovedBy</code></td><td>yes</td><td>who approved the closure. Missing gives <code>ErrApprovalRequired</code></td></tr><tr><td><code>RequestedBy</code></td><td>no</td><td>who asked for it. When set, it must differ from <code>ApprovedBy</code>, ignoring case</td></tr><tr><td><code>SweepTo</code></td><td>when the balance isn't zero</td><td>where the balance goes: a customer account, or a house account such as <code>@PayoutClearing</code></td></tr><tr><td><code>Reference</code></td><td>when the balance isn't zero</td><td>the sweep's idempotency key</td></tr></tbody></table></div>
+<h2 id="approvals"><a href="#approvals">Approvals</a></h2>
+<p>Closing can't be undone, so it takes two people, like an <a href="adjustments.html">adjustment</a>. In Oja's back office, ops.kemi raises the request and lead.femi approves it.</p>
+<figure class="code"><pre><code>_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;no reason:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;no approver:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrApprovalRequired</span>))
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;Ops.Kemi&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;self-approval:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrApprovalRequired</span>))
+fmt.<span class="t">Println</span>(err)
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;balance, no SweepTo:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>no reason: true
+no approver: true
+self-approval: true
+ledger.Ops.CloseAccount: ledger: approval required: requester cannot approve their own closure
+balance, no SweepTo: true</pre></figure>
+<ul><li>The check compares names without regard to case, so <code>ops.kemi</code> can't approve as <code>Ops.Kemi</code>.</li><li>humanblnk records the names you pass. It doesn't know who your staff are, so check in your own app that the approver is allowed to approve.</li></ul>
+<h2 id="what-blocks-a-closure"><a href="#what-blocks-a-closure">What blocks a closure</a></h2>
+<p><code>CloseAccount</code> refuses with <code>ErrPendingActivity</code> while money could still reach or leave the account after it is closed. Each refusal names what to deal with first.</p>
+<div class="tablewrap"><table><thead><tr><th>Blocker</th><th>Why</th><th>How to clear it</th></tr></thead><tbody><tr><td>a pending transaction (hold, withdrawal, pending deposit or transfer)</td><td>it would settle into or out of a closed account</td><td><code>wallet.Confirm</code> or <code>wallet.Cancel</code> it</td></tr><tr><td>a scheduled transfer into or out of the account</td><td>Blnk posts it by itself, so humanblnk couldn't stop it later</td><td>wait until it posts. humanblnk has no call to remove one</td></tr><tr><td>a pot under the account that is still open</td><td>the pot's money would be stranded</td><td>close the pot first with <code>ops.CloseAccount</code>, sweeping to the parent</td></tr><tr><td>an escrow paying into or out of the account that still holds money</td><td>releasing or refunding it would touch a closed account</td><td><code>wallet.ReleaseEscrow</code> or <code>wallet.RefundEscrow</code> it</td></tr><tr><td>a negative balance</td><td>an overdraft must be settled first</td><td>fund the account, or correct it with <code>ops.Adjust</code> (<code>ErrInvalidInput</code>)</td></tr></tbody></table></div>
+<h3 id="pending-and-scheduled-transactions">Pending and scheduled transactions</h3>
+<figure class="code"><figcaption>Ada's card hold, then her standing order</figcaption><pre><code>in := ledger.<span class="t">CloseInput</span>{
+	<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">SweepTo</span>: ledger.<span class="t">AccountID</span>(<span class="s">&quot;@PayoutClearing&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;close_ada_main&quot;</span>,
+}
+
+<span class="c">// A card hold at Chidi Stores is still pending.</span>
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;pending hold:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))
+_, err = wallet.<span class="t">Cancel</span>(ctx, hold.<span class="t">TransactionID</span>)
+check(err)
+
+<span class="c">// A standing order to Chidi Stores is due tomorrow.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: shop.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;so_ada_chidi_1&quot;</span>, <span class="t">ScheduledFor</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)})
+check(err)
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;scheduled transfer:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))
+fmt.<span class="t">Println</span>(err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>pending hold: true
+scheduled transfer: true
+ledger.Ops.CloseAccount: ledger: account has pending (INFLIGHT) activity: account bln_000003 has scheduled transfers (e.g. so_ada_chidi_1, due 2026-09-02T09:00:00Z); they must post or be removed first</pre></figure>
+<h3 id="pots-and-escrows">Pots and escrows</h3>
+<figure class="code"><figcaption>Ada's Rent pot, then an escrow with Chidi Stores</figcaption><pre><code><span class="c">// Ada&#x27;s Rent pot is still open.</span>
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;open pot:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))
+
+<span class="c">// Close the pot first, sweeping its money back to the main account.</span>
+_, err = ops.<span class="t">CloseAccount</span>(ctx, rent.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{
+	<span class="t">Reason</span>: <span class="s">&quot;parent account closing&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">SweepTo</span>: adaNGN.<span class="t">ID</span>, <span class="t">Reference</span>: <span class="s">&quot;close_ada_rent&quot;</span>,
+})
+check(err)
+
+<span class="c">// An escrow for an order from Chidi Stores still holds ₦8,000.</span>
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;escrow holding money:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))
+fmt.<span class="t">Println</span>(err)
+
+<span class="c">// The order arrives: the escrow is released to Chidi Stores.</span>
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, esc.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_10450_release&quot;</span>})
+check(err)
+
+closed, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, in)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;now:&quot;</span>, closed.<span class="t">Status</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>open pot: true
+escrow holding money: true
+ledger.Ops.CloseAccount: ledger: account has pending (INFLIGHT) activity: escrow bln_000022 still holds 8000 NGN; release or refund it first
+now: closed 0.00</pre></figure>
+<ul><li>A pot is an account, so it is closed with the same call. Give its parent as <code>SweepTo</code> when it has money in it.</li><li>An escrow blocks the closure whether the account is the payer or the beneficiary. An escrow that has been fully released or refunded doesn't.</li></ul>
+<h2 id="after-the-closure"><a href="#after-the-closure">After the closure</a></h2>
+<figure class="code"><pre><code>acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, acct.<span class="t">Status</span>)
+
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T8801&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;deposit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: shop.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;chidi_refund_44&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;transfer in:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
+
+err = ops.<span class="t">UnfreezeAccount</span>(ctx, adaNGN.<span class="t">ID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;reopen with UnfreezeAccount:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
+
+again, err := ops.<span class="t">CloseAccount</span>(ctx, adaNGN.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{}) <span class="c">// already closed: returns it</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;close again:&quot;</span>, again.<span class="t">Status</span>, <span class="s">&quot;reason kept:&quot;</span>, again.<span class="t">MetaData</span>[<span class="s">&quot;status_reason&quot;</span>])</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>status: closed
+deposit: true
+transfer in: true
+reopen with UnfreezeAccount: true
+close again: closed reason kept: customer request</pre></figure>
+<ul><li><code>Status</code> stays <code>closed</code>. <code>ops.UnfreezeAccount</code> and <code>ops.FreezeAccount</code> refuse it with <code>ErrAccountClosed</code>.</li><li>Every new movement touching the account is refused with <code>ErrAccountClosed</code>: deposits, transfers in and out, withdrawals, holds, refunds back to it.</li><li>Calling <code>CloseAccount</code> again on a closed account returns it unchanged without checking the input, so a retry is safe.</li></ul>
+<h2 id="money-that-arrives-late"><a href="#money-that-arrives-late">Money that arrives late</a></h2>
+<p>A provider reversal or a late transfer can still turn up after the account is closed. The deposit is refused with <code>ErrAccountClosed</code>, but the provider has the money. Park it in <code>@Suspense</code> with <code>ops.HoldInSuspense</code>, then claim it for the customer's new account with <code>ops.ClaimFromSuspense</code>, or send it back with <code>ops.ReturnFromSuspense</code>. <a href="suspense.html">Unidentified money</a> walks through it with a late payment for Chidi Stores' old account.</p>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>The sweep is one transaction from the account to <code>SweepTo</code>, for the whole balance. Blnk debits the source and credits the destination.</p>
+<p>Ada's side account, ₦15,500 to her main account:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's side account</td><td>15,500</td><td></td></tr><tr><td>Ada's main account</td><td></td><td>15,500</td></tr></tbody></table></div>
+<p>Tunde's account, ₦125,000 paid out through Flutterwave:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Tunde's account</td><td>125,000</td><td></td></tr><tr><td><code>@FlutterwaveClearing</code></td><td></td><td>125,000</td></tr></tbody></table></div>
+<p>Then the balance's metadata is updated: <code>status: closed</code>, <code>status_reason</code>, <code>closed_requested_by</code>, <code>closed_approved_by</code> and <code>status_changed_at</code>. An account with a zero balance gets the metadata update only. No fee is charged on a sweep.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>chidiSide, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;merchant_311_b&quot;</span>})
+check(err)
+fund(wallet, chidiSide.<span class="t">ID</span>, <span class="s">&quot;9000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;seed_chidi_b&quot;</span>)
+in = ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;merchant request&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">SweepTo</span>: adaNGN.<span class="t">ID</span>, <span class="t">Reference</span>: <span class="s">&quot;close_chidi_b&quot;</span>}
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, chidiSide.<span class="t">ID</span>, in) <span class="c">// Ada&#x27;s account is closed</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;sweep into closed:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
+
+check(ops.<span class="t">FreezeAccount</span>(ctx, shop.<span class="t">ID</span>, <span class="s">&quot;chargeback review&quot;</span>))
+in.<span class="t">SweepTo</span> = shop.<span class="t">ID</span>
+_, err = ops.<span class="t">CloseAccount</span>(ctx, chidiSide.<span class="t">ID</span>, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;sweep into frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
+in.<span class="t">SweepTo</span> = chidiSide.<span class="t">ID</span>
+_, err = ops.<span class="t">CloseAccount</span>(ctx, chidiSide.<span class="t">ID</span>, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;sweep into itself:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;house account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+
+<span class="c">// Nothing leaves a frozen ledger, closure sweeps included.</span>
+agents, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-agents&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Agents&quot;</span>})
+check(err)
+ikeja, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: agents.<span class="t">ID</span>})
+check(err)
+fund(wallet, ikeja.<span class="t">ID</span>, <span class="s">&quot;7000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;seed_ikeja&quot;</span>)
+check(ops.<span class="t">FreezeLedger</span>(ctx, agents.<span class="t">ID</span>, <span class="s">&quot;CBN directive 2026/114&quot;</span>))
+_, err = ops.<span class="t">CloseAccount</span>(ctx, ikeja.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;agent offboarded&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">SweepTo</span>: <span class="s">&quot;@PayoutClearing&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;close_ikeja&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen ledger:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))
+
+<span class="c">// A frozen account can still be closed and swept.</span>
+check(ops.<span class="t">FreezeAccount</span>(ctx, chidiSide.<span class="t">ID</span>, <span class="s">&quot;merchant offboarding&quot;</span>))
+in.<span class="t">SweepTo</span> = ledger.<span class="t">AccountID</span>(<span class="s">&quot;@PayoutClearing&quot;</span>)
+closed, err = ops.<span class="t">CloseAccount</span>(ctx, chidiSide.<span class="t">ID</span>, in)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen account closed:&quot;</span>, closed.<span class="t">Status</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>sweep into closed: true
+sweep into frozen: true
+sweep into itself: true
+house account: true
+frozen ledger: true
+frozen account closed: closed 0.00</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>no <code>Reason</code>; a balance but no <code>SweepTo</code> or <code>Reference</code>; <code>SweepTo</code> is the account itself; the balance is negative</td><td>fix the call, or settle the overdraft</td></tr><tr><td><code>ErrApprovalRequired</code></td><td>no <code>ApprovedBy</code>, or <code>ApprovedBy</code> is the same person as <code>RequestedBy</code></td><td>get a second person to approve</td></tr><tr><td><code>ErrPendingActivity</code></td><td>a pending or scheduled transaction, an open pot, or an escrow holding money</td><td>clear the blocker the message names, then retry</td></tr><tr><td><code>ErrAccountClosed</code></td><td><code>SweepTo</code> is closed; any movement on the account after closure</td><td>sweep somewhere else; open a new account for the customer</td></tr><tr><td><code>ErrAccountFrozen</code></td><td><code>SweepTo</code> is frozen</td><td>unfreeze it or sweep somewhere else. The account being closed may itself be frozen</td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>the account's ledger is frozen and there is a balance to sweep</td><td>wait for <code>ops.UnfreezeLedger</code></td></tr><tr><td><code>ErrWrongKind</code></td><td>a house account such as <code>@FeeIncome</code> passed as the account to close</td><td>house accounts are never closed</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="freeze.html">Freeze and unfreeze</a>: stop an account for a while instead of for good.</li><li><a href="suspense.html">Unidentified money</a>: money that arrives for a closed account.</li><li><a href="savings-pots.html">Savings pots and standing orders</a> and <a href="escrow.html">Escrow</a>: the things that block a closure.</li><li><a href="settlement.html">Provider settlement</a>: clear the payout clearing account against your bank.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="freeze.html"><small>Previous</small>Freeze and unfreeze</a><a class="next" href="settlement.html"><small>Next</small>Provider settlement</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

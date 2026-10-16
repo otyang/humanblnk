@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Install and connect · humanblnk</title>
+<meta name="description" content="Add the module, connect to Blnk Core or Blnk Cloud, check the setup at start-up, and hand each part of your app the one handle it needs.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
+<h1>Install and connect</h1>
+<p class="lead">Add the module, connect to Blnk Core or Blnk Cloud, check the setup at start-up, and hand each part of your app the one handle it needs.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#install">Install</a><a href="#which-constructor-to-use">Which constructor to use</a><a href="#provision-the-ledger-once">Provision the ledger once</a><a href="#connect-humanblnk-new">Connect: humanblnk.New</a><a href="#connect-in-two-steps-blnk-new-and-ledger-new">Connect in two steps: blnk.New and ledger.New</a><a href="#blnk-cloud">Blnk Cloud</a><a href="#check-at-start-up-svc-check">Check at start-up: svc.Check</a><a href="#config-fields">Config fields</a><a href="#give-each-part-of-the-app-one-handle">Give each part of the app one handle</a><a href="#errors">Errors</a><a href="#next">Next</a></nav>
+
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Oja runs a wallet app in Nigeria. Its Go services keep every balance in Blnk Core. Before the first customer signs up, Oja needs three things: the library in its module, a client that reaches Core, and a ledger for customer accounts. Then each service gets the one handle it should use.</p>
+<h2 id="install"><a href="#install">Install</a></h2>
+<figure class="code"><pre><code>go get github.com/otyang/humanblnk@latest</code></pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Requirement</th><th>Version</th></tr></thead><tbody><tr><td>Go</td><td>1.27 or later. The module has no third-party dependencies.</td></tr><tr><td>Blnk Core</td><td>0.15.4 or later, self-hosted or on Blnk Cloud. CI tests against 0.15.6 and 0.15.4.</td></tr></tbody></table></div>
+<p>Core before 0.15.3 ignores <code>dry_run</code> and would post a quoted transaction, so it is not supported. The library is pre-1.0: minor versions may change the API, and every change is in <code>CHANGELOG.md</code>.</p>
+<h2 id="which-constructor-to-use"><a href="#which-constructor-to-use">Which constructor to use</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>The usual app</td><td><code>humanblnk.New(url, cfg, opts...)</code>: one call, one import</td></tr><tr><td>You want the client too, e.g. to call <code>client.Health</code> or Blnk endpoints the library doesn't cover</td><td><code>blnk.New(url, opts...)</code>, then <code>ledger.New(client, cfg)</code></td></tr><tr><td>Tests</td><td><code>ledgertest.New(t, cfg)</code>, an in-memory Core. See <a href="testing.html">Testing your app</a></td></tr></tbody></table></div>
+<p><code>humanblnk.New</code> builds the <code>blnk.Client</code> and calls <code>ledger.New</code> for you. The root package re-exports package <code>ledger</code> with type aliases, so <code>humanblnk.Config</code> and <code>ledger.Config</code> are the same type. <code>humanblnk.NewClient</code> and <code>humanblnk.NewService</code> are the two-step names.</p>
+<h2 id="provision-the-ledger-once"><a href="#provision-the-ledger-once">Provision the ledger once</a></h2>
+<p>Customer accounts live in a Blnk ledger. Create it once, from a provisioning job, and keep its id. <code>CreateLedger</code> is idempotent by <code>Key</code>, so running the job again returns the same ledger.</p>
+<figure class="code"><figcaption>Oja creates its Nigerian ledger</figcaption><pre><code><span class="c">// Once, at provisioning time: no LedgerID yet.</span>
+boot := humanblnk.<span class="t">New</span>(blnkURL, humanblnk.<span class="t">Config</span>{}, humanblnk.<span class="t">WithAPIKey</span>(apiKey))
+check(boot.<span class="t">Check</span>(ctx)) <span class="c">// Core is up; no ledger to check yet</span>
+
+ng, err := boot.<span class="t">Ops</span>().<span class="t">CreateLedger</span>(ctx, humanblnk.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-ng&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Nigeria&quot;</span>})
+check(err)
+again, err := boot.<span class="t">Ops</span>().<span class="t">CreateLedger</span>(ctx, humanblnk.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-ng&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Nigeria&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ledger:&quot;</span>, ng.<span class="t">ID</span>, ng.<span class="t">Name</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;run again:&quot;</span>, again.<span class="t">ID</span> == ng.<span class="t">ID</span>, <span class="s">&quot;replayed:&quot;</span>, again.<span class="t">Replayed</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ledger: ldg_000002 Oja Nigeria
+run again: true replayed: true</pre></figure>
+<ul><li><code>Check</code> with no <code>Config.LedgerID</code> only checks the client and Core health.</li><li>Store <code>ng.ID</code> in your configuration (for example <code>BLNK_LEDGER_ID</code>). Every service reads it into <code>Config.LedgerID</code>.</li><li>More in <a href="ledgers.html">Provision ledgers</a>.</li></ul>
+<h2 id="connect-humanblnk-new"><a href="#connect-humanblnk-new">Connect: humanblnk.New</a></h2>
+<figure class="code"><figcaption>Oja's API server at start-up</figcaption><pre><code>svc := humanblnk.<span class="t">New</span>(blnkURL,
+	humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: ng.<span class="t">ID</span>}, <span class="c">// the id from provisioning, e.g. from BLNK_LEDGER_ID</span>
+	humanblnk.<span class="t">WithAPIKey</span>(apiKey),      <span class="c">// sent as X-Blnk-Key</span>
+)
+<span class="k">if</span> err := svc.<span class="t">Check</span>(ctx); err != <span class="b">nil</span> {
+	panic(err) <span class="c">// log.Fatal in a real app: don&#x27;t start with a broken setup</span>
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;connected to Blnk; humanblnk&quot;</span>, humanblnk.<span class="t">Version</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>connected to Blnk; humanblnk 0.1.0</pre></figure>
+<ul><li>The emulator here plays Core. In production <code>blnkURL</code> is your Core URL, such as <code>http://localhost:5001</code>, or <code>https://ENTERPRISE_PUBLIC_URL/core</code> for an Enterprise instance.</li><li><code>WithAPIKey</code> sets the <code>X-Blnk-Key</code> header. Core needs it when it runs in secure mode.</li><li>The client is safe for concurrent use. Build one <code>Service</code> at start-up and share it.</li></ul>
+<p>In a real <code>main</code> it looks like this:</p>
+<figure class="code"><pre><code>svc := humanblnk.<span class="t">New</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_URL&quot;</span>),
+	humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: humanblnk.<span class="t">LedgerID</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_LEDGER_ID&quot;</span>))},
+	humanblnk.<span class="t">WithAPIKey</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_API_KEY&quot;</span>)))
+<span class="k">if</span> err := svc.<span class="t">Check</span>(ctx); err != <span class="b">nil</span> {
+	log.<span class="t">Fatal</span>(err)
+}</code></pre></figure>
+<h2 id="connect-in-two-steps-blnk-new-and-ledger-new"><a href="#connect-in-two-steps-blnk-new-and-ledger-new">Connect in two steps: blnk.New and ledger.New</a></h2>
+<p>Build the client yourself when you want to tune it or keep a reference to it.</p>
+<figure class="code"><pre><code>client := blnk.<span class="t">New</span>(blnkURL,
+	blnk.<span class="t">WithAPIKey</span>(apiKey),
+	blnk.<span class="t">WithRetries</span>(<span class="n">5</span>, <span class="n">100</span>*time.<span class="t">Millisecond</span>),                    <span class="c">// default 3 retries from 200ms</span>
+	blnk.<span class="t">WithHTTPClient</span>(&amp;http.<span class="t">Client</span>{<span class="t">Timeout</span>: <span class="n">10</span> * time.<span class="t">Second</span>}), <span class="c">// default timeout 30s</span>
+	blnk.<span class="t">WithUserAgent</span>(<span class="s">&quot;oja-wallet/2.4&quot;</span>),                         <span class="c">// default humanblnk-go/&lt;version&gt;</span>
+)
+svc2 := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ng.<span class="t">ID</span>})
+check(svc2.<span class="t">Check</span>(ctx))
+
+h, err := client.<span class="t">Health</span>(ctx) <span class="c">// the client is usable on its own too</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Core status:&quot;</span>, h.<span class="t">Status</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Core status: UP</pre></figure>
+<h3 id="client-options">Client options</h3>
+<div class="tablewrap"><table><thead><tr><th>Option</th><th>What it changes</th><th>Default</th></tr></thead><tbody><tr><td><code>WithAPIKey(key)</code></td><td>sends <code>X-Blnk-Key</code> on every request</td><td>no key</td></tr><tr><td><code>WithInstanceID(id)</code></td><td>the Blnk Cloud instance (<code>instance_…</code>), sent as the <code>instance_id</code> query parameter</td><td>none</td></tr><tr><td><code>WithRetries(n, base)</code></td><td>how often retryable failures are retried, with jittered backoff from <code>base</code></td><td>3 retries, 200ms</td></tr><tr><td><code>WithHTTPClient(h)</code></td><td>the <code>*http.Client</code> used</td><td>a client with a 30s timeout</td></tr><tr><td><code>WithUserAgent(ua)</code></td><td>the <code>User-Agent</code> header</td><td><code>humanblnk-go/0.1.0</code></td></tr></tbody></table></div>
+<ul><li>Retried failures: 423 (lock contention), 429 (rate limit), 503 (queue backpressure), 502, 504 and network errors. Retrying a payment is safe because Blnk enforces its <code>Reference</code>.</li><li>Confirming or cancelling a pending transaction carries no reference, so it is retried only on 423, 429 and 503, when Blnk certainly did nothing. It is never retried after a network error or a gateway timeout.</li><li>Redirects are followed only to the same scheme and host, so the API key never goes anywhere else. Your own <code>http.Client</code> is copied, not changed.</li></ul>
+<h2 id="blnk-cloud"><a href="#blnk-cloud">Blnk Cloud</a></h2>
+<p>On Blnk Cloud you call Blnk's proxy, <code>CloudProxyURL</code> (<code>https://api.cloud.blnkfinance.com/proxy</code>), with a Cloud API key and your instance id:</p>
+<figure class="code"><pre><code>svc := humanblnk.<span class="t">New</span>(humanblnk.<span class="t">CloudProxyURL</span>,
+	humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: humanblnk.<span class="t">LedgerID</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_LEDGER_ID&quot;</span>))},
+	humanblnk.<span class="t">WithAPIKey</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_CLOUD_API_KEY&quot;</span>)),
+	humanblnk.<span class="t">WithInstanceID</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_INSTANCE_ID&quot;</span>))) <span class="c">// &quot;instance_…&quot;</span></code></pre></figure>
+<p>A proxy URL without an instance id, or an id that doesn't start with <code>instance_</code>, is a configuration mistake. Every call returns it, and <code>Check</code> reports it at start-up (see below).</p>
+<h2 id="check-at-start-up-svc-check"><a href="#check-at-start-up-svc-check">Check at start-up: svc.Check</a></h2>
+<p><code>svc.Check(ctx)</code> verifies, in order:</p>
+<ol><li>The client is configured correctly: an <code>http://</code> or <code>https://</code> base URL, and a valid instance id for Blnk Cloud.</li><li>Core is up and reaches its database (<code>GET /health</code> answers <code>UP</code>).</li><li><code>Config.LedgerID</code>, when set, is a ledger id, the ledger exists, and it isn't marked as a duplicate of another ledger.</li></ol>
+<h3 id="a-wrong-ledger-id">A wrong ledger id</h3>
+<figure class="code"><pre><code>wrong := humanblnk.<span class="t">New</span>(blnkURL, humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: <span class="s">&quot;ldg_typo&quot;</span>}, humanblnk.<span class="t">WithAPIKey</span>(apiKey))
+err = wrong.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ErrLedgerNotFound:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>), <span class="s">&quot;ErrNotFound:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
+
+wrongKind := humanblnk.<span class="t">New</span>(blnkURL, humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: <span class="s">&quot;bln_000123&quot;</span>}) <span class="c">// a balance id, not a ledger id</span>
+err = wrongKind.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ErrWrongKind:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Config.LedgerID: ledger.Check: ledger: ledger not found: ledger: not found: ledger ldg_typo does not exist
+ErrLedgerNotFound: true ErrNotFound: true
+ErrWrongKind: true</pre></figure>
+<p>The error starts with <code>Config.LedgerID:</code> so the log says which setting is wrong. <code>ErrLedgerNotFound</code> also matches <code>ErrNotFound</code>, and <code>ErrWrongKind</code> also matches <code>ErrInvalidInput</code>.</p>
+<h3 id="a-wrong-client-setup">A wrong client setup</h3>
+<figure class="code"><pre><code>noURL := humanblnk.<span class="t">New</span>(<span class="s">&quot;&quot;</span>, humanblnk.<span class="t">Config</span>{}) <span class="c">// BLNK_URL not set</span>
+err = noURL.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(err)
+
+noInstance := humanblnk.<span class="t">New</span>(humanblnk.<span class="t">CloudProxyURL</span>, humanblnk.<span class="t">Config</span>{}, humanblnk.<span class="t">WithAPIKey</span>(apiKey))
+err = noInstance.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(err)
+
+badInstance := humanblnk.<span class="t">New</span>(humanblnk.<span class="t">CloudProxyURL</span>, humanblnk.<span class="t">Config</span>{},
+	humanblnk.<span class="t">WithAPIKey</span>(apiKey), humanblnk.<span class="t">WithInstanceID</span>(<span class="s">&quot;deployment_7f3a&quot;</span>))
+err = badInstance.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ErrUnavailable:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ledger.Check: ledger: ledger temporarily unavailable: blnk: base URL &quot;&quot; must be an http:// or https:// URL (is BLNK_URL set?)
+ledger.Check: ledger: ledger temporarily unavailable: blnk: the Blnk Cloud proxy needs an instance ID: use WithInstanceID(&quot;instance_…&quot;)
+ledger.Check: ledger: ledger temporarily unavailable: blnk: Cloud instance ID &quot;deployment_7f3a&quot; must start with instance_ (not deployment_)
+ErrUnavailable: true</pre></figure>
+<h3 id="core-not-reachable">Core not reachable</h3>
+<figure class="code"><pre><code>core.<span class="t">Close</span>() <span class="c">// Core goes away</span>
+down := ledger.<span class="t">New</span>(blnk.<span class="t">New</span>(blnkURL, blnk.<span class="t">WithRetries</span>(<span class="n">0</span>, <span class="n">0</span>)), ledger.<span class="t">Config</span>{})
+err = down.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ErrUnavailable:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ErrUnavailable: true</pre></figure>
+<aside class="note">Client configuration mistakes and an unreachable Core both come back from <code>Check</code> as <code>ErrUnavailable</code>. Log the message: it names the actual problem. Retrying won't fix a configuration mistake.</aside>
+<h2 id="config-fields"><a href="#config-fields">Config fields</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it changes</th><th>Default</th></tr></thead><tbody><tr><td><code>LedgerID</code></td><td>the ledger new customer accounts open in. <code>Check</code> verifies it</td><td>none; <code>OpenAccount</code> needs it unless the call sets <code>LedgerID</code></td></tr><tr><td><code>Fees</code></td><td>a <code>FeeFunc</code> that prices every chargeable call with no explicit <code>Fee</code>. See <a href="fees.html">Fees</a></td><td>none: each call must set <code>Fee</code> (<code>ledger.NoFee</code> for free)</td></tr><tr><td><code>Limits</code></td><td>per-tier, per-currency caps on money leaving customer accounts. See <a href="limits.html">Limits</a></td><td>no limits</td></tr><tr><td><code>Location</code></td><td>where days and months start, for daily and monthly limits</td><td>UTC</td></tr><tr><td><code>Display</code></td><td>how amounts are shown, per currency. See <a href="money.html">Money</a></td><td><code>BuiltinDisplay</code>, then every decimal place, padded</td></tr><tr><td><code>Precisions</code></td><td>smallest-unit multiplier per currency</td><td><code>BuiltinPrecisions</code>, then <code>DefaultPrecision</code></td></tr><tr><td><code>DefaultPrecision</code></td><td>precision for currencies in neither map</td><td>100</td></tr><tr><td><code>FeeIncomeAccount</code></td><td>where fees are credited</td><td><code>@FeeIncome</code></td></tr><tr><td><code>DepositClearingAccount</code></td><td>deposit source when no <code>Provider</code> is named</td><td><code>@DepositClearing</code></td></tr><tr><td><code>PayoutClearingAccount</code></td><td>withdrawal destination when no <code>Provider</code> is named</td><td><code>@PayoutClearing</code></td></tr><tr><td><code>UseQueue</code></td><td>send writes through Blnk's queue; results arrive by webhook</td><td>false: <code>skip_queue: true</code>, so you get the result in the response</td></tr><tr><td><code>WithdrawalHoldTTL</code></td><td>how long a pending withdrawal waits for the provider before it cancels itself; negative disables expiry</td><td>24h</td></tr><tr><td><code>LedgerStatusTTL</code></td><td>how long a ledger's frozen or active status is cached; negative reads it every time</td><td>30s</td></tr><tr><td><code>Now</code></td><td>the clock</td><td><code>time.Now</code></td></tr></tbody></table></div>
+<aside class="tip">If you already have money on older house accounts such as <code>@Fees</code> or <code>@World</code>, set <code>FeeIncomeAccount</code>, <code>DepositClearingAccount</code> and <code>PayoutClearingAccount</code> to them so balances aren't split across two accounts.</aside>
+<h2 id="give-each-part-of-the-app-one-handle"><a href="#give-each-part-of-the-app-one-handle">Give each part of the app one handle</a></h2>
+<p><code>svc</code> implements <code>ledger.Ledger</code>, which has two handles:</p>
+<div class="tablewrap"><table><thead><tr><th>Handle</th><th>For</th><th>Examples</th></tr></thead><tbody><tr><td><code>wallet := svc.Wallet()</code></td><td>what customers do</td><td>open accounts, deposit, transfer, withdraw, hold, refund</td></tr><tr><td><code>ops := svc.Ops()</code></td><td>what the business does</td><td>freeze and close accounts, settle with providers, adjust, trial balance</td></tr></tbody></table></div>
+<p>Hand each part of your app only the handle it needs. A customer-facing server that holds a <code>ledger.Wallet</code> can't freeze or close accounts, adjust balances or record settlements, because those methods aren't on it.</p>
+<figure class="code"><figcaption>The API server gets the wallet, the back office gets ops</figcaption><pre><code><span class="k">var</span> l ledger.<span class="t">Ledger</span> = svc2 <span class="c">// what the rest of the app depends on</span>
+
+<span class="c">// The customer-facing API gets only the wallet handle.</span>
+<span class="k">type</span> customerAPI <span class="k">struct</span>{ wallet ledger.<span class="t">Wallet</span> }
+<span class="c">// The back-office tool gets only the ops handle.</span>
+<span class="k">type</span> backOffice <span class="k">struct</span>{ ops ledger.<span class="t">Ops</span> }
+
+api := customerAPI{wallet: l.<span class="t">Wallet</span>()}
+admin := backOffice{ops: l.<span class="t">Ops</span>()}
+
+ada, err := api.wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
+	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>}, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,
+})
+check(err)
+<span class="c">// api.wallet.FreezeAccount(...) would not compile: Wallet has no such method.</span>
+check(admin.ops.<span class="t">FreezeAccount</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>, <span class="s">&quot;KYC review&quot;</span>))
+
+acct, err := api.wallet.<span class="t">GetAccount</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(acct.<span class="t">ID</span>, acct.<span class="t">Status</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>bln_000004 frozen</pre></figure>
+<ul><li>Depend on the <code>ledger.Ledger</code>, <code>ledger.Wallet</code> and <code>ledger.Ops</code> interfaces, not on <code>*ledger.Service</code>. That lets you wrap the service with <code>ledger.Instrument</code> for logs and metrics (<a href="observability.html">Logging, metrics and tracing</a>) or swap in the emulator in tests.</li><li>Helpers that are not domain operations stay on <code>*ledger.Service</code>: <code>Check</code>, <code>Parse</code>, <code>Precision</code>, <code>Display</code>, <code>ComputeFee</code>, <code>ParseWebhook</code>, <code>DecodeEvent</code> and <code>WebhookHandler</code>.</li></ul>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrUnavailable</code></td><td>a bad base URL; a Cloud proxy URL without a valid <code>instance_…</code> id; Core down or its database unreachable</td><td>read the message; fix the configuration or start Core</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td><code>Config.LedgerID</code> names no ledger</td><td>fix the id; run provisioning first</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>Config.LedgerID</code> holds another kind of id, such as a <code>bln_…</code> balance id</td><td>put the ledger id (<code>ldg_…</code>) there</td></tr><tr><td><code>ErrInvalidInput</code></td><td><code>Config.LedgerID</code> names a ledger marked as a duplicate; the message names the one to use</td><td>switch to the ledger the message names</td></tr></tbody></table></div>
+<h2 id="next"><a href="#next">Next</a></h2>
+<ul><li><a href="money.html">Money and amounts</a>: how to pass amounts.</li><li><a href="errors.html">Errors</a>: every error and what to tell the user.</li><li><a href="webhooks.html">Webhooks</a>: receive Blnk's events.</li><li><a href="customer-accounts.html">Create customer accounts</a>: the first wallet call.</li></ul>
+</article>
+<nav class="prevnext"><a class="next" href="money.html"><small>Next</small>Money and amounts</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

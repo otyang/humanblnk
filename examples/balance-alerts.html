@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Balance alerts · humanblnk</title>
+<meta name="description" content="Have Blnk tell you when a balance crosses a line: a customer running low, a provider owing too much, a payout waiting too long.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>Balance alerts</h1>
+<p class="lead">Have Blnk tell you when a balance crosses a line: a customer running low, a provider owing too much, a payout waiting too long.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#when-to-use-an-alert">When to use an alert</a><a href="#watch-a-customer-account">Watch a customer account</a><a href="#watch-a-house-account">Watch a house account</a><a href="#receiving-the-alert">Receiving the alert</a><a href="#alerts-repeat-debounce-them">Alerts repeat: debounce them</a><a href="#fields-and-operators">Fields and operators</a><a href="#stop-watching-ops-unwatchbalance">Stop watching: ops.UnwatchBalance</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related-pages">Related pages</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure><figure class="code"><pre><code>deliver := <span class="k">func</span>(step <span class="b">string</span>) { <span class="c">// send every new webhook to the handler, as Blnk would</span>
+	alerts := <span class="n">0</span>
+	<span class="k">for</span> _, raw := <span class="k">range</span> core.<span class="t">Events</span>()[seen:] {
+		<span class="k">if</span> raw.<span class="t">Event</span> == ledger.<span class="t">EventBalanceAlert</span> {
+			alerts++
+		}
+		handler.<span class="t">ServeHTTP</span>(httptest.<span class="t">NewRecorder</span>(), core.<span class="t">WebhookRequest</span>(raw, <span class="s">&quot;&quot;</span>))
+	}
+	seen = <span class="b">len</span>(core.<span class="t">Events</span>())
+	acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+	check(err)
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-24s balance %8s, alerts received %d\n&quot;</span>, step, acct.<span class="t">Balance</span>.<span class="t">Display</span>, alerts)
+}</code></pre></figure></details>
+<article>
+<h2 id="when-to-use-an-alert"><a href="#when-to-use-an-alert">When to use an alert</a></h2>
+<p>Oja wants to push a message to Ada when her balance drops below ₦1,000. Finance wants to hear when Paystack owes more than ₦100,000 that hasn't been settled. Operations wants to know when a large payout is waiting on a merchant's account. None of this needs polling: Blnk can watch a balance and call your webhook when a condition holds.</p>
+<p><code>ops.WatchBalance</code> creates a Blnk balance monitor. When the condition holds, Blnk sends the <code>balance.monitor</code> webhook, which humanblnk decodes as <code>ledger.EventBalanceAlert</code> with the alert in <code>Event.Alert</code>.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Watch a customer account, pot or escrow</td><td><code>ops.WatchBalance</code> with <code>AccountID</code></td></tr><tr><td>Watch one of the business's own accounts</td><td><code>ops.WatchBalance</code> with <code>House: ledger.HouseRef{...}</code></td></tr><tr><td>Stop watching</td><td><code>ops.UnwatchBalance</code> with the watch's <code>ID</code></td></tr><tr><td>Check balances once a night instead</td><td><code>ops.TrialBalance</code>; see <a href="reports.html">Trial balance and reports</a></td></tr></tbody></table></div>
+<h2 id="watch-a-customer-account"><a href="#watch-a-customer-account">Watch a customer account</a></h2>
+<figure class="code"><figcaption>Low-balance alert for Ada</figcaption><pre><code><span class="c">// Tell Ada when her balance drops below ₦1,000.</span>
+low, err := ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
+	<span class="t">AccountID</span>: adaNGN,
+	<span class="t">Field</span>:     <span class="s">&quot;balance&quot;</span>, <span class="c">// the default</span>
+	<span class="t">Operator</span>:  <span class="s">&quot;&lt;&quot;</span>,
+	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="c">// currency from the account</span>
+	<span class="t">MetaData</span>:  <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;purpose&quot;</span>: <span class="s">&quot;low balance push&quot;</span>},
+})
+check(err)
+fmt.<span class="t">Println</span>(low.<span class="t">ID</span>, <span class="s">&quot;on&quot;</span>, low.<span class="t">AccountID</span>, low.<span class="t">Field</span>, low.<span class="t">Operator</span>, low.<span class="t">Threshold</span>.<span class="t">Display</span>, low.<span class="t">Threshold</span>.<span class="t">Currency</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>mon_000008 on bln_000003 balance &lt; 1000.00 NGN</pre></figure>
+<ul><li>Set exactly one of <code>AccountID</code> and <code>House</code>.</li><li><code>Field</code> is the balance figure compared. It defaults to <code>balance</code>, the settled balance.</li><li><code>Threshold</code> can leave the currency empty; it takes the account's currency. A different currency is refused.</li><li><code>MetaData</code> is stored on the Blnk monitor. Use it to note what the watch is for.</li><li>Keep <code>ID</code> (<code>mon_…</code>) to unwatch later, and to know which watch an alert belongs to.</li></ul>
+<h2 id="watch-a-house-account"><a href="#watch-a-house-account">Watch a house account</a></h2>
+<p>House accounts are named by <code>HouseRef</code>, as everywhere in <code>Ops</code>.</p>
+<figure class="code"><figcaption>Paystack owes Oja more than ₦100,000</figcaption><pre><code><span class="c">// Alert finance when Paystack owes Oja more than ₦100,000 not yet settled.</span>
+<span class="c">// @PaystackClearing is an asset: Blnk stores it negative, so &quot;owes more&quot; is &quot;below -100,000&quot;.</span>
+psk, err := ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
+	<span class="t">House</span>:     ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>), <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>},
+	<span class="t">Operator</span>:  <span class="s">&quot;&lt;&quot;</span>,
+	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;-100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+})
+check(err)
+fmt.<span class="t">Println</span>(psk.<span class="t">ID</span>, <span class="s">&quot;on&quot;</span>, psk.<span class="t">AccountID</span>, psk.<span class="t">Field</span>, psk.<span class="t">Operator</span>, psk.<span class="t">Threshold</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>mon_000009 on bln_000006 balance &lt; -100000.00</pre></figure>
+<ul><li>The condition is checked against the balance as Blnk stores it. <code>@PaystackClearing</code> is an asset, which Blnk stores as a negative number, so "Paystack owes more than ₦100,000" is <code>balance &lt; -100000</code>. A credit-normal account such as <code>@FeeIncome</code> reads positive, so "fee income above ₦1m" is <code>balance &gt; 1000000</code>. See <a href="house-accounts.html">House accounts</a> for which accounts are which.</li><li>Blnk creates a house account the first time money moves through it. Watching one that has never been used fails with <code>ErrNotFound</code>. Set up house watches after the first movement, or retry them from a start-up job.</li></ul>
+<h2 id="receiving-the-alert"><a href="#receiving-the-alert">Receiving the alert</a></h2>
+<p>Alerts arrive through your global Blnk webhook, like transaction events. In production, mount <code>svc.WebhookHandler</code> and handle <code>ledger.EventBalanceAlert</code>; see <a href="webhooks.html">Webhooks</a>. In tests, the in-memory Blnk records every webhook it would have sent: read them with <code>core.Events()</code> and turn one into a real HTTP request with <code>core.WebhookRequest(e, secret)</code>.</p>
+<figure class="code"><figcaption>Ada pays Chidi Stores ₦4,500, then ₦200</figcaption><pre><code><span class="c">// Ada pays Chidi Stores twice: ₦4,500, then ₦200.</span>
+<span class="k">for</span> i, amt := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;4500&quot;</span>, <span class="s">&quot;200&quot;</span>} {
+	_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amt, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;pay_%d&quot;</span>, i)})
+	check(err)
+}
+
+<span class="c">// The emulator records the webhooks Blnk would send. Feed them to your handler.</span>
+<span class="k">for</span> _, raw := <span class="k">range</span> core.<span class="t">Events</span>() {
+	<span class="k">if</span> raw.<span class="t">Event</span> != ledger.<span class="t">EventBalanceAlert</span> {
+		<span class="k">continue</span>
+	}
+	e, err := svc.<span class="t">ParseWebhook</span>(core.<span class="t">WebhookRequest</span>(raw, <span class="s">&quot;&quot;</span>), ledger.<span class="t">WebhookConfig</span>{})
+	check(err)
+	fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, e.<span class="t">Alert</span>.<span class="t">ID</span>, e.<span class="t">Alert</span>.<span class="t">AccountID</span>, e.<span class="t">Alert</span>.<span class="t">Operator</span>, e.<span class="t">Alert</span>.<span class="t">Threshold</span>.<span class="t">Display</span>, e.<span class="t">Alert</span>.<span class="t">Threshold</span>.<span class="t">Currency</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>balance.monitor mon_000008 bln_000003 &lt; 1000.00 NGN
+balance.monitor mon_000008 bln_000003 &lt; 1000.00 NGN</pre></figure>
+<ul><li><code>Event.Alert</code> is a <code>*ledger.Watch</code> with the watch's <code>ID</code>, the <code>AccountID</code> (Blnk balance id) of the watched account, <code>Field</code>, <code>Operator</code> and <code>Threshold</code>.</li><li>Blnk's payload has no currency. <code>svc.ParseWebhook</code> and <code>svc.WebhookHandler</code> read the account and fill in the threshold's currency and display value. <code>svc.DecodeEvent</code> doesn't call Blnk, so after it the threshold holds only the raw smallest-unit number in <code>PreciseAmount</code>.</li><li>The alert doesn't carry the balance. Read it with <code>wallet.GetAccount</code> or <code>ops.GetHouseAccount</code> if you need it.</li></ul>
+<h2 id="alerts-repeat-debounce-them"><a href="#alerts-repeat-debounce-them">Alerts repeat: debounce them</a></h2>
+<p>Blnk checks the condition after every update of the balance and sends the webhook every time it holds, not only when it first becomes true. Ada got two alerts above, one per payment. Keep a flag per watch on your side, set it when you notify, and clear it when the balance recovers.</p>
+<figure class="code"><figcaption>Notify once per drop</figcaption><pre><code><span class="c">// Blnk sends balance.monitor after every update while the condition holds.</span>
+<span class="c">// Notify once, and again only after the balance has recovered.</span>
+notified := <span class="k">map</span>[<span class="b">string</span>]<span class="b">bool</span>{} <span class="c">// in production: a row in your database</span>
+handler := svc.<span class="t">WebhookHandler</span>(ledger.<span class="t">WebhookConfig</span>{}, <span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> {
+	<span class="k">switch</span> e.<span class="t">Name</span> {
+	<span class="k">case</span> ledger.<span class="t">EventBalanceAlert</span>:
+		<span class="k">if</span> e.<span class="t">Alert</span>.<span class="t">ID</span> != low.<span class="t">ID</span> || notified[e.<span class="t">Alert</span>.<span class="t">ID</span>] {
+			<span class="k">return</span> <span class="b">nil</span> <span class="c">// another watch, or Ada was already told</span>
+		}
+		notified[e.<span class="t">Alert</span>.<span class="t">ID</span>] = <span class="b">true</span>
+		fmt.<span class="t">Println</span>(<span class="s">&quot;push to Ada: your balance is below&quot;</span>, e.<span class="t">Alert</span>.<span class="t">Threshold</span>.<span class="t">Display</span>)
+	<span class="k">case</span> ledger.<span class="t">EventTransactionApplied</span>:
+		acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+		<span class="k">if</span> err != <span class="b">nil</span> {
+			<span class="k">return</span> err <span class="c">// answers 500, Blnk retries</span>
+		}
+		<span class="k">if</span> acct.<span class="t">Balance</span>.<span class="t">PreciseAmount</span>.<span class="t">Cmp</span>(low.<span class="t">Threshold</span>.<span class="t">PreciseAmount</span>) &gt;= <span class="n">0</span> {
+			delete(notified, low.<span class="t">ID</span>) <span class="c">// recovered: the next drop alerts again</span>
+		}
+	}
+	<span class="k">return</span> <span class="b">nil</span>
+})
+
+seen := <span class="b">len</span>(core.<span class="t">Events</span>())
+deliver := <span class="k">func</span>(step <span class="b">string</span>) { <span class="c">// send every new webhook to the handler, as Blnk would</span>
+	alerts := <span class="n">0</span>
+	<span class="k">for</span> _, raw := <span class="k">range</span> core.<span class="t">Events</span>()[seen:] {
+		<span class="k">if</span> raw.<span class="t">Event</span> == ledger.<span class="t">EventBalanceAlert</span> {
+			alerts++
+		}
+		handler.<span class="t">ServeHTTP</span>(httptest.<span class="t">NewRecorder</span>(), core.<span class="t">WebhookRequest</span>(raw, <span class="s">&quot;&quot;</span>))
+	}
+	seen = <span class="b">len</span>(core.<span class="t">Events</span>())
+	acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+	check(err)
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-24s balance %8s, alerts received %d\n&quot;</span>, step, acct.<span class="t">Balance</span>.<span class="t">Display</span>, alerts)
+}
+
+<span class="k">for</span> i := <span class="n">0</span>; i &lt; <span class="n">3</span>; i++ { <span class="c">// three small payments while below ₦1,000</span>
+	_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;small_%d&quot;</span>, i)})
+	check(err)
+	deliver(fmt.<span class="t">Sprintf</span>(<span class="s">&quot;pays ₦50 (small_%d)&quot;</span>, i))
+}
+fund(wallet, adaNGN, <span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T101&quot;</span>)
+deliver(<span class="s">&quot;tops up ₦3,000&quot;</span>)
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_big&quot;</span>})
+check(err)
+deliver(<span class="s">&quot;pays ₦2,500&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>push to Ada: your balance is below 1000.00
+pays ₦50 (small_0)       balance   250.00, alerts received 1
+pays ₦50 (small_1)       balance   200.00, alerts received 1
+pays ₦50 (small_2)       balance   150.00, alerts received 1
+tops up ₦3,000           balance  3150.00, alerts received 0
+push to Ada: your balance is below 1000.00
+pays ₦2,500              balance   650.00, alerts received 1</pre></figure>
+<ul><li>Three payments while below ₦1,000 send three alerts. Ada gets one push.</li><li>The top-up takes her above the threshold. No alert is sent, and the handler clears the flag.</li><li>The next drop alerts again.</li><li>Keep the flag in your database, not in memory. Blnk delivers at least once and may deliver to any of your instances.</li></ul>
+<h2 id="fields-and-operators"><a href="#fields-and-operators">Fields and operators</a></h2>
+<figure class="code"><pre><code><span class="c">// Warn when a pending payout over ₦1,000 is waiting on Chidi Stores&#x27; account.</span>
+pend, err := ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
+	<span class="t">AccountID</span>: chidiNGN,
+	<span class="t">Field</span>:     <span class="s">&quot;inflight_debit_balance&quot;</span>,
+	<span class="t">Operator</span>:  <span class="s">&quot;&gt;&quot;</span>,
+	<span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+})
+check(err)
+fmt.<span class="t">Println</span>(pend.<span class="t">Field</span>, pend.<span class="t">Operator</span>, pend.<span class="t">Threshold</span>.<span class="t">Display</span>)
+
+<span class="c">// &quot;=&quot; is accepted and sent as &quot;==&quot;, the only equality Blnk&#x27;s evaluator matches.</span>
+exact, err := ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: chidiNGN, <span class="t">Operator</span>: <span class="s">&quot;=&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0&quot;</span>, <span class="s">&quot;&quot;</span>)})
+check(err)
+fmt.<span class="t">Println</span>(exact.<span class="t">Field</span>, exact.<span class="t">Operator</span>, exact.<span class="t">Threshold</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>inflight_debit_balance &gt; 1000.00
+balance == 0.00</pre></figure>
+<div class="tablewrap"><table><thead><tr><th><code>Field</code></th><th>Compares</th></tr></thead><tbody><tr><td><code>balance</code> (default)</td><td>the settled balance</td></tr><tr><td><code>credit_balance</code></td><td>the lifetime total of credits</td></tr><tr><td><code>debit_balance</code></td><td>the lifetime total of debits</td></tr><tr><td><code>inflight_balance</code></td><td>the pending (INFLIGHT) balance</td></tr><tr><td><code>inflight_debit_balance</code></td><td>pending money going out, e.g. withdrawals not yet confirmed</td></tr><tr><td><code>inflight_credit_balance</code></td><td>pending money coming in</td></tr></tbody></table></div>
+<p><code>Operator</code> is one of <code>&lt;</code>, <code>&lt;=</code>, <code>&gt;</code>, <code>&gt;=</code>, <code>==</code> and <code>!=</code>. <code>=</code> is accepted and sent as <code>==</code>, because Blnk accepts <code>=</code> but its evaluator never matches it.</p>
+<p>The threshold is sent to Blnk as an integer in the smallest unit with precision 1, so ₦1,000.00 goes as <code>100000</code>. Blnk computes monitor values with float math, and this keeps the threshold exact.</p>
+<h2 id="stop-watching-ops-unwatchbalance"><a href="#stop-watching-ops-unwatchbalance">Stop watching: ops.UnwatchBalance</a></h2>
+<figure class="code"><pre><code>check(ops.<span class="t">UnwatchBalance</span>(ctx, pend.<span class="t">ID</span>))
+check(ops.<span class="t">UnwatchBalance</span>(ctx, exact.<span class="t">ID</span>))
+
+before := <span class="b">len</span>(core.<span class="t">Events</span>())
+w, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: chidiNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;payout_7001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
+check(err)
+alerts := <span class="n">0</span>
+<span class="k">for</span> _, raw := <span class="k">range</span> core.<span class="t">Events</span>()[before:] {
+	<span class="k">if</span> raw.<span class="t">Event</span> == ledger.<span class="t">EventBalanceAlert</span> {
+		alerts++
+	}
+}
+fmt.<span class="t">Println</span>(w.<span class="t">Status</span>, <span class="s">&quot;alerts after unwatching:&quot;</span>, alerts)
+
+err = ops.<span class="t">UnwatchBalance</span>(ctx, pend.<span class="t">ID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;unwatch twice:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>INFLIGHT alerts after unwatching: 0
+unwatch twice: true</pre></figure>
+<ul><li><code>UnwatchBalance</code> deletes the Blnk monitor. Nothing more is sent for it. Here Chidi Stores' ₦2,000 pending payout would have matched the <code>inflight_debit_balance &gt; 1000</code> watch.</li><li>Deleting a watch that no longer exists is <code>ErrNotFound</code>. Treat that as done if you are cleaning up.</li><li>An alert already on its way can still arrive after you unwatch. Ignore alerts for watch ids you no longer hold.</li></ul>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>No money moves. <code>WatchBalance</code> creates one balance monitor (<code>POST /balance-monitors</code>) on the account's Blnk balance, with <code>field</code>, <code>operator</code>, <code>value</code> in the smallest unit and <code>precision: 1</code>. <code>UnwatchBalance</code> deletes it (<code>DELETE /balance-monitors/{id}</code>). The monitor stays until you delete it: it isn't removed when it fires.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>fees := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}
+th := ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;&quot;</span>)
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">House</span>: fees, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: th})
+fmt.<span class="t">Println</span>(<span class="s">&quot;both set:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: th})
+fmt.<span class="t">Println</span>(<span class="s">&quot;neither set:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Operator</span>: <span class="s">&quot;=&gt;&quot;</span>, <span class="t">Threshold</span>: th})
+fmt.<span class="t">Println</span>(<span class="s">&quot;bad operator:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Field</span>: <span class="s">&quot;available&quot;</span>, <span class="t">Operator</span>: <span class="s">&quot;&lt;&quot;</span>, <span class="t">Threshold</span>: th})
+fmt.<span class="t">Println</span>(<span class="s">&quot;bad field:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Operator</span>: <span class="s">&quot;&lt;&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>)})
+fmt.<span class="t">Println</span>(<span class="s">&quot;wrong currency:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">House</span>: fees, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: th})
+fmt.<span class="t">Println</span>(<span class="s">&quot;house account not used yet:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
+
+_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{<span class="t">AccountID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: th})
+fmt.<span class="t">Println</span>(<span class="s">&quot;house account as AccountID:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>both set: true
+neither set: true
+bad operator: true
+bad field: true
+wrong currency: true
+house account not used yet: true
+house account as AccountID: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>both <code>AccountID</code> and <code>House</code> set, or neither; an unknown <code>Field</code> or <code>Operator</code>; a threshold in another currency; an empty watch id</td><td>fix the call</td></tr><tr><td><code>ErrWrongKind</code></td><td>a house account passed as <code>AccountID</code>, or a customer account as <code>House</code></td><td>use <code>House: ledger.HouseRef{...}</code> for <code>@</code> accounts</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist; the house account has never been used; unwatching a watch that is gone</td><td>check the id; create house watches after first use</td></tr><tr><td><code>ErrUnavailable</code></td><td>Blnk can't be reached after retries</td><td>retry</td></tr></tbody></table></div>
+<h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
+<ul><li><a href="webhooks.html">Webhooks</a> to mount the handler and verify signatures.</li><li><a href="reports.html">Trial balance and reports</a> for the nightly view of every balance.</li><li><a href="house-accounts.html">House accounts</a> for which accounts run negative in Blnk.</li><li><a href="testing.html">Testing</a> for <code>core.Events()</code> and <code>core.WebhookRequest</code>.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="reports.html"><small>Previous</small>Trial balance and reports</a><a class="next" href="reconciliation.html"><small>Next</small>Reconciliation</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

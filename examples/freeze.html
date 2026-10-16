@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Freeze and unfreeze · humanblnk</title>
+<meta name="description" content="Stop money moving on one account, or on a whole ledger, while you investigate, then lift the freeze. Nothing is reversed and no balance changes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>Freeze and unfreeze</h1>
+<p class="lead">Stop money moving on one account, or on a whole ledger, while you investigate, then lift the freeze. Nothing is reversed and no balance changes.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#when-to-freeze">When to freeze</a><a href="#freeze-one-account-ops-freezeaccount">Freeze one account: ops.FreezeAccount</a><a href="#see-the-status">See the status</a><a href="#what-a-freeze-does-not-stop">What a freeze does not stop</a><a href="#unfreeze-ops-unfreezeaccount">Unfreeze: ops.UnfreezeAccount</a><a href="#freeze-a-whole-ledger-ops-freezeledger">Freeze a whole ledger: ops.FreezeLedger</a><a href="#several-processes-config-ledgerstatusttl">Several processes: Config.LedgerStatusTTL</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure></details>
+<article>
+<h2 id="when-to-freeze"><a href="#when-to-freeze">When to freeze</a></h2>
+<p>Oja freezes when it needs time to look at something: a login from a new device on Tunde's account, a chargeback pattern, a court order, or a regulator's instruction that covers every agent float. A freeze is a status, not a movement. The balance stays where it is, and lifting the freeze puts the account back exactly as it was.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th><th>What stops</th></tr></thead><tbody><tr><td>One customer's account looks compromised</td><td><code>ops.FreezeAccount</code></td><td>every new movement into or out of that account</td></tr><tr><td>A whole group of accounts must stop paying out</td><td><code>ops.FreezeLedger</code></td><td>money leaving any customer account in the ledger; money coming in carries on</td></tr><tr><td>The customer is leaving for good</td><td><code>ops.CloseAccount</code></td><td>everything, for good. See <a href="close-account.html">Close an account</a></td></tr></tbody></table></div>
+<p>Freezing is on <code>svc.Ops()</code>. A customer-facing server that only holds a <code>ledger.Wallet</code> can't freeze or unfreeze anything.</p>
+<h2 id="freeze-one-account-ops-freezeaccount"><a href="#freeze-one-account-ops-freezeaccount">Freeze one account: ops.FreezeAccount</a></h2>
+<figure class="code"><figcaption>Tunde's account is frozen after a suspicious login</figcaption><pre><code><span class="c">// Fraud monitoring flags a login on Tunde&#x27;s account from a new device.</span>
+err = ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN.<span class="t">ID</span>, <span class="s">&quot;suspected account takeover&quot;</span>)
+check(err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_77&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;send out:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;wd_tunde_502&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;cash out:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: tundeNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_ada_12&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;receive from Ada:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5501&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;top up:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+fmt.<span class="t">Println</span>(err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>send out: true
+cash out: true
+receive from Ada: true
+top up: true
+ledger.Wallet.Deposit: ledger: account is frozen or blocked: account bln_000005 is frozen</pre></figure>
+<ul><li>A frozen account refuses money <strong>in both directions</strong>: transfers out, withdrawals, transfers from other customers and deposits from a provider all fail with <code>ErrAccountFrozen</code>.</li><li>The check runs in humanblnk before anything is sent to Blnk, so a refused call writes nothing.</li><li>The <code>reason</code> is stored on the account. It is for your staff and your audit trail; the customer never sees it unless you show it.</li><li>Freezing an account that is already frozen just updates the reason.</li></ul>
+<aside class="warn">A deposit refused because the account is frozen is still money the provider collected. Paystack has it, and the clearing account doesn't show it yet. Park it in <code>@Suspense</code> with <code>ops.HoldInSuspense</code> and claim it for Tunde once the freeze is lifted. See <a href="suspense.html">Unidentified money</a>.</aside>
+<h2 id="see-the-status"><a href="#see-the-status">See the status</a></h2>
+<figure class="code"><figcaption>What support sees on Tunde's account</figcaption><pre><code>acct, err := wallet.<span class="t">GetAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, acct.<span class="t">Status</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;reason:&quot;</span>, acct.<span class="t">MetaData</span>[<span class="s">&quot;status_reason&quot;</span>])
+fmt.<span class="t">Println</span>(<span class="s">&quot;since:&quot;</span>, acct.<span class="t">MetaData</span>[<span class="s">&quot;status_changed_at&quot;</span>])
+fmt.<span class="t">Println</span>(<span class="s">&quot;balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, acct.<span class="t">Available</span>.<span class="t">Display</span>)
+
+q, err := wallet.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_78&quot;</span>})
+check(err) <span class="c">// a refusal is not an error here: it is in the quote</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;quote allowed:&quot;</span>, q.<span class="t">Allowed</span>, <span class="s">&quot;frozen:&quot;</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>status: frozen
+reason: suspected account takeover
+since: 2026-09-01T09:00:00Z
+balance: 80000.00 available: 50000.00
+quote allowed: false frozen: true</pre></figure>
+<ul><li><code>Account.Status</code> reads <code>frozen</code>. Accounts that were never frozen read <code>active</code>.</li><li><code>MetaData</code> keeps <code>status_reason</code> and <code>status_changed_at</code> (UTC, RFC 3339) from the last status change.</li><li>The balance doesn't move. <code>Available</code> is lower than <code>Balance</code> here only because of the payout and card hold Tunde started before the freeze.</li><li>Quotes run the same checks, so <code>wallet.QuoteTransfer</code> comes back with <code>Allowed: false</code> and <code>Reason</code> set to <code>ErrAccountFrozen</code>. Use it to grey out the Send button in the app.</li></ul>
+<h2 id="what-a-freeze-does-not-stop"><a href="#what-a-freeze-does-not-stop">What a freeze does not stop</a></h2>
+<p>The freeze is checked when a movement starts. Three things that started before the freeze still finish:</p>
+<figure class="code"><figcaption>Work started before the freeze</figcaption><pre><code><span class="c">// Tunde&#x27;s account is frozen, but three things were set up before the freeze.</span>
+
+<span class="c">// 1. Flutterwave reports the ₦20,000 payout as paid.</span>
+r, err := wallet.<span class="t">Confirm</span>(ctx, payout.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;confirm payout:&quot;</span>, r.<span class="t">Status</span>)
+
+<span class="c">// 2. Chidi Stores voids the ₦10,000 card hold.</span>
+r, err = wallet.<span class="t">Cancel</span>(ctx, cardHold.<span class="t">TransactionID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;cancel card hold:&quot;</span>, r.<span class="t">Status</span>)
+
+<span class="c">// 3. The ₦2,000 standing order to Ada falls due.</span>
+core.<span class="t">Advance</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)
+so, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;so_tunde_rent_1&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;scheduled transfer:&quot;</span>, so.<span class="t">Status</span>)
+
+acct, err = wallet.<span class="t">GetAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, acct.<span class="t">Status</span>, <span class="s">&quot;balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>confirm payout: APPLIED
+cancel card hold: VOID
+scheduled transfer: APPLIED
+status: frozen balance: 58000.00</pre></figure>
+<ul><li><code>wallet.Confirm</code> and <code>wallet.Cancel</code> on a pending transaction are not checked. A payout already sent to Flutterwave can be confirmed, and a card hold can be released.</li><li>Scheduled transfers are posted by Blnk itself when they fall due, so humanblnk never sees them and can't refuse them. The same goes for hold expiry and auto-capture (<code>HoldInput.CaptureAt</code>).</li><li>If those must stop too, cancel the pending ones yourself with <code>wallet.Cancel</code> after you freeze.</li></ul>
+<div class="tablewrap"><table><thead><tr><th>Started before the freeze</th><th>After the freeze</th></tr></thead><tbody><tr><td>Pending withdrawal or hold</td><td><code>Confirm</code> and <code>Cancel</code> still work</td></tr><tr><td>Scheduled transfer</td><td>posts when due</td></tr><tr><td>Hold with <code>ExpiresAt</code> or <code>CaptureAt</code></td><td>released or captured by Blnk when due</td></tr><tr><td>Any new <code>Transfer</code>, <code>Withdraw</code>, <code>Deposit</code>, <code>Hold</code>, <code>Split</code>, <code>Exchange</code>, <code>Refund</code></td><td>refused with <code>ErrAccountFrozen</code></td></tr></tbody></table></div>
+<aside class="warn"><code>wallet.Hold</code> checks only the account the money is held on, not its <code>Destination</code>. A new card hold paying a frozen merchant is accepted, and confirming it credits the frozen account. Check the merchant's <code>Status</code> yourself before you place the hold.</aside>
+<h2 id="unfreeze-ops-unfreezeaccount"><a href="#unfreeze-ops-unfreezeaccount">Unfreeze: ops.UnfreezeAccount</a></h2>
+<figure class="code"><figcaption>Tunde confirms the device was his</figcaption><pre><code><span class="c">// Tunde confirms the new device was his. Support lifts the freeze.</span>
+err = ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
+check(err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_tunde_77&quot;</span>})
+check(err)
+
+acct, err = wallet.<span class="t">GetAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, acct.<span class="t">Status</span>, <span class="s">&quot;balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>status: active balance: 53000.00</pre></figure>
+<ul><li>The account goes back to <code>active</code> and the reason is cleared. <code>status_changed_at</code> is set to the time of the unfreeze.</li><li>The refused transfer can be retried with the same <code>Reference</code>. Nothing was written the first time, so it posts normally.</li><li>Unfreezing an account that isn't frozen sets it to <code>active</code> again and does no harm. A closed account can't be unfrozen.</li></ul>
+<h2 id="freeze-a-whole-ledger-ops-freezeledger"><a href="#freeze-a-whole-ledger-ops-freezeledger">Freeze a whole ledger: ops.FreezeLedger</a></h2>
+<p>Oja keeps agent floats in their own ledger, <code>Oja Agents</code>. When the regulator orders a hold on agent payouts, one call stops all of them.</p>
+<figure class="code"><figcaption>A regulator's hold on every agent float</figcaption><pre><code><span class="c">// Agent floats live in their own ledger. A regulator orders a hold on all of them.</span>
+agents, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-agents&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Agents&quot;</span>})
+check(err)
+ikeja, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: agents.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;agent_ikeja&quot;</span>})
+check(err)
+fund(wallet, ikeja.<span class="t">ID</span>, <span class="s">&quot;200000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;seed_ikeja&quot;</span>)
+
+err = ops.<span class="t">FreezeLedger</span>(ctx, agents.<span class="t">ID</span>, <span class="s">&quot;CBN directive 2026/114&quot;</span>)
+check(err)
+lg, err := ops.<span class="t">GetLedger</span>(ctx, agents.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ledger:&quot;</span>, lg.<span class="t">Status</span>, <span class="s">&quot;-&quot;</span>, lg.<span class="t">MetaData</span>[<span class="s">&quot;status_reason&quot;</span>])
+
+<span class="c">// Out of the ledger: refused.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;agent pays Ada:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))
+
+<span class="c">// Into the ledger: allowed.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN.<span class="t">ID</span>, <span class="t">To</span>: ikeja.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_in_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada pays agent:&quot;</span>, err == <span class="b">nil</span>)
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ikeja.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5520&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;agent tops up:&quot;</span>, err == <span class="b">nil</span>)
+
+<span class="c">// House postings carry on.</span>
+_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_stl_0901&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;Paystack settlement:&quot;</span>, err == <span class="b">nil</span>)
+
+err = ops.<span class="t">UnfreezeLedger</span>(ctx, agents.<span class="t">ID</span>)
+check(err)
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;after unfreeze, agent pays Ada:&quot;</span>, err == <span class="b">nil</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ledger: frozen - CBN directive 2026/114
+agent pays Ada: true
+Ada pays agent: true
+agent tops up: true
+Paystack settlement: true
+after unfreeze, agent pays Ada: true</pre></figure>
+<ul><li>Nothing can <strong>leave</strong> a customer account in a frozen ledger: transfers out, withdrawals, holds and closure sweeps fail with <code>ErrLedgerFrozen</code>.</li><li>Money can still <strong>come in</strong>: deposits from Paystack and transfers from accounts in other ledgers post as usual.</li><li>House accounts (<code>@PaystackClearing</code>, <code>@BankOperating</code>, <code>@FeeIncome</code> and the rest) live in Blnk's general ledger and are never blocked, so settlement and fee postings carry on.</li><li>The status and reason are stored on the ledger. Read them with <code>ops.GetLedger</code>: <code>Status</code> is <code>frozen</code> or <code>active</code>.</li><li>An account freeze and a ledger freeze are separate. Unfreezing the ledger doesn't unfreeze an account that was frozen on its own.</li></ul>
+<h2 id="several-processes-config-ledgerstatusttl"><a href="#several-processes-config-ledgerstatusttl">Several processes: Config.LedgerStatusTTL</a></h2>
+<p>Checking a ledger's status on every movement would cost one extra request each time, so each <code>Service</code> caches the status it last read. <code>Config.LedgerStatusTTL</code> sets how long.</p>
+<figure class="code"><figcaption>The admin tool freezes; the API server sees it after the cache expires</figcaption><pre><code><span class="c">// The admin tool runs in its own process, with its own Service.</span>
+admin := ledger.<span class="t">New</span>(core.<span class="t">Client</span>(), ledger.<span class="t">Config</span>{<span class="t">Now</span>: core.<span class="t">Now</span>})
+
+<span class="c">// The API server moved money a moment ago, so it has the ledger cached as active.</span>
+err = admin.<span class="t">Ops</span>().<span class="t">FreezeLedger</span>(ctx, agents.<span class="t">ID</span>, <span class="s">&quot;CBN directive 2026/115&quot;</span>)
+check(err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_2&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;API server, same moment:&quot;</span>, err == <span class="b">nil</span>)
+
+core.<span class="t">Advance</span>(<span class="n">31</span> * time.<span class="t">Second</span>) <span class="c">// past the default 30s LedgerStatusTTL</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ikeja.<span class="t">ID</span>, <span class="t">To</span>: adaNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;float_out_3&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;API server, 31s later:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>API server, same moment: true
+API server, 31s later: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th><code>LedgerStatusTTL</code></th><th>Behaviour</th></tr></thead><tbody><tr><td><code>0</code> (not set)</td><td>30 seconds</td></tr><tr><td>a positive duration</td><td>the status is read again once the cached copy is older than this</td></tr><tr><td>a negative duration</td><td>the status is read from Blnk on every movement</td></tr></tbody></table></div>
+<ul><li>The <code>Service</code> that calls <code>FreezeLedger</code> or <code>UnfreezeLedger</code> drops its own cached copy at once. Only other processes wait for the TTL.</li><li>Account status is not cached. An account freeze applies to every process on the next movement.</li><li>Set a negative TTL if a ledger freeze must apply everywhere within the same second, and accept the extra request per movement.</li></ul>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>A freeze moves no money, so it makes no entries. Each call writes metadata only:</p>
+<div class="tablewrap"><table><thead><tr><th>Call</th><th>Blnk records</th></tr></thead><tbody><tr><td><code>FreezeAccount</code></td><td>on the balance: <code>status: frozen</code>, <code>status_reason</code>, <code>status_changed_at</code></td></tr><tr><td><code>UnfreezeAccount</code></td><td>on the balance: <code>status: active</code>, <code>status_reason</code> cleared, <code>status_changed_at</code></td></tr><tr><td><code>FreezeLedger</code></td><td>on the ledger: <code>status: frozen</code>, <code>status_reason</code>, <code>status_changed_at</code></td></tr><tr><td><code>UnfreezeLedger</code></td><td>on the ledger: <code>status: active</code>, <code>status_reason</code> cleared, <code>status_changed_at</code></td></tr></tbody></table></div>
+<p>Blnk itself doesn't act on these fields. humanblnk enforces them on every movement it makes. A call made to Blnk directly, outside humanblnk, is not blocked.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code><span class="c">// A closed account can&#x27;t be frozen or unfrozen.</span>
+old, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_ada_old&quot;</span>})
+check(err)
+_, err = ops.<span class="t">CloseAccount</span>(ctx, old.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;duplicate account&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>})
+check(err)
+err = ops.<span class="t">FreezeAccount</span>(ctx, old.<span class="t">ID</span>, <span class="s">&quot;review&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;freeze closed:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
+err = ops.<span class="t">UnfreezeAccount</span>(ctx, old.<span class="t">ID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;unfreeze closed:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))
+
+<span class="c">// House accounts and the general ledger are never frozen.</span>
+err = ops.<span class="t">FreezeAccount</span>(ctx, ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), <span class="s">&quot;review&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;freeze @FeeIncome:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+err = ops.<span class="t">FreezeLedger</span>(ctx, ledger.<span class="t">GeneralLedgerID</span>, <span class="s">&quot;review&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;freeze general ledger:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+
+err = ops.<span class="t">FreezeAccount</span>(ctx, <span class="s">&quot;bln_doesnotexist&quot;</span>, <span class="s">&quot;review&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;unknown account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>freeze closed: true
+unfreeze closed: true
+freeze @FeeIncome: true
+freeze general ledger: true
+unknown account: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrAccountFrozen</code></td><td>a movement touches a frozen account, in or out</td><td>wait for the freeze to be lifted; park incoming provider money in <a href="suspense.html">suspense</a></td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>money would leave a customer account in a frozen ledger</td><td>wait for <code>UnfreezeLedger</code>; money in still works</td></tr><tr><td><code>ErrAccountClosed</code></td><td>freezing, unfreezing or moving money on a closed account</td><td>open a new account for the customer</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>FreezeAccount</code> on a house account such as <code>@FeeIncome</code>, or <code>FreezeLedger</code> on the general ledger</td><td>house accounts are never frozen</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist</td><td>check the id</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td><code>FreezeLedger</code> on a ledger that doesn't exist</td><td>check the id</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="close-account.html">Close an account</a>: the permanent version of a freeze.</li><li><a href="suspense.html">Unidentified money</a>: where to park money that can't reach a frozen or closed account.</li><li><a href="ledgers.html">Provision ledgers</a>: split accounts into ledgers so you can freeze a group at once.</li><li><a href="errors.html">Errors</a>: how <code>errors.Is</code> works with every sentinel.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="house-accounts.html"><small>Previous</small>House accounts and the chart of accounts</a><a class="next" href="close-account.html"><small>Next</small>Close an account</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

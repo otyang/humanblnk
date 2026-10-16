@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Money and amounts · humanblnk</title>
+<meta name="description" content="Pass amounts as the decimal the user typed. Every amount comes back exact, in both forms Blnk stores, with a display string for people.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
+<h1>Money and amounts</h1>
+<p class="lead">Pass amounts as the decimal the user typed. Every amount comes back exact, in both forms Blnk stores, with a display string for people.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#the-three-forms-of-an-amount">The three forms of an amount</a><a href="#which-one-to-use">Which one to use</a><a href="#amount-and-parse">Amount and Parse</a><a href="#integers-you-already-hold">Integers you already hold</a><a href="#rejected-amounts">Rejected amounts</a><a href="#fees-an-empty-currency">Fees: an empty currency</a><a href="#json">JSON</a><a href="#display">Display</a><a href="#precision-config-precisions">Precision: Config.Precisions</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada types "50,000" to top up in naira, "0.00012345" to buy bitcoin, and "20.5" to send USDT. Oja must store each one exactly, never as a float, and show it back in a form she can read and spend. <code>ledger.Money</code> carries all of that.</p>
+<h2 id="the-three-forms-of-an-amount"><a href="#the-three-forms-of-an-amount">The three forms of an amount</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Example for 0.456 BTC</th><th>What it is</th></tr></thead><tbody><tr><td><code>Value</code></td><td><code>&quot;0.456&quot;</code></td><td>the human decimal, trailing zeros trimmed</td></tr><tr><td><code>PreciseAmount</code></td><td><code>45600000</code></td><td>the integer in the smallest unit, a <code>*big.Int</code>. Blnk sums this on balances</td></tr><tr><td><code>Precision</code></td><td><code>100000000</code></td><td>the multiplier: <code>Value</code> × <code>Precision</code> = <code>PreciseAmount</code></td></tr><tr><td><code>Display</code></td><td><code>&quot;0.456&quot;</code></td><td>for people to read, set on every <code>Money</code> the library returns. Never compute with it</td></tr></tbody></table></div>
+<p>Only <code>precise_amount</code> and <code>precision</code> are sent to Blnk, never its float <code>amount</code>, so <code>0.456</code> can't turn into <code>0.45599999</code>.</p>
+<h2 id="which-one-to-use"><a href="#which-one-to-use">Which one to use</a></h2>
+<div class="tablewrap"><table><thead><tr><th>You have</th><th>Use</th></tr></thead><tbody><tr><td>What the user typed</td><td><code>ledger.Amount(&quot;1,500.50&quot;, &quot;NGN&quot;)</code></td></tr><tr><td>The same, resolved now so you can read <code>PreciseAmount</code></td><td><code>svc.Parse(&quot;1500.50&quot;, &quot;NGN&quot;)</code></td></tr><tr><td>An integer in the smallest unit, e.g. from a provider's webhook in kobo</td><td><code>ledger.Minor(1050075, &quot;NGN&quot;)</code></td></tr><tr><td>An integer and its precision</td><td><code>ledger.Precise(big.NewInt(45600000), 100000000, &quot;BTC&quot;)</code></td></tr><tr><td>A decimal and a precision of your choice, without a <code>Service</code></td><td><code>ledger.ParseDecimal(&quot;12.3456&quot;, &quot;OJA&quot;, 10000)</code></td></tr><tr><td>A JSON body from your app's client</td><td><code>json.Unmarshal</code> into a <code>ledger.Money</code></td></tr></tbody></table></div>
+<h2 id="amount-and-parse"><a href="#amount-and-parse">Amount and Parse</a></h2>
+<p><code>Amount</code> keeps the text and upper-cases the currency. It doesn't resolve anything, so <code>PreciseAmount</code> is still nil. Every call that takes a <code>Money</code> resolves it with the currency's precision. <code>svc.Parse</code> does the same now, so you can read both forms.</p>
+<figure class="code"><pre><code>typed := ledger.<span class="t">Amount</span>(<span class="s">&quot;0.456&quot;</span>, <span class="s">&quot;btc&quot;</span>) <span class="c">// what the user typed; currency upper-cased</span>
+fmt.<span class="t">Println</span>(typed.<span class="t">Value</span>, typed.<span class="t">Currency</span>, <span class="s">&quot;resolved:&quot;</span>, typed.<span class="t">PreciseAmount</span> != <span class="b">nil</span>)
+
+m, err := svc.<span class="t">Parse</span>(<span class="s">&quot;0.456&quot;</span>, <span class="s">&quot;BTC&quot;</span>) <span class="c">// fills both forms from the currency&#x27;s precision</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Value:&quot;</span>, m.<span class="t">Value</span>, <span class="s">&quot;PreciseAmount:&quot;</span>, m.<span class="t">PreciseAmount</span>, <span class="s">&quot;Precision:&quot;</span>, m.<span class="t">Precision</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;String:&quot;</span>, m.<span class="t">String</span>(), <span class="s">&quot;Fixed:&quot;</span>, m.<span class="t">Fixed</span>())</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>0.456 BTC resolved: false
+Value: 0.456 PreciseAmount: 45600000 Precision: 100000000
+String: 0.456 BTC Fixed: 0.45600000</pre></figure>
+<ul><li><code>String()</code> gives <code>&quot;0.456 BTC&quot;</code>. <code>Fixed()</code> gives every decimal place the precision allows.</li><li><code>IsZero()</code>, <code>Sign()</code> and <code>IsPositive()</code> compare without floats. <code>Sign</code> and <code>IsPositive</code> need a resolved amount.</li></ul>
+<h3 id="commas-zeros-and-precision-by-currency">Commas, zeros and precision by currency</h3>
+<figure class="code"><pre><code><span class="k">for</span> _, in := <span class="k">range</span> [][<span class="n">2</span>]<span class="b">string</span>{
+	{<span class="s">&quot;100.56&quot;</span>, <span class="s">&quot;USD&quot;</span>}, {<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>}, {<span class="s">&quot;1,500.50&quot;</span>, <span class="s">&quot;NGN&quot;</span>}, {<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;JPY&quot;</span>},
+	{<span class="s">&quot;1.250&quot;</span>, <span class="s">&quot;KWD&quot;</span>}, {<span class="s">&quot;20.5&quot;</span>, <span class="s">&quot;USDT&quot;</span>}, {<span class="s">&quot;0.00012345&quot;</span>, <span class="s">&quot;BTC&quot;</span>},
+} {
+	m, err := svc.<span class="t">Parse</span>(in[<span class="n">0</span>], in[<span class="n">1</span>])
+	check(err)
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-12s %-5s precise=%-10s precision=%d\n&quot;</span>, in[<span class="n">0</span>], m.<span class="t">Currency</span>, m.<span class="t">PreciseAmount</span>, m.<span class="t">Precision</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>100.56       USD   precise=10056      precision=100
+10000        NGN   precise=1000000    precision=100
+1,500.50     NGN   precise=150050     precision=100
+5000         JPY   precise=5000       precision=1
+1.250        KWD   precise=1250       precision=1000
+20.5         USDT  precise=20500000   precision=1000000
+0.00012345   BTC   precise=12345      precision=100000000</pre></figure>
+<ul><li>Commas and underscores are dropped, so <code>&quot;1,500.50&quot;</code> is <code>150050</code> kobo.</li><li><code>JPY</code> has no decimals and <code>KWD</code> has three: the precision follows the currency, not a fixed two places.</li></ul>
+<h2 id="integers-you-already-hold"><a href="#integers-you-already-hold">Integers you already hold</a></h2>
+<figure class="code"><pre><code><span class="c">// You already hold the integer in the smallest unit:</span>
+r, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Minor</span>(<span class="n">1050075</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// ₦10,500.75</span>
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T1001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Minor:&quot;</span>, r.<span class="t">Amount</span>.<span class="t">Value</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>)
+
+<span class="c">// You hold the integer and the precision:</span>
+p := ledger.<span class="t">Precise</span>(big.<span class="t">NewInt</span>(<span class="n">45600000</span>), <span class="n">100000000</span>, <span class="s">&quot;BTC&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Precise:&quot;</span>, p.<span class="t">Value</span>, p.<span class="t">PreciseAmount</span>, p.<span class="t">Precision</span>)
+
+<span class="c">// A decimal against a precision you choose, without a Service:</span>
+d, err := ledger.<span class="t">ParseDecimal</span>(<span class="s">&quot;12.3456&quot;</span>, <span class="s">&quot;OJA&quot;</span>, <span class="n">10000</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;ParseDecimal:&quot;</span>, d.<span class="t">Value</span>, d.<span class="t">PreciseAmount</span>, d.<span class="t">Precision</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Minor: 10500.75 10500.75
+Precise: 0.456 45600000 100000000
+ParseDecimal: 12.3456 123456 10000</pre></figure>
+<p><code>Minor</code> leaves <code>Precision</code> empty, and the call fills it from the currency. <code>Precise</code> sets everything up front. A <code>Money</code> that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.</p>
+<h2 id="rejected-amounts"><a href="#rejected-amounts">Rejected amounts</a></h2>
+<figure class="code"><pre><code><span class="k">for</span> _, in := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;100.567&quot;</span>, <span class="s">&quot;1e3&quot;</span>, <span class="s">&quot;12abc&quot;</span>} {
+	_, err := svc.<span class="t">Parse</span>(in, <span class="s">&quot;NGN&quot;</span>)
+	fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+}
+
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;250.505&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T1002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger: invalid input: amount &quot;100.567&quot; has more than 2 decimal places
+true ledger: invalid input: amount &quot;1e3&quot;: exponent notation not allowed
+true ledger: invalid input: invalid amount &quot;12abc&quot;
+true ledger.Wallet.Deposit: ledger: invalid input: ledger: invalid input: amount &quot;250.505&quot; has more than 2 decimal places</pre></figure>
+<p>More decimal places than the currency allows, exponents and anything that isn't a number fail with <code>ErrInvalidInput</code> before anything is sent to Blnk. Nothing is rounded for you.</p>
+<h2 id="fees-an-empty-currency"><a href="#fees-an-empty-currency">Fees: an empty currency</a></h2>
+<p>A fee is always in the transaction's currency. Write it with an empty currency and it takes the amount's.</p>
+<figure class="code"><figcaption>Paystack keeps ₦750 of Ada's ₦50,000</figcaption><pre><code>r, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
+	<span class="t">AccountID</span>: adaNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;750&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="c">// empty currency: takes the amount&#x27;s (NGN)</span>
+	<span class="t">Reference</span>: <span class="s">&quot;paystack_T1003&quot;</span>,
+	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;gross:&quot;</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;fee:&quot;</span>, r.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>], <span class="s">&quot;net:&quot;</span>, r.<span class="t">MetaData</span>[<span class="s">&quot;net_amount&quot;</span>])
+
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_T1004&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;NoFee is zero:&quot;</span>, ledger.<span class="t">NoFee</span>.<span class="t">IsZero</span>())</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>gross: 50000.00 fee: 750 net: 49250
+true ledger.Wallet.Deposit: ledger: invalid input: fee currency USD differs from amount currency NGN
+NoFee is zero: true</pre></figure>
+<ul><li><code>ledger.NoFee</code> is a zero fee. Use it for a free transaction when <code>Config.Fees</code> isn't set.</li><li>A fee in another currency is refused. For an exchange, the fee is in the sell currency. See <a href="fees.html">Fees</a>.</li><li>The deposit records the gross amount; <code>meta_data.fee</code> and <code>meta_data.net_amount</code> hold the split.</li></ul>
+<h3 id="what-happens-in-blnk">What happens in Blnk</h3>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>@PaystackClearing</code></td><td>₦50,000</td><td></td></tr><tr><td>Ada's NGN account</td><td></td><td>₦49,250</td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦750</td></tr></tbody></table></div>
+<h2 id="json"><a href="#json">JSON</a></h2>
+<p><code>Money</code> marshals to both forms plus the display string. <code>precise_amount</code> is a string so JavaScript clients don't lose digits on 18-decimal assets.</p>
+<figure class="code"><figcaption>Out to your app, and back in from a client</figcaption><pre><code>out, err := json.<span class="t">Marshal</span>(r.<span class="t">Amount</span>) <span class="c">// e.g. in your API response</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="b">string</span>(out))
+
+<span class="c">// What a client sends: amount as a string, or as a bare JSON number.</span>
+<span class="k">var</span> req <span class="k">struct</span> {
+	<span class="t">Amount</span> ledger.<span class="t">Money</span> <span class="s">`json:&quot;amount&quot;`</span>
+}
+check(json.<span class="t">Unmarshal</span>([]<span class="b">byte</span>(<span class="s">`{&quot;amount&quot;: {&quot;amount&quot;: 0.1, &quot;currency&quot;: &quot;usd&quot;}}`</span>), &amp;req))
+fmt.<span class="t">Println</span>(<span class="s">&quot;decoded:&quot;</span>, req.<span class="t">Amount</span>.<span class="t">Value</span>, req.<span class="t">Amount</span>.<span class="t">Currency</span>)
+
+tr, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
+	<span class="t">AccountID</span>: ada.<span class="t">Accounts</span>[<span class="s">&quot;USD&quot;</span>].<span class="t">ID</span>, <span class="t">Amount</span>: req.<span class="t">Amount</span>,
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T1005&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;posted:&quot;</span>, tr.<span class="t">Amount</span>.<span class="t">Value</span>, tr.<span class="t">Amount</span>.<span class="t">PreciseAmount</span>, tr.<span class="t">Amount</span>.<span class="t">Precision</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>{&quot;amount&quot;:&quot;50000&quot;,&quot;display&quot;:&quot;50000.00&quot;,&quot;currency&quot;:&quot;NGN&quot;,&quot;precise_amount&quot;:&quot;5000000&quot;,&quot;precision&quot;:100}
+decoded: 0.1 USD
+posted: 0.1 10 100</pre></figure>
+<ul><li>On the way in, <code>amount</code> may be a string (<code>&quot;0.1&quot;</code>) or a bare number (<code>0.1</code>). A number is read from its literal text, never through <code>float64</code>.</li><li><code>currency</code> is upper-cased. <code>precise_amount</code> and <code>precision</code> are optional. When both <code>amount</code> and <code>precise_amount</code> are given, they must agree.</li><li><code>display</code> is ignored on the way in.</li></ul>
+<h2 id="display"><a href="#display">Display</a></h2>
+<p><code>Display</code> is cut, never rounded up, so a displayed balance can always be spent in full. The exact amount stays in <code>Value</code>.</p>
+<div class="tablewrap"><table><thead><tr><th>Currency</th><th>Rule</th><th>Example</th></tr></thead><tbody><tr><td>Fiat not listed below</td><td>every decimal place of its precision, padded</td><td><code>100.50</code> USD, <code>5000</code> JPY, <code>1.250</code> KWD</td></tr><tr><td><code>USDT</code>, <code>USDC</code></td><td>2 places, padded: stablecoins read as money</td><td><code>20.50</code></td></tr><tr><td><code>BTC</code>, <code>LTC</code>, <code>BCH</code></td><td>up to 8 places, trailing zeros dropped</td><td><code>0.5</code></td></tr><tr><td><code>ETH</code>, <code>TRX</code></td><td>up to 6 places, trailing zeros dropped</td><td><code>0.123456</code></td></tr><tr><td><code>SOL</code></td><td>up to 4 places, trailing zeros dropped</td><td><code>1.25</code></td></tr></tbody></table></div>
+<p>These are <code>ledger.BuiltinDisplay</code>. Change any currency with <code>Config.Display</code>, which takes a <code>DisplayRule</code> per currency.</p>
+<figure class="code"><figcaption>Oja shows whole naira and 4 places of ETH</figcaption><pre><code>svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
+	<span class="t">LedgerID</span>: ledgerID,
+	<span class="t">Display</span>: <span class="k">map</span>[<span class="b">string</span>]ledger.<span class="t">DisplayRule</span>{
+		<span class="s">&quot;ETH&quot;</span>: {<span class="t">Decimals</span>: <span class="n">4</span>, <span class="t">TrimZeros</span>: <span class="b">true</span>}, <span class="c">// crypto style: cut to 4, drop trailing zeros</span>
+		<span class="s">&quot;NGN&quot;</span>: {<span class="t">Decimals</span>: <span class="n">0</span>},                  <span class="c">// whole naira on screen</span>
+	},
+})
+<span class="k">for</span> _, in := <span class="k">range</span> [][<span class="n">2</span>]<span class="b">string</span>{
+	{<span class="s">&quot;1250.75&quot;</span>, <span class="s">&quot;NGN&quot;</span>}, {<span class="s">&quot;100.5&quot;</span>, <span class="s">&quot;USD&quot;</span>}, {<span class="s">&quot;0.123456789&quot;</span>, <span class="s">&quot;ETH&quot;</span>}, {<span class="s">&quot;0.5&quot;</span>, <span class="s">&quot;BTC&quot;</span>}, {<span class="s">&quot;20.5&quot;</span>, <span class="s">&quot;USDT&quot;</span>},
+} {
+	m, err := svc.<span class="t">Parse</span>(in[<span class="n">0</span>], in[<span class="n">1</span>])
+	check(err)
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-12s %-4s Value=%-12s Display=%s\n&quot;</span>, in[<span class="n">0</span>], in[<span class="n">1</span>], m.<span class="t">Value</span>, svc.<span class="t">Display</span>(m))
+}
+
+acct, err := svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;ETH&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;rule for ETH:&quot;</span>, svc.<span class="t">DisplayRule</span>(<span class="s">&quot;ETH&quot;</span>), <span class="s">&quot;balance shows:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>1250.75      NGN  Value=1250.75      Display=1250
+100.5        USD  Value=100.5        Display=100.50
+0.123456789  ETH  Value=0.123456789  Display=0.1234
+0.5          BTC  Value=0.5          Display=0.5
+20.5         USDT Value=20.5         Display=20.50
+rule for ETH: {4 true} balance shows: 0</pre></figure>
+<div class="tablewrap"><table><thead><tr><th><code>DisplayRule</code> field</th><th>What it changes</th></tr></thead><tbody><tr><td><code>Decimals</code></td><td>the most decimal places shown, capped at the currency's precision</td></tr><tr><td><code>TrimZeros</code></td><td>drop trailing zeros instead of padding to <code>Decimals</code></td></tr></tbody></table></div>
+<p><code>svc.Display(m)</code> formats any resolved <code>Money</code>, and <code>svc.DisplayRule(currency)</code> says which rule applies: <code>Config.Display</code>, then <code>BuiltinDisplay</code>, then every decimal place, padded. A rule also works on its own:</p>
+<figure class="code"><pre><code>eth, err := svc.<span class="t">Parse</span>(<span class="s">&quot;0.123456789&quot;</span>, <span class="s">&quot;ETH&quot;</span>)
+check(err)
+fiat := ledger.<span class="t">DisplayRule</span>{<span class="t">Decimals</span>: <span class="n">2</span>}
+crypto := ledger.<span class="t">DisplayRule</span>{<span class="t">Decimals</span>: <span class="n">6</span>, <span class="t">TrimZeros</span>: <span class="b">true</span>}
+fmt.<span class="t">Println</span>(fiat.<span class="t">Format</span>(eth), crypto.<span class="t">Format</span>(eth), ledger.<span class="t">BuiltinDisplay</span>[<span class="s">&quot;ETH&quot;</span>].<span class="t">Format</span>(eth))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>0.12 0.123456 0.123456</pre></figure>
+<h2 id="precision-config-precisions"><a href="#precision-config-precisions">Precision: Config.Precisions</a></h2>
+<p>Each currency has a precision, the number of smallest units in one whole unit.</p>
+<div class="tablewrap"><table><thead><tr><th>Currencies</th><th>Precision</th></tr></thead><tbody><tr><td><code>BTC</code>, <code>LTC</code>, <code>BCH</code></td><td>100000000 (8 places)</td></tr><tr><td><code>ETH</code></td><td>1000000000000000000 (18 places)</td></tr><tr><td><code>SOL</code></td><td>1000000000 (9 places)</td></tr><tr><td><code>USDT</code>, <code>USDC</code>, <code>TRX</code></td><td>1000000 (6 places)</td></tr><tr><td><code>JPY</code>, <code>KRW</code>, <code>XOF</code>, <code>XAF</code>, <code>UGX</code>, <code>RWF</code></td><td>1 (no decimals)</td></tr><tr><td><code>KWD</code>, <code>BHD</code>, <code>OMR</code>, <code>TND</code></td><td>1000 (3 places)</td></tr><tr><td>everything else</td><td><code>Config.DefaultPrecision</code>, default 100</td></tr></tbody></table></div>
+<p>These are <code>ledger.BuiltinPrecisions</code>. Add or override currencies with <code>Config.Precisions</code>. Each value must be a power of 10.</p>
+<figure class="code"><figcaption>Oja adds its own loyalty points, OJA, at 4 places</figcaption><pre><code>svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
+	<span class="t">LedgerID</span>:         ledgerID,
+	<span class="t">Precisions</span>:       <span class="k">map</span>[<span class="b">string</span>]<span class="b">int64</span>{<span class="s">&quot;OJA&quot;</span>: <span class="n">10000</span>, <span class="s">&quot;NGN&quot;</span>: <span class="n">100</span>}, <span class="c">// your own points token</span>
+	<span class="t">DefaultPrecision</span>: <span class="n">100</span>,                                        <span class="c">// the default</span>
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;OJA:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;OJA&quot;</span>), <span class="s">&quot;BTC:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;BTC&quot;</span>),
+	<span class="s">&quot;JPY:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;JPY&quot;</span>), <span class="s">&quot;GHS:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;GHS&quot;</span>))
+fmt.<span class="t">Println</span>(<span class="s">&quot;built in for ETH:&quot;</span>, ledger.<span class="t">BuiltinPrecisions</span>[<span class="s">&quot;ETH&quot;</span>])
+
+pts, err := svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;OJA&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;account precision:&quot;</span>, pts.<span class="t">Precision</span>, <span class="s">&quot;shows:&quot;</span>, pts.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>OJA: 10000 BTC: 100000000 JPY: 1 GHS: 100
+built in for ETH: 1000000000000000000
+account precision: 10000 shows: 0.0000</pre></figure>
+<aside class="warn">Keep a currency's precision fixed once money has moved. Blnk sums <code>precise_amount</code> on balances, so mixing precisions corrupts the totals.</aside>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>more decimals than the currency allows; exponent notation; not a number; a fee in another currency; a negative fee; a zero or negative amount; no amount; <code>Value</code> and <code>PreciseAmount</code> disagree</td><td>show the user the allowed format, e.g. two decimal places for NGN</td></tr><tr><td><code>ErrInvalidInput</code></td><td>a precision that isn't a power of 10</td><td>fix <code>Config.Precisions</code> or the <code>Precise</code> / <code>ParseDecimal</code> call</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="fees.html">Fees</a>: price fees with <code>Config.Fees</code> and <code>ComputeFee</code>.</li><li><a href="currency-exchange.html">Currency exchange</a>: rates and rounding between currencies.</li><li><a href="setup.html">Install and connect</a>: every <code>Config</code> field.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="setup.html"><small>Previous</small>Install and connect</a><a class="next" href="errors.html"><small>Next</small>Errors</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

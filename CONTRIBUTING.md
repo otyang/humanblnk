@@ -32,9 +32,16 @@ that talks to Blnk.
 - **Blnk behaviour changes go in the emulator too**, so `ledgertest` keeps
   matching real Core. If you observed something on a real Core, say which
   version in the pull request.
-- **Documented samples live in** `ledger/docs_examples_test.go`. After
-  changing a sample or any exported API, run `make docs` and commit
-  `docs.html` and `CONTRACT.md` (CI checks they are current).
+- **Documented samples live in** `ledger/docs_examples_test.go` (the guide)
+  and `examples/source/` (the example pages). After changing a sample or any
+  exported API, run `make docs` and commit `docs.html`, `CONTRACT.md` and
+  `examples/` (CI checks they are current).
+- **An example page** is `examples/source/<page>.md` plus the samples in
+  `examples/source/<page>_test.go`. A sample sits between
+  `// sample: <page>/<name>` and `// end`, wrapped in `begin(...)` and
+  `end()`; what it prints is shown as its output. `@sample <name>` in the
+  Markdown places it on the page. See `scripts/genexamples.py` for the
+  Markdown the pages accept.
 - **New exported names in `ledger`** must be re-exported in `humanblnk.go`;
   `TestReexportsEverything` tells you which.
 - **Each method acts on one kind of object.** Ledger, customer-account and

@@ -378,7 +378,7 @@ func TestCustomersPotsAndFind(t *testing.T) {
 
 	ngn := c.Accounts["NGN"]
 	rent, err := svc.Wallet().OpenPot(ctx, ledger.PotInput{ParentID: ngn.ID, Name: "Rent", Goal: ledger.Amount("500000", "")})
-	if err != nil || rent.Kind != ledger.PotAccount || rent.Goal.Value != "500000" || rent.IdentityID != c.ID {
+	if err != nil || rent.Kind != ledger.PotAccount || rent.Goal.Value != "500000" || rent.Goal.Display != "500000.00" || rent.IdentityID != c.ID {
 		t.Fatalf("pot: %+v %v", rent, err)
 	}
 	if dup, _ := svc.Wallet().OpenPot(ctx, ledger.PotInput{ParentID: ngn.ID, Name: "Rent"}); dup.ID != rent.ID {
@@ -388,6 +388,11 @@ func TestCustomersPotsAndFind(t *testing.T) {
 	pots, err := svc.Wallet().ListPots(ctx, ngn.ID)
 	if err != nil || len(pots) != 2 {
 		t.Fatalf("list pots: %v %v", pots, err)
+	}
+	for _, p := range pots {
+		if p.Name == "Rent" && p.Goal.Display != "500000.00" {
+			t.Fatalf("listed pot goal display: %q", p.Goal.Display)
+		}
 	}
 	// Wallet().GetCustomer shows main accounts only.
 	if got, _ := svc.Wallet().GetCustomer(ctx, c.ID); got.Accounts["NGN"].ID != ngn.ID || len(got.Accounts) != 3 {

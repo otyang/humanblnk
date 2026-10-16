@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Refunds · humanblnk</title>
+<meta name="description" content="Send money back after a payment: in full in one step, or in parts, with over-refunds refused and every refund linked to the payment it reverses.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Refunds</h1>
+<p class="lead">Send money back after a payment: in full in one step, or in parts, with over-refunds refused and every refund linked to the payment it reverses.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#a-full-refund-wallet-refund">A full refund: wallet.Refund</a><a href="#partial-refunds-wallet-refundpartial">Partial refunds: wallet.RefundPartial</a><a href="#finding-refunds">Finding refunds</a><a href="#a-payment-with-a-fee">A payment with a fee</a><a href="#one-leg-of-a-split">One leg of a split</a><a href="#frozen-and-closed-accounts">Frozen and closed accounts</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// refundBalance reads an account&#x27;s balance for display.</span>
+<span class="k">func</span> refundBalance(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>) <span class="b">string</span> {
+	a, err := w.<span class="t">GetAccount</span>(ctx, id)
+	check(err)
+	<span class="k">return</span> a.<span class="t">Balance</span>.<span class="t">Display</span>
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada paid Chidi Stores for an order. Sometimes the whole order is cancelled. Sometimes only one item was out of stock, and Chidi Stores refunds part now and maybe more later. Oja must never refund more than Ada paid, and support staff must be able to see which refund belongs to which payment.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Reverse the whole payment, once</td><td><code>wallet.Refund</code></td></tr><tr><td>Refund part of a payment, possibly several times</td><td><code>wallet.RefundPartial</code></td></tr><tr><td>Reverse a payment that had a fee, or one leg of a split</td><td><code>RefundPartial</code> by the payment id (it picks the recipient's leg), or either call by the leg's own id</td></tr><tr><td>Money still in escrow</td><td><code>wallet.RefundEscrow</code>; see <a href="escrow.html">Escrow</a></td></tr><tr><td>Money on hold, not yet posted</td><td><code>wallet.Cancel</code>; see <a href="card-holds.html">Card holds</a></td></tr></tbody></table></div>
+<h2 id="a-full-refund-wallet-refund"><a href="#a-full-refund-wallet-refund">A full refund: wallet.Refund</a></h2>
+<p><code>Refund</code> asks Blnk to reverse the transaction. Blnk does it once, for the whole amount.</p>
+<figure class="code"><figcaption>Chidi Stores cancels a ₦15,000 order</figcaption><pre><code><span class="c">// Chidi Stores cancels the whole ₦15,000 order.</span>
+back, err := wallet.<span class="t">Refund</span>(ctx, pay.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{
+	<span class="t">Reason</span>:      <span class="s">&quot;order cancelled&quot;</span>,
+	<span class="t">Description</span>: <span class="s">&quot;Refund of order 10460&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(back.<span class="t">Status</span>, back.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;reference:&quot;</span>, back.<span class="t">Reference</span> == pay.<span class="t">TransactionID</span>+<span class="s">&quot;_refund&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;reason:&quot;</span>, back.<span class="t">MetaData</span>[<span class="s">&quot;refund_reason&quot;</span>])
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada:&quot;</span>, refundBalance(wallet, adaNGN), <span class="s">&quot;Chidi Stores:&quot;</span>, refundBalance(wallet, chidi))
+
+_, err = wallet.<span class="t">Refund</span>(ctx, pay.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{})
+fmt.<span class="t">Println</span>(<span class="s">&quot;second refund:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED 15000.00 reference: true
+reason: order cancelled
+Ada: 100000.00 Chidi Stores: 0.00
+second refund: true</pre></figure>
+<ul><li>The refund's reference is the original's transaction id plus <code>_refund</code>.</li><li><code>Reason</code> is stored as <code>meta_data.refund_reason</code>. <code>Description</code> and <code>MetaData</code> go on the refund too.</li><li>A second <code>Refund</code> of the same transaction fails with <code>ErrAlreadyFinalized</code>.</li><li>The transaction must be posted. For a pending payment that was later confirmed, pass the id that <code>Confirm</code> returned (the record of the capture), not the id of the hold. This holds for <code>RefundPartial</code> too.</li></ul>
+<h2 id="partial-refunds-wallet-refundpartial"><a href="#partial-refunds-wallet-refundpartial">Partial refunds: wallet.RefundPartial</a></h2>
+<p><code>RefundPartial</code> sends part of the amount back as an ordinary transfer from the recipient to the payer. Each refund carries <code>meta_data.refund_of</code> with the original's id, and the original's <code>meta_data.refunded_precise</code> holds the running total in the smallest unit.</p>
+<figure class="code"><figcaption>Two items out of stock in a ₦6,000 order</figcaption><pre><code><span class="c">// Two of three items in a ₦6,000 order were out of stock, refunded one at a time.</span>
+r1, err := wallet.<span class="t">RefundPartial</span>(ctx, pay2.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;refund_10470_1&quot;</span>, <span class="c">// one per refund; a retry replays it</span>
+	<span class="t">Reason</span>:    <span class="s">&quot;item out of stock&quot;</span>,
+})
+check(err)
+r2, err := wallet.<span class="t">RefundPartial</span>(ctx, pay2.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10470_2&quot;</span>, <span class="t">Reason</span>: <span class="s">&quot;item out of stock&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(r1.<span class="t">Amount</span>.<span class="t">Display</span>, r2.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;linked:&quot;</span>, r2.<span class="t">MetaData</span>[<span class="s">&quot;refund_of&quot;</span>] == pay2.<span class="t">TransactionID</span>)
+
+orig, err := wallet.<span class="t">GetTransaction</span>(ctx, pay2.<span class="t">TransactionID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;refunded so far (kobo):&quot;</span>, orig.<span class="t">MetaData</span>[<span class="s">&quot;refunded_precise&quot;</span>])
+
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, pay2.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10470_3&quot;</span>,
+})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAmountExceeded</span>), err)
+
+_, err = wallet.<span class="t">Refund</span>(ctx, pay2.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{})
+fmt.<span class="t">Println</span>(<span class="s">&quot;full refund after partials:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>2000.00 2500.00 linked: true
+refunded so far (kobo): 450000
+true ledger.Wallet.RefundPartial: ledger: amount exceeds remaining held amount: 2000 NGN exceeds the 1500 NGN not yet refunded
+full refund after partials: true</pre></figure>
+<ul><li><code>Reference</code> is required, one per refund. Retrying with the same reference replays that refund instead of counting it twice.</li><li>The library adds up the refunds already linked to the payment. Anything over what is left fails with <code>ErrAmountExceeded</code>, and the error says how much is left.</li><li>Once a payment has partial refunds, <code>Refund</code> is refused with <code>ErrAlreadyFinalized</code>. Refund the rest with <code>RefundPartial</code>.</li><li>After a full <code>Refund</code>, <code>RefundPartial</code> is refused with <code>ErrAlreadyFinalized</code>.</li></ul>
+<aside class="warn">Two partial refunds of the same payment sent at the same moment can both pass the remaining-amount check. Run refunds for one payment one at a time in your app, for example through one worker or a row lock.</aside>
+<h2 id="finding-refunds"><a href="#finding-refunds">Finding refunds</a></h2>
+<figure class="code"><pre><code><span class="c">// Your support tool has only the refund&#x27;s reference.</span>
+ref, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;refund_10470_1&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(ref.<span class="t">Amount</span>.<span class="t">Display</span>, ref.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>], ref.<span class="t">MetaData</span>[<span class="s">&quot;refund_reason&quot;</span>])
+
+<span class="c">// refund_of leads back to the original payment.</span>
+o, err := wallet.<span class="t">GetTransaction</span>(ctx, ref.<span class="t">MetaData</span>[<span class="s">&quot;refund_of&quot;</span>].(<span class="b">string</span>))
+check(err)
+fmt.<span class="t">Println</span>(o.<span class="t">Reference</span>, o.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;refunded (kobo):&quot;</span>, o.<span class="t">MetaData</span>[<span class="s">&quot;refunded_precise&quot;</span>])
+
+<span class="c">// A full refund&#x27;s reference is the original id plus &quot;_refund&quot;.</span>
+full, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, pay.<span class="t">TransactionID</span>+<span class="s">&quot;_refund&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(full.<span class="t">Amount</span>.<span class="t">Display</span>, full.<span class="t">Status</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>2000.00 refund item out of stock
+pay_10470 6000.00 refunded (kobo): 450000
+15000.00 APPLIED</pre></figure>
+<ul><li><code>GetTransaction</code> takes a Blnk transaction id. <code>GetTransactionByReference</code> takes your reference.</li><li>For a payment with a fee or a split, both rebuild the parent from its legs, so the parent id and reference still work.</li></ul>
+<h2 id="a-payment-with-a-fee"><a href="#a-payment-with-a-fee">A payment with a fee</a></h2>
+<p>A transfer with a fee is stored as two legs: one to the recipient, one to <code>@FeeIncome</code>. <code>RefundPartial</code> by the payment's id picks the recipient's leg, so the fee stays with Oja.</p>
+<figure class="code"><figcaption>Ada paid ₦10,000 plus a ₦50 fee</figcaption><pre><code><span class="c">// Ada paid Chidi Stores ₦10,000 plus a ₦50 Oja fee.</span>
+feePay, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;pay_10480&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;legs:&quot;</span>, <span class="b">len</span>(feePay.<span class="t">Legs</span>))
+
+<span class="c">// RefundPartial picks the leg that paid Chidi Stores. The fee stays with Oja.</span>
+rf, err := wallet.<span class="t">RefundPartial</span>(ctx, feePay.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10480&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(rf.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;from Chidi Stores:&quot;</span>, rf.<span class="t">Source</span> == <span class="b">string</span>(chidi))
+fmt.<span class="t">Println</span>(<span class="s">&quot;refund_of is the leg:&quot;</span>, rf.<span class="t">MetaData</span>[<span class="s">&quot;refund_of&quot;</span>] != feePay.<span class="t">TransactionID</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>legs: 2
+10000.00 from Chidi Stores: true
+refund_of is the leg: true</pre></figure>
+<p><code>Refund</code> can't be used with the payment's id, because Blnk has no stored transaction under it, only the legs. Refund each leg you want to reverse by the leg's own transaction id. To give the fee back, reverse the fee leg:</p>
+<figure class="code"><pre><code><span class="c">// Refund needs a stored transaction. A payment with a fee is stored only as its legs.</span>
+_, err = wallet.<span class="t">Refund</span>(ctx, feePay.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{})
+fmt.<span class="t">Println</span>(<span class="s">&quot;Refund on the parent:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
+
+<span class="c">// To give the fee back too, refund the fee leg by its own id.</span>
+<span class="k">var</span> feeLeg <span class="b">string</span>
+<span class="k">for</span> _, leg := <span class="k">range</span> feePay.<span class="t">Legs</span> {
+	<span class="k">if</span> leg.<span class="t">Account</span> == ledger.<span class="t">FeeIncomeAccount</span> {
+		feeLeg = leg.<span class="t">TransactionID</span>
+	}
+}
+rfee, err := wallet.<span class="t">Refund</span>(ctx, feeLeg, ledger.<span class="t">RefundInput</span>{<span class="t">Reason</span>: <span class="s">&quot;goodwill&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(rfee.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;back to Ada:&quot;</span>, rfee.<span class="t">Destination</span> == <span class="b">string</span>(adaNGN))
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada:&quot;</span>, refundBalance(wallet, adaNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Refund on the parent: true
+50.00 back to Ada: true
+Ada: 98500.00</pre></figure>
+<h2 id="one-leg-of-a-split"><a href="#one-leg-of-a-split">One leg of a split</a></h2>
+<p>A <a href="split-payments.html">split payment</a> that paid several recipients needs the leg's id: the library can't guess which recipient is refunding. A split paid to one customer and <code>@FeeIncome</code> works like a payment with a fee: the customer's leg is picked.</p>
+<figure class="code"><figcaption>Chidi Stores refunds ₦3,800 of its share of a card order</figcaption><pre><code><span class="c">// A card order: Oja&#x27;s 5%, ₦1,500 to Tunde for delivery, the rest to Chidi Stores.</span>
+order, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>)), <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_10490&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Percent</span>: <span class="s">&quot;5&quot;</span>},
+		{<span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>)},
+		{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>},
+	},
+})
+check(err)
+
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, order.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10490_x&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;whole split:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+<span class="k">var</span> chidiLeg <span class="b">string</span>
+<span class="k">for</span> _, leg := <span class="k">range</span> order.<span class="t">Legs</span> {
+	<span class="k">if</span> leg.<span class="t">Account</span> == <span class="b">string</span>(chidi) {
+		chidiLeg = leg.<span class="t">TransactionID</span>
+	}
+}
+rs, err := wallet.<span class="t">RefundPartial</span>(ctx, chidiLeg, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3800&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10490_1&quot;</span>, <span class="t">Reason</span>: <span class="s">&quot;returned item&quot;</span>,
+})
+check(err)
+clearing, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@PaystackClearing&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(rs.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;back to @PaystackClearing:&quot;</span>, rs.<span class="t">Destination</span> == clearing.<span class="t">ID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores balance:&quot;</span>, refundBalance(wallet, chidi))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>whole split: true
+3800.00 back to @PaystackClearing: true
+Chidi Stores balance: 15200.00</pre></figure>
+<p>The refund goes back to where the money came from. For a card payment that is <code>@PaystackClearing</code>. Return the money to Ada's card through Paystack, and the clearing account then matches what Paystack reports. See <a href="settlement.html">Settlement</a>.</p>
+<h2 id="frozen-and-closed-accounts"><a href="#frozen-and-closed-accounts">Frozen and closed accounts</a></h2>
+<p>Blnk reverses a transaction without checking account status, so the library checks it before asking. Money leaves the original recipient and goes back to the payer, and both must be active.</p>
+<figure class="code"><figcaption>Ada's account is frozen during a fraud check</figcaption><pre><code>pay3, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_501&quot;</span>})
+check(err)
+check(ops.<span class="t">FreezeAccount</span>(ctx, adaNGN, <span class="s">&quot;fraud check&quot;</span>))
+
+_, err = wallet.<span class="t">Refund</span>(ctx, pay3.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{})
+fmt.<span class="t">Println</span>(<span class="s">&quot;payer frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, pay3.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_501_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;partial too:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
+check(ops.<span class="t">UnfreezeAccount</span>(ctx, adaNGN))
+ok, err := wallet.<span class="t">Refund</span>(ctx, pay3.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;after unfreeze:&quot;</span>, ok.<span class="t">Status</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>payer frozen: true
+partial too: true
+after unfreeze: APPLIED</pre></figure>
+<ul><li>A frozen account on either side gives <code>ErrAccountFrozen</code>. Unfreeze it and refund again.</li><li>A closed account gives <code>ErrAccountClosed</code>, for good. To get money to a customer whose account is closed, see <a href="suspense.html">Suspense</a>.</li></ul>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>A full refund of Ada's ₦15,000 payment to Chidi Stores (<code>Refund</code>):</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Chidi Stores</td><td>₦15,000.00</td><td></td></tr><tr><td>Ada</td><td></td><td>₦15,000.00</td></tr></tbody></table></div>
+<p>Blnk records it with reference <code>&lt;id&gt;_refund</code> and overdraft allowed. A partial refund of ₦2,000 (<code>RefundPartial</code>) makes the same entries for ₦2,000, as a transfer with <code>txn_type: refund</code>, <code>refund_of</code> and <code>refund_reason</code> in its metadata. The library then updates <code>refunded_precise</code> on the original.</p>
+<p>A partial refund of Chidi Stores' leg of a card order:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Chidi Stores</td><td>₦3,800.00</td><td></td></tr><tr><td><code>@PaystackClearing</code></td><td></td><td>₦3,800.00</td></tr></tbody></table></div>
+<p>Refunding a fee leg debits <code>@FeeIncome</code> and credits the payer. House accounts may go negative here.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>held, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_10500&quot;</span>, <span class="t">Pending</span>: <span class="b">true</span>})
+check(err)
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, held.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10500_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;pending:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, <span class="s">&quot;txn_unknown&quot;</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_x&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;unknown:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
+
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, pay.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_10460_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;already fully refunded:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))
+
+<span class="c">// Tunde got ₦2,000 from Ada, then cashed out everything he had (₦3,500).</span>
+p2p, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_502&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;cashout_77&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>, <span class="t">Immediate</span>: <span class="b">true</span>})
+check(err)
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, p2p.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_502_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;partial, money spent:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+_, err = wallet.<span class="t">Refund</span>(ctx, p2p.<span class="t">TransactionID</span>, ledger.<span class="t">RefundInput</span>{})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;full refund posts anyway, Tunde:&quot;</span>, refundBalance(wallet, tundeNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>pending: true
+unknown: true
+already fully refunded: true
+partial, money spent: true
+full refund posts anyway, Tunde: -2000.00</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrAmountExceeded</code></td><td>a partial refund over what is left to refund</td><td>refund at most the amount in the error</td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td><code>Refund</code> twice; <code>Refund</code> after partial refunds; <code>RefundPartial</code> after a full <code>Refund</code></td><td>use the other call, or stop: it is already refunded</td></tr><tr><td><code>ErrInsufficientFunds</code></td><td><code>RefundPartial</code> when the recipient no longer has the money</td><td>collect it from the recipient first, or use <code>Refund</code></td></tr><tr><td><code>ErrInvalidInput</code></td><td>the transaction isn't posted; a split with several recipients given by its parent id; no <code>Reference</code> on a partial refund; no transaction id</td><td>refund the leg, or wait until it posts</td></tr><tr><td><code>ErrNotFound</code></td><td>no transaction with that id; <code>Refund</code> on the parent id of a payment with a fee or a split</td><td>check the id; refund the legs by their own ids</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td>the payer or the recipient is frozen or closed</td><td>see <a href="freeze.html">Freeze accounts</a></td></tr></tbody></table></div>
+<aside class="warn"><code>Refund</code> posts even when the recipient has spent the money, because Blnk reverses with overdraft allowed. The recipient's customer account goes negative, as Tunde's did above. Use <code>RefundPartial</code> when the recipient must have the money to give back.</aside>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="disputes.html">Disputes</a>: hold the money while a complaint is looked into, before deciding on a refund.</li><li><a href="escrow.html">Escrow</a>: refund before the seller is ever paid.</li><li><a href="split-payments.html">Split payments</a>: where leg ids come from.</li><li><a href="adjustments.html">Adjustments</a>: approved corrections that are not refunds.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="split-payments.html"><small>Previous</small>Split payments and marketplaces</a><a class="next" href="escrow.html"><small>Next</small>Escrow</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

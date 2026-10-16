@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Statements and history · humanblnk</title>
+<meta name="description" content="Show a customer&#x27;s activity, build a monthly statement that is checked against Blnk, export it as CSV, and read a balance at any moment.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Statements and history</h1>
+<p class="lead">Show a customer's activity, build a monthly statement that is checked against Blnk, export it as CSV, and read a balance at any moment.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#recent-activity-wallet-history">Recent activity: wallet.History</a><a href="#a-statement-wallet-statement">A statement: wallet.Statement</a><a href="#export-writecsv">Export: WriteCSV</a><a href="#a-balance-at-a-moment-wallet-balanceat">A balance at a moment: wallet.BalanceAt</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related-pages">Related pages</a></nav>
+
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada opens the Oja app and scrolls through her recent activity. At the end of September she downloads a statement for her landlord, who wants to see an opening balance, every payment and a closing balance that adds up. Oja's support team also needs her balance as it stood on a given day.</p>
+<p>The samples on this page run on one month of Ada's activity: a Paystack top-up with a fee, a transfer to Tunde with a fee, an order from Chidi Stores, a transfer into her rent pot scheduled for the 25th, a Flutterwave withdrawal confirmed the next day, Tunde paying back half a cab fare, and a withdrawal Flutterwave never confirmed.</p>
+<div class="tablewrap"><table><thead><tr><th>Need</th><th>Use</th></tr></thead><tbody><tr><td>A list of recent activity, with pending and scheduled items</td><td><code>wallet.History</code></td></tr><tr><td>A document for a period: opening, entries, closing</td><td><code>wallet.Statement</code></td></tr><tr><td>The same as a file</td><td><code>Statement.WriteCSV</code></td></tr><tr><td>One balance at one moment, e.g. month end</td><td><code>wallet.BalanceAt</code></td></tr><tr><td>The same for a house account such as <code>@FeeIncome</code></td><td><code>ops.HouseHistory</code>, <code>ops.HouseStatement</code>, <code>ops.HouseBalanceAt</code></td></tr></tbody></table></div>
+<h2 id="recent-activity-wallet-history"><a href="#recent-activity-wallet-history">Recent activity: wallet.History</a></h2>
+<p><code>History</code> lists the account's transactions, newest first, in every status.</p>
+<figure class="code"><figcaption>The five most recent items</figcaption><pre><code>page, err := wallet.<span class="t">History</span>(ctx, adaNGN, ledger.<span class="t">HistoryQuery</span>{<span class="t">Limit</span>: <span class="n">5</span>}) <span class="c">// newest first</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;total:&quot;</span>, page.<span class="t">Total</span>)
+<span class="k">for</span> _, r := <span class="k">range</span> page.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(r.<span class="t">CreatedAt</span>.<span class="t">In</span>(lagos).<span class="t">Format</span>(<span class="s">&quot;02 Jan&quot;</span>), r.<span class="t">Reference</span>, r.<span class="t">EntryStatus</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>, r.<span class="t">Description</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>total: 12
+18 Sep payout_7002 pending 3000.00 Withdrawal
+11 Sep p2p_20002 posted 2500.00 From Tunde: half of the cab
+11 Sep ref_txn_000025 posted 10000.00 To GTBank
+11 Sep ref_txn_000024 posted 50.00 To GTBank
+10 Sep payout_7001-2 pending 10000.00 To GTBank</pre></figure>
+<ul><li>Each item is a <code>ledger.Receipt</code> with <code>Reference</code>, <code>EntryStatus</code> (<code>posted</code>, <code>pending</code>, <code>voided</code>, <code>queued</code>, <code>scheduled</code>, <code>rejected</code>), <code>Amount</code>, <code>Description</code>, <code>CreatedAt</code> and the rest.</li><li><code>Total</code> is the number of matching transactions, for paging.</li><li>History shows every record Blnk keeps. A movement with a fee appears as its legs (<code>p2p_20001-1</code>, <code>p2p_20001-2</code>). Confirming a pending withdrawal adds a posted record for each leg (here <code>ref_txn_000024</code> and <code>ref_txn_000025</code>), and the original pending records stay in the list.</li><li>For a list of what really moved the balance, use <code>Statement</code>.</li></ul>
+<h3 id="filtering-and-paging-historyquery">Filtering and paging: HistoryQuery</h3>
+<figure class="code"><pre><code>in, err := wallet.<span class="t">History</span>(ctx, adaNGN, ledger.<span class="t">HistoryQuery</span>{
+	<span class="t">Direction</span>: ledger.<span class="t">Incoming</span>,                           <span class="c">// or ledger.Outgoing; default ledger.All</span>
+	<span class="t">Statuses</span>:  []<span class="b">string</span>{<span class="s">&quot;posted&quot;</span>},                        <span class="c">// or Blnk&#x27;s &quot;APPLIED&quot;; empty means all</span>
+	<span class="t">Since</span>:     time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos),  <span class="c">// created at or after</span>
+	<span class="t">Until</span>:     time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos), <span class="c">// created before</span>
+})
+check(err)
+<span class="k">for</span> _, r := <span class="k">range</span> in.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;in:&quot;</span>, r.<span class="t">Reference</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>, r.<span class="t">Description</span>)
+}
+
+planned, err := wallet.<span class="t">History</span>(ctx, adaNGN, ledger.<span class="t">HistoryQuery</span>{<span class="t">Statuses</span>: []<span class="b">string</span>{<span class="s">&quot;scheduled&quot;</span>}})
+check(err)
+<span class="k">for</span> _, r := <span class="k">range</span> planned.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;scheduled:&quot;</span>, r.<span class="t">Reference</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;for&quot;</span>, r.<span class="t">Raw</span>.<span class="t">ScheduledFor</span>.<span class="t">In</span>(lagos).<span class="t">Format</span>(<span class="s">&quot;02 Jan 15:04&quot;</span>))
+}
+
+second, err := wallet.<span class="t">History</span>(ctx, adaNGN, ledger.<span class="t">HistoryQuery</span>{<span class="t">Limit</span>: <span class="n">5</span>, <span class="t">Offset</span>: <span class="n">5</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;page 2:&quot;</span>, <span class="b">len</span>(second.<span class="t">Items</span>), <span class="s">&quot;of&quot;</span>, second.<span class="t">Total</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>in: p2p_20002 2500.00 From Tunde: half of the cab
+in: paystack_T100201-1 49250.00 Card top-up
+scheduled: rent_sep 20000.00 for 25 Sep 09:00
+page 2: 5 of 12</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>Direction</code></td><td><code>ledger.All</code> (default), <code>ledger.Incoming</code> (the account received), <code>ledger.Outgoing</code> (the account paid)</td></tr><tr><td><code>Statuses</code></td><td>only these statuses, in either vocabulary: <code>&quot;posted&quot;</code> or Blnk's <code>&quot;APPLIED&quot;</code>, <code>&quot;pending&quot;</code> or <code>&quot;INFLIGHT&quot;</code>, and so on; empty means all</td></tr><tr><td><code>Since</code></td><td>created at or after this time</td></tr><tr><td><code>Until</code></td><td>created before this time</td></tr><tr><td><code>Limit</code></td><td>page size; default 20, at most 100</td></tr><tr><td><code>Offset</code></td><td>where the page starts</td></tr></tbody></table></div>
+<p><code>HistoryPage</code> returns <code>Items</code>, the <code>Limit</code> and <code>Offset</code> used, and <code>Total</code>. <code>Since</code> and <code>Until</code> filter on when a transaction was created, so a scheduled transfer is found by the day it was set up.</p>
+<h2 id="a-statement-wallet-statement"><a href="#a-statement-wallet-statement">A statement: wallet.Statement</a></h2>
+<p><code>Statement</code> covers <code>[from, to)</code>: from the first moment, up to but not including the last. Use the customer's timezone for the dates.</p>
+<figure class="code"><figcaption>Ada's September statement, in Lagos time</figcaption><pre><code><span class="c">// Ada downloads her September statement.</span>
+from := time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos)
+to := from.<span class="t">AddDate</span>(<span class="n">0</span>, <span class="n">1</span>, <span class="n">0</span>) <span class="c">// up to, not including, 1 October</span>
+st, err := wallet.<span class="t">Statement</span>(ctx, adaNGN, from, to)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;opening&quot;</span>, st.<span class="t">Opening</span>.<span class="t">Display</span>, <span class="s">&quot;in&quot;</span>, st.<span class="t">Credits</span>.<span class="t">Display</span>, <span class="s">&quot;out&quot;</span>, st.<span class="t">Debits</span>.<span class="t">Display</span>, <span class="s">&quot;closing&quot;</span>, st.<span class="t">Closing</span>.<span class="t">Display</span>)
+<span class="k">for</span> _, l := <span class="k">range</span> st.<span class="t">Lines</span> {
+	amount := <span class="s">&quot;+&quot;</span> + l.<span class="t">Credit</span>.<span class="t">Display</span>
+	<span class="k">if</span> l.<span class="t">Debit</span>.<span class="t">IsPositive</span>() {
+		amount = <span class="s">&quot;-&quot;</span> + l.<span class="t">Debit</span>.<span class="t">Display</span>
+	}
+	fmt.<span class="t">Println</span>(l.<span class="t">Date</span>.<span class="t">In</span>(lagos).<span class="t">Format</span>(<span class="s">&quot;02 Jan&quot;</span>), l.<span class="t">Description</span>, <span class="s">&quot;|&quot;</span>, l.<span class="t">Counterpart</span>, <span class="s">&quot;|&quot;</span>, amount, <span class="s">&quot;=&quot;</span>, l.<span class="t">Balance</span>.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>opening 15000.00 in 51750.00 out 47560.00 closing 19190.00
+01 Sep Card top-up | @PaystackClearing | +49250.00 = 64250.00
+03 Sep To Tunde: suya money | bln_000005 | -5000.00 = 59250.00
+03 Sep To Tunde: suya money | @FeeIncome | -10.00 = 59240.00
+05 Sep Chidi Stores order 5101 | bln_000007 | -12500.00 = 46740.00
+11 Sep To GTBank | @FlutterwaveClearing | -10000.00 = 36740.00
+11 Sep To GTBank | @FeeIncome | -50.00 = 36690.00
+11 Sep From Tunde: half of the cab | bln_000005 | +2500.00 = 39190.00
+25 Sep Rent pot | bln_000008 | -20000.00 = 19190.00</pre></figure>
+<p><code>Statement</code> fields:</p>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>AccountID</code>, <code>Currency</code></td><td>the account</td></tr><tr><td><code>From</code>, <code>To</code></td><td>the period as you asked for it</td></tr><tr><td><code>Opening</code></td><td>Blnk's historical balance just before <code>From</code></td></tr><tr><td><code>Credits</code>, <code>Debits</code></td><td>total in and total out over the period</td></tr><tr><td><code>Closing</code></td><td><code>Opening</code> plus <code>Credits</code> minus <code>Debits</code></td></tr><tr><td><code>Lines</code></td><td>one <code>StatementLine</code> per posted entry</td></tr></tbody></table></div>
+<p>Each <code>StatementLine</code> has <code>Date</code>, <code>Reference</code>, <code>Description</code>, <code>Credit</code> (money in, zero for a debit), <code>Debit</code> (money out, zero for a credit), <code>Balance</code> (the running balance after the line), <code>Counterpart</code> and the full <code>Receipt</code>.</p>
+<p>How the lines are built:</p>
+<ul><li>Only posted (<code>APPLIED</code>) entries are listed. Pending holds, pending withdrawals, voided and scheduled transfers are left out. The withdrawal Flutterwave never confirmed expired and is not on the statement.</li><li>Entries are dated by when they took effect. The rent transfer was created on 5 September and appears on 25 September, the day it posted. The withdrawal requested on the 10th appears on the 11th, when Flutterwave confirmed it.</li><li>A fee is its own line, straight after the payment it belongs to, with <code>@FeeIncome</code> as the counterpart.</li><li><code>Counterpart</code> is the other account: a customer account id, or the <code>@Name</code> of a house account such as <code>@PaystackClearing</code>.</li><li>A deposit's fee never touches Ada's account: she is credited the net amount, ₦49,250.</li></ul>
+<h3 id="checked-against-blnk">Checked against Blnk</h3>
+<p>The running balance is worked out from the lines and then compared with Blnk's own historical balance at <code>To</code>. If they differ, for example because an entry was backdated or posted while the statement was being read, <code>Statement</code> returns <code>ErrConflict</code> instead of a statement that doesn't add up. Ask again.</p>
+<p>A statement holds at most 10,000 lines. A longer period is refused with <code>ErrInvalidInput</code>; ask for one month at a time.</p>
+<h2 id="export-writecsv"><a href="#export-writecsv">Export: WriteCSV</a></h2>
+<p><code>WriteCSV</code> writes the statement to any <code>io.Writer</code>: an HTTP response, a file or a buffer.</p>
+<figure class="code"><pre><code>check(st.<span class="t">WriteCSV</span>(os.<span class="t">Stdout</span>)) <span class="c">// or an http.ResponseWriter, a file, a bytes.Buffer</span></code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>date,reference,description,counterpart,credit,debit,balance,currency
+2026-08-31T23:00:00Z,,Opening balance,,,,15000.00,NGN
+2026-09-01T09:00:00Z,paystack_T100201-1,Card top-up,@PaystackClearing,49250.00,,64250.00,NGN
+2026-09-03T12:00:00Z,p2p_20001-2,To Tunde: suya money,bln_000005,,5000.00,59250.00,NGN
+2026-09-03T12:00:00Z,p2p_20001-1,To Tunde: suya money,@FeeIncome,,10.00,59240.00,NGN
+2026-09-05T15:00:00Z,order_5101,Chidi Stores order 5101,bln_000007,,12500.00,46740.00,NGN
+2026-09-11T09:00:00Z,ref_txn_000025,To GTBank,@FlutterwaveClearing,,10000.00,36740.00,NGN
+2026-09-11T09:00:00Z,ref_txn_000024,To GTBank,@FeeIncome,,50.00,36690.00,NGN
+2026-09-11T09:00:00Z,p2p_20002,From Tunde: half of the cab,bln_000005,2500.00,,39190.00,NGN
+2026-09-25T09:00:00Z,rent_sep,Rent pot,bln_000008,,20000.00,19190.00,NGN
+2026-09-30T23:00:00Z,,Closing balance,,51750.00,47560.00,19190.00,NGN</pre></figure>
+<ul><li>The first row is the header, then an opening row, one row per line, and a closing row with the period's total credits, total debits and the closing balance.</li><li>Amounts are plain decimals with every decimal place (<code>49250.00</code>), and a zero credit or debit is left blank.</li><li>Dates are in UTC, in RFC 3339.</li></ul>
+<h2 id="a-balance-at-a-moment-wallet-balanceat"><a href="#a-balance-at-a-moment-wallet-balanceat">A balance at a moment: wallet.BalanceAt</a></h2>
+<figure class="code"><figcaption>Ada's balance at four moments</figcaption><pre><code><span class="k">for</span> _, moment := <span class="k">range</span> []time.<span class="t">Time</span>{
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos),   <span class="c">// start of September</span>
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">10</span>, <span class="n">18</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos), <span class="c">// withdrawal pending: not counted</span>
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">11</span>, <span class="n">18</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos), <span class="c">// confirmed</span>
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos),  <span class="c">// month end</span>
+} {
+	b, err := wallet.<span class="t">BalanceAt</span>(ctx, adaNGN, moment)
+	check(err)
+	fmt.<span class="t">Println</span>(moment.<span class="t">Format</span>(<span class="s">&quot;02 Jan 15:04&quot;</span>), b.<span class="t">Display</span>)
+}
+now, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;now&quot;</span>, now.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available&quot;</span>, now.<span class="t">Available</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>01 Sep 00:00 15000.00
+10 Sep 18:00 46740.00
+11 Sep 18:00 39190.00
+01 Oct 00:00 19190.00
+now 27190.00 available 27190.00</pre></figure>
+<ul><li><code>BalanceAt</code> returns the posted balance at that instant. A pending amount isn't included: on 10 September the withdrawal was held but not yet confirmed, so the balance still includes it.</li><li>It uses Blnk's historical balance endpoint, recomputed from transactions. That needs Blnk Core 0.10.1 or later.</li><li><code>GetAccount</code> gives the balance now, with <code>Available</code> (balance minus pending debits).</li></ul>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>Nothing is written. These calls only read:</p>
+<div class="tablewrap"><table><thead><tr><th>Call</th><th>Blnk reads</th></tr></thead><tbody><tr><td><code>History</code></td><td><code>POST /transactions/filter</code> by <code>balance_id</code> (or <code>source</code> / <code>destination</code> for a direction), newest first</td></tr><tr><td><code>Statement</code></td><td>the historical balance before <code>From</code> and at <code>To</code> (<code>GET /balances/{id}/at</code>), and the <code>APPLIED</code> transactions by <code>effective_date</code>, 100 per request</td></tr><tr><td><code>BalanceAt</code></td><td><code>GET /balances/{id}/at</code></td></tr></tbody></table></div>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">Statement</span>(ctx, adaNGN, to, from) <span class="c">// backwards</span>
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = wallet.<span class="t">Statement</span>(ctx, ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>), from, to)
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>), err)
+
+_, err = wallet.<span class="t">History</span>(ctx, <span class="s">&quot;bln_doesnotexist&quot;</span>, ledger.<span class="t">HistoryQuery</span>{})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Statement: ledger: invalid input: from must be before to
+true ledger.Wallet.Statement: ledger: id names the wrong kind of object: ledger: invalid input: @FeeIncome is a house account, not a customer account; read house accounts with Ops().GetHouseAccount
+true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td><code>from</code> is not before <code>to</code>; more than 10,000 lines in the period</td><td>fix the dates; ask for a shorter period</td></tr><tr><td><code>ErrWrongKind</code></td><td>a house account was passed to a wallet method</td><td>use <code>ops.HouseStatement</code> and the other house methods</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist</td><td>check the id</td></tr><tr><td><code>ErrConflict</code></td><td>the lines don't add up to Blnk's balance at <code>To</code></td><td>ask again; if it persists, look for backdated entries</td></tr></tbody></table></div>
+<h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
+<ul><li><a href="house-accounts.html">House accounts</a>: the same history and statements for <code>@FeeIncome</code> and the clearing accounts.</li><li><a href="fees.html">Fees and pricing</a>: where the fee lines come from.</li><li><a href="savings-pots.html">Savings pots and standing orders</a>: scheduled transfers.</li><li><a href="withdrawals.html">Withdrawals</a>: pending, confirmed and expired payouts.</li><li><a href="reports.html">Reports</a>: balances across the whole ledger.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="limits.html"><small>Previous</small>Limits and KYC tiers</a><a class="next" href="ledgers.html"><small>Next</small>Provision ledgers</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

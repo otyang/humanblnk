@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fees and pricing · humanblnk</title>
+<meta name="description" content="Charge for deposits, withdrawals, transfers and exchanges: a fee on each call, or one pricing function for the whole app, with every fee posted to @FeeIncome.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Fees and pricing</h1>
+<p class="lead">Charge for deposits, withdrawals, transfers and exchanges: a fee on each call, or one pricing function for the whole app, with every fee posted to @FeeIncome.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#how-fees-work">How fees work</a><a href="#a-fee-on-the-call">A fee on the call</a><a href="#fee-rules-feerule-and-computefee">Fee rules: FeeRule and ComputeFee</a><a href="#a-fee-set-in-another-currency-convert">A fee set in another currency: Convert</a><a href="#one-price-list-config-fees">One price list: Config.Fees</a><a href="#waivers-and-promotions">Waivers and promotions</a><a href="#retries-are-priced-again">Retries are priced again</a><a href="#where-fees-go-feeincome">Where fees go: @FeeIncome</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related-pages">Related pages</a></nav>
+
+<article>
+<h2 id="how-fees-work"><a href="#how-fees-work">How fees work</a></h2>
+<p>Oja charges for some movements and not others. A Paystack top-up costs 1.5%, a transfer to a friend costs ₦10, a Flutterwave payout costs $0.50 in the customer's currency, and Chidi Stores, a tier3 merchant, pays nothing.</p>
+<p>humanblnk never guesses a fee. Every chargeable call must say what it charges, or the call fails before it reaches Blnk. The chargeable calls are <code>Deposit</code>, <code>Withdraw</code>, <code>Transfer</code>, <code>Exchange</code>, <code>Schedule</code>, each item of <code>Bulk</code>, and the quotes for them.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>A few calls, or prices decided by the caller</td><td><code>Fee</code> on the call</td></tr><tr><td>A deliberately free movement</td><td><code>Fee: ledger.NoFee</code></td></tr><tr><td>One price list for the whole app</td><td><code>Config.Fees</code>, a <code>FeeFunc</code></td></tr><tr><td>Prices as percentage, fixed, minimum, maximum or bands</td><td><code>FeeRule</code> with <code>ComputeFee</code></td></tr><tr><td>A fee set in another currency</td><td><code>FeeRequest.Convert</code> inside your <code>FeeFunc</code></td></tr><tr><td>A promotion or a waiver</td><td><code>Fee</code> on the call; it skips <code>Config.Fees</code></td></tr></tbody></table></div>
+<p>Movements that are not customer payments never take a fee: holds, splits, escrow, refunds, disputes, suspense, settlement and adjustments.</p>
+<h2 id="a-fee-on-the-call"><a href="#a-fee-on-the-call">A fee on the call</a></h2>
+<p>Set <code>Fee</code> on the input. It is always in the transaction's currency, so you can write it with an empty currency.</p>
+<figure class="code"><figcaption>A ₦750 fee on a top-up, and a free transfer</figcaption><pre><code><span class="c">// Paystack says ₦50,000 arrived for Ada; Oja keeps ₦750.</span>
+dep, err := wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{
+	<span class="t">AccountID</span>: adaNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// gross, as Paystack received it</span>
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;750&quot;</span>, <span class="s">&quot;&quot;</span>),      <span class="c">// &quot;&quot; takes the amount&#x27;s currency</span>
+	<span class="t">Reference</span>: <span class="s">&quot;paystack_T100201&quot;</span>,
+	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
+})
+check(err)
+<span class="k">for</span> _, leg := <span class="k">range</span> dep.<span class="t">Legs</span> { <span class="c">// the fee leg has a fixed amount; the rest goes to Ada</span>
+	fmt.<span class="t">Println</span>(<span class="s">&quot;leg:&quot;</span>, leg.<span class="t">Account</span>, leg.<span class="t">Narration</span>, leg.<span class="t">Amount</span>.<span class="t">Display</span>, leg.<span class="t">Distribution</span>)
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;fee:&quot;</span>, dep.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>], <span class="s">&quot;net:&quot;</span>, dep.<span class="t">MetaData</span>[<span class="s">&quot;net_amount&quot;</span>])
+
+<span class="c">// Tunde sends Ada ₦5,000 for free.</span>
+tr, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>, <span class="c">// deliberately free</span>
+	<span class="t">Reference</span>: <span class="s">&quot;p2p_20001&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;free transfer:&quot;</span>, tr.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;legs:&quot;</span>, <span class="b">len</span>(tr.<span class="t">Legs</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>leg: @FeeIncome Deposit fee 750.00 75000
+leg: bln_000003 Deposit  left
+fee: 750 net: 49250
+free transfer: 5000.00 legs: 0</pre></figure>
+<ul><li>A deposit fee is taken out of <code>Amount</code>: Paystack received ₦50,000, Ada gets ₦49,250 and <code>@FeeIncome</code> gets ₦750.</li><li>A withdrawal or transfer fee is charged on top: the sender pays <code>Amount</code> plus <code>Fee</code> and the recipient gets <code>Amount</code>.</li><li>A movement with a fee is recorded as one Blnk transaction with two destinations. <code>Receipt.Legs</code> lists them: the fee leg has a fixed amount (<code>75000</code> kobo), the customer's leg takes what is <code>left</code>.</li><li>The receipt's <code>MetaData</code> records <code>fee</code>, <code>net_amount</code> and their <code>_precise</code> forms, for your reports.</li><li><code>ledger.NoFee</code> says "free" on purpose. It is not the same as leaving <code>Fee</code> out.</li></ul>
+<h2 id="fee-rules-feerule-and-computefee"><a href="#fee-rules-feerule-and-computefee">Fee rules: FeeRule and ComputeFee</a></h2>
+<p>A <code>FeeRule</code> describes a price without writing arithmetic. <code>svc.ComputeFee</code> applies it to an amount as typed and returns a fee ready to pass as <code>Fee</code>.</p>
+<figure class="code"><figcaption>The same three amounts under four rules, and the three rounding modes</figcaption><pre><code>rules := []ledger.<span class="t">FeeRule</span>{
+	{<span class="t">Percent</span>: <span class="s">&quot;1.5&quot;</span>, <span class="t">Max</span>: <span class="s">&quot;2000&quot;</span>},           <span class="c">// 1.5%, capped at ₦2,000</span>
+	{<span class="t">Percent</span>: <span class="s">&quot;0.5&quot;</span>, <span class="t">Min</span>: <span class="s">&quot;10&quot;</span>, <span class="t">Max</span>: <span class="s">&quot;100&quot;</span>}, <span class="c">// 0.5%, at least ₦10, at most ₦100</span>
+	{<span class="t">Percent</span>: <span class="s">&quot;1&quot;</span>, <span class="t">Fixed</span>: <span class="s">&quot;100&quot;</span>},            <span class="c">// 1% plus ₦100</span>
+	{<span class="t">Tiers</span>: []ledger.<span class="t">FeeTier</span>{ <span class="c">// banded by amount</span>
+		{<span class="t">UpTo</span>: <span class="s">&quot;5000&quot;</span>, <span class="t">Rule</span>: ledger.<span class="t">FeeRule</span>{<span class="t">Fixed</span>: <span class="s">&quot;10&quot;</span>}},
+		{<span class="t">UpTo</span>: <span class="s">&quot;50000&quot;</span>, <span class="t">Rule</span>: ledger.<span class="t">FeeRule</span>{<span class="t">Fixed</span>: <span class="s">&quot;25&quot;</span>}},
+		{<span class="t">Rule</span>: ledger.<span class="t">FeeRule</span>{<span class="t">Fixed</span>: <span class="s">&quot;50&quot;</span>}}, <span class="c">// everything above</span>
+	}},
+}
+<span class="k">for</span> _, amount := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;20000&quot;</span>, <span class="s">&quot;250000&quot;</span>} {
+	line := amount + <span class="s">&quot; NGN:&quot;</span>
+	<span class="k">for</span> _, rule := <span class="k">range</span> rules {
+		fee, err := svc.<span class="t">ComputeFee</span>(rule, ledger.<span class="t">Amount</span>(amount, <span class="s">&quot;NGN&quot;</span>))
+		check(err)
+		line += <span class="s">&quot; &quot;</span> + fee.<span class="t">Display</span>
+	}
+	fmt.<span class="t">Println</span>(line)
+}
+
+<span class="c">// 1.5% of ₦333.33 is ₦4.99995: the rounding mode decides the last kobo.</span>
+modes := []ledger.<span class="t">Rounding</span>{ledger.<span class="t">RoundHalfUp</span>, ledger.<span class="t">RoundUp</span>, ledger.<span class="t">RoundDown</span>}
+<span class="k">for</span> i, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;RoundHalfUp&quot;</span>, <span class="s">&quot;RoundUp&quot;</span>, <span class="s">&quot;RoundDown&quot;</span>} {
+	fee, err := svc.<span class="t">ComputeFee</span>(ledger.<span class="t">FeeRule</span>{<span class="t">Percent</span>: <span class="s">&quot;1.5&quot;</span>, <span class="t">Rounding</span>: modes[i]}, ledger.<span class="t">Amount</span>(<span class="s">&quot;333.33&quot;</span>, <span class="s">&quot;NGN&quot;</span>))
+	check(err)
+	fmt.<span class="t">Println</span>(name, fee.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>1500 NGN: 22.50 10.00 115.00 10.00
+20000 NGN: 300.00 100.00 300.00 25.00
+250000 NGN: 2000.00 100.00 2600.00 50.00
+RoundHalfUp 5.00
+RoundUp 5.00
+RoundDown 4.99</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>Percent</code></td><td>a percentage of the amount, e.g. <code>&quot;1.5&quot;</code> (a trailing <code>%</code> is accepted)</td></tr><tr><td><code>Fixed</code></td><td>a flat part added to the percentage</td></tr><tr><td><code>Min</code></td><td>a floor on the fee, applied after <code>Percent</code> and <code>Fixed</code></td></tr><tr><td><code>Max</code></td><td>a cap on the fee, applied last</td></tr><tr><td><code>Rounding</code></td><td>how the percentage part rounds to the smallest unit: <code>RoundHalfUp</code> (default), <code>RoundUp</code> (in the house's favour), <code>RoundDown</code> (in the customer's favour)</td></tr><tr><td><code>Tiers</code></td><td>bands that replace the fields above: the first tier whose <code>UpTo</code> is at or above the amount applies; a tier with an empty <code>UpTo</code> covers everything above</td></tr></tbody></table></div>
+<ul><li>Amounts in a rule are decimals in the transaction's currency, so keep one rule per currency.</li><li><code>ledger.ComputeFee(rule, r.Amount)</code> is the same calculation for an amount that is already resolved, such as <code>FeeRequest.Amount</code>. Use it inside a <code>FeeFunc</code>.</li><li>If no tier covers the amount (every tier has an <code>UpTo</code> and the amount is above all of them), <code>ComputeFee</code> returns <code>ErrInvalidInput</code>.</li></ul>
+<h2 id="a-fee-set-in-another-currency-convert"><a href="#a-fee-set-in-another-currency-convert">A fee set in another currency: Convert</a></h2>
+<p>Oja's payout fee is "$0.50 everywhere". <code>FeeRequest.Convert</code> turns it into the transaction's currency at a rate you supply (units of the transaction currency per 1 unit of the fee currency), rounded to that currency's precision with the mode you choose.</p>
+<figure class="code"><pre><code><span class="c">// Oja charges $0.50 on every withdrawal, in the withdrawal&#x27;s currency.</span>
+amount, err := svc.<span class="t">Parse</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>) <span class="c">// resolved, like FeeRequest.Amount</span>
+check(err)
+r := ledger.<span class="t">FeeRequest</span>{<span class="t">Kind</span>: ledger.<span class="t">FeeWithdrawal</span>, <span class="t">Amount</span>: amount}
+
+fee, err := r.<span class="t">Convert</span>(ledger.<span class="t">Amount</span>(<span class="s">&quot;0.50&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="s">&quot;1532.40&quot;</span>, ledger.<span class="t">RoundUp</span>)
+check(err)
+fmt.<span class="t">Println</span>(fee.<span class="t">Value</span>, fee.<span class="t">Currency</span>)
+
+odd, err := r.<span class="t">Convert</span>(ledger.<span class="t">Amount</span>(<span class="s">&quot;0.50&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="s">&quot;1532.333&quot;</span>, ledger.<span class="t">RoundUp</span>)
+check(err)
+fmt.<span class="t">Println</span>(odd.<span class="t">Value</span>, odd.<span class="t">Currency</span>, <span class="s">&quot;(766.1665 rounded up)&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>766.2 NGN
+766.17 NGN (766.1665 rounded up)</pre></figure>
+<p>The result is in the transaction's currency, which is the only currency a fee can be in. You get the rate; humanblnk does not fetch exchange rates.</p>
+<h2 id="one-price-list-config-fees"><a href="#one-price-list-config-fees">One price list: Config.Fees</a></h2>
+<p>Set <code>Config.Fees</code> to a <code>FeeFunc</code> and every chargeable call without its own <code>Fee</code> asks it for the price. It runs on every call, so prices can change while the app is running: read them from your database and finance can reprice without a deploy.</p>
+<figure class="code"><figcaption>Oja's price list, used by a deposit, a withdrawal and a merchant transfer</figcaption><pre><code>transferFee := <span class="s">&quot;10&quot;</span> <span class="c">// in production, read from your pricing table</span>
+usdRate := <span class="k">map</span>[<span class="b">string</span>]<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="s">&quot;USD&quot;</span>: <span class="s">&quot;1&quot;</span>}
+
+pricing := <span class="k">func</span>(ctx context.<span class="t">Context</span>, r ledger.<span class="t">FeeRequest</span>) (ledger.<span class="t">Money</span>, <span class="b">error</span>) {
+	<span class="k">if</span> r.<span class="t">Account</span> != <span class="b">nil</span> &amp;&amp; r.<span class="t">Account</span>.<span class="t">MetaData</span>[<span class="s">&quot;tier&quot;</span>] == <span class="s">&quot;tier3&quot;</span> {
+		<span class="k">return</span> ledger.<span class="t">NoFee</span>, <span class="b">nil</span> <span class="c">// merchants on tier3 pay nothing</span>
+	}
+	<span class="k">switch</span> {
+	<span class="k">case</span> r.<span class="t">Kind</span> == ledger.<span class="t">FeeDeposit</span> &amp;&amp; r.<span class="t">Amount</span>.<span class="t">Currency</span> == <span class="s">&quot;NGN&quot;</span>:
+		<span class="k">return</span> ledger.<span class="t">ComputeFee</span>(ledger.<span class="t">FeeRule</span>{<span class="t">Percent</span>: <span class="s">&quot;1.5&quot;</span>, <span class="t">Max</span>: <span class="s">&quot;2000&quot;</span>}, r.<span class="t">Amount</span>)
+	<span class="k">case</span> r.<span class="t">Kind</span> == ledger.<span class="t">FeeTransfer</span> &amp;&amp; r.<span class="t">Amount</span>.<span class="t">Currency</span> == <span class="s">&quot;NGN&quot;</span>:
+		<span class="k">return</span> ledger.<span class="t">ComputeFee</span>(ledger.<span class="t">FeeRule</span>{<span class="t">Fixed</span>: transferFee}, r.<span class="t">Amount</span>)
+	<span class="k">case</span> r.<span class="t">Kind</span> == ledger.<span class="t">FeeWithdrawal</span> &amp;&amp; usdRate[r.<span class="t">Amount</span>.<span class="t">Currency</span>] != <span class="s">&quot;&quot;</span>:
+		<span class="k">return</span> r.<span class="t">Convert</span>(ledger.<span class="t">Amount</span>(<span class="s">&quot;0.50&quot;</span>, <span class="s">&quot;USD&quot;</span>), usdRate[r.<span class="t">Amount</span>.<span class="t">Currency</span>], ledger.<span class="t">RoundUp</span>)
+	}
+	<span class="k">return</span> ledger.<span class="t">Money</span>{}, fmt.<span class="t">Errorf</span>(<span class="s">&quot;no price for a %s in %s&quot;</span>, r.<span class="t">Kind</span>, r.<span class="t">Amount</span>.<span class="t">Currency</span>)
+}
+
+priced := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ledgerID, <span class="t">Fees</span>: pricing})
+pw := priced.<span class="t">Wallet</span>()
+
+d, err := pw.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;paystack_T100202&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>}) <span class="c">// no Fee: Config.Fees prices it</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;deposit fee:&quot;</span>, d.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>])
+
+w, err := pw.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;payout_7001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>, <span class="t">Immediate</span>: <span class="b">true</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;withdrawal: debited&quot;</span>, w.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;fee&quot;</span>, w.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>])
+
+m, err := pw.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: chidiNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;chidi_refund_88&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;tier3 transfer:&quot;</span>, m.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;legs:&quot;</span>, <span class="b">len</span>(m.<span class="t">Legs</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>deposit fee: 300
+withdrawal: debited 20766.20 fee 766.2
+tier3 transfer: 15000.00 legs: 0</pre></figure>
+<p>The function gets a <code>FeeRequest</code>:</p>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>Kind</code></td><td><code>ledger.FeeDeposit</code>, <code>FeeWithdrawal</code>, <code>FeeTransfer</code> or <code>FeeExchange</code></td></tr><tr><td><code>Account</code></td><td>the customer account charged, with its <code>MetaData</code> (e.g. <code>tier</code>): the receiving account for a deposit, the sending account otherwise; nil when that side is a house account</td></tr><tr><td><code>Amount</code></td><td>the transaction amount, resolved (currency and precision set): the gross amount for a deposit, what the recipient gets for a withdrawal or transfer, the amount sold for an exchange</td></tr><tr><td><code>Provider</code></td><td>for deposits and withdrawals, e.g. <code>&quot;paystack&quot;</code></td></tr><tr><td><code>BuyCurrency</code></td><td>for exchanges, the currency bought</td></tr></tbody></table></div>
+<p>What it returns decides the call:</p>
+<ul><li>a <code>Money</code> in <code>r.Amount</code>'s currency, or with an empty currency: that is the fee;</li><li><code>ledger.NoFee</code>: the call is free;</li><li>an error: the call is refused with <code>ErrFeePricing</code>, and your error is kept as the cause;</li><li>an empty <code>ledger.Money{}</code>, or a fee in another currency: also <code>ErrFeePricing</code>.</li></ul>
+<p>An exchange's fee is in the sell currency and charged on top of the amount sold. <code>Schedule</code> asks once, when the plan is created, and charges that fee on every occurrence. <code>Bulk</code> asks once per item. Quotes (<code>QuoteDeposit</code>, <code>QuoteWithdraw</code>, <code>QuoteTransfer</code>, <code>QuoteExchange</code>) call the same function, so the fee a customer sees on the confirm screen is the fee they pay. See <a href="quotes.html">Quotes</a>.</p>
+<h2 id="waivers-and-promotions"><a href="#waivers-and-promotions">Waivers and promotions</a></h2>
+<p>A <code>Fee</code> on the call always wins over <code>Config.Fees</code>. Use that for a free weekend, a goodwill gesture, or a discount you work out yourself.</p>
+<figure class="code"><figcaption>A free transfer, and a half-price one priced from the quote</figcaption><pre><code><span class="c">// Free-transfer weekend: the app passes Fee itself, so Config.Fees isn&#x27;t asked.</span>
+promo, err := pw.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_20002&quot;</span>,
+	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;promo&quot;</span>: <span class="s">&quot;free-weekend&quot;</span>}})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;promo:&quot;</span>, promo.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;legs:&quot;</span>, <span class="b">len</span>(promo.<span class="t">Legs</span>))
+
+<span class="c">// A half-price offer: price as usual, then charge less.</span>
+q, err := pw.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_20003&quot;</span>})
+check(err)
+half, err := priced.<span class="t">ComputeFee</span>(ledger.<span class="t">FeeRule</span>{<span class="t">Percent</span>: <span class="s">&quot;50&quot;</span>}, ledger.<span class="t">Amount</span>(q.<span class="t">Fee</span>.<span class="t">Value</span>, <span class="s">&quot;NGN&quot;</span>))
+check(err)
+offer, err := pw.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: half, <span class="t">Reference</span>: <span class="s">&quot;p2p_20003&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;usual fee:&quot;</span>, q.<span class="t">Fee</span>.<span class="t">Display</span>, <span class="s">&quot;charged:&quot;</span>, offer.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>])</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>promo: 2000.00 legs: 0
+usual fee: 10.00 charged: 5</pre></figure>
+<ul><li>Record why in <code>MetaData</code> (here <code>promo</code>), so the waiver shows in reports.</li><li>For a discount, take the usual price from a quote and pass the reduced fee.</li><li>Customers who never pay, like Chidi Stores on tier3, belong in the <code>FeeFunc</code> itself (it returns <code>NoFee</code> for them), not in every call.</li></ul>
+<h2 id="retries-are-priced-again"><a href="#retries-are-priced-again">Retries are priced again</a></h2>
+<p>A retry with the same <code>Reference</code> and the same entries returns the original with <code>Replayed: true</code>. With <code>Config.Fees</code>, the retry is priced again. If the price changed between the first attempt and the retry, the entries differ and the retry is refused with <code>ErrDuplicateReference</code>.</p>
+<figure class="code"><pre><code>in := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_20004&quot;</span>}
+first, err := pw.<span class="t">Transfer</span>(ctx, in)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;first attempt fee:&quot;</span>, first.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>])
+
+transferFee = <span class="s">&quot;15&quot;</span> <span class="c">// finance changes the price; the app retries a timed-out call</span>
+_, err = pw.<span class="t">Transfer</span>(ctx, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;retry, re-priced:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))
+
+in.<span class="t">Fee</span> = ledger.<span class="t">Amount</span>(first.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>].(<span class="b">string</span>), <span class="s">&quot;&quot;</span>) <span class="c">// retry with the fee first charged</span>
+again, err := pw.<span class="t">Transfer</span>(ctx, in)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;retry with the original fee: replayed&quot;</span>, again.<span class="t">Replayed</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>first attempt fee: 10
+retry, re-priced: true
+retry with the original fee: replayed true</pre></figure>
+<aside class="tip">Keep the fee from the first attempt (from the quote or the receipt) and pass it as <code>Fee</code> when you retry. The retry then matches the original whatever the price list says now.</aside>
+<h2 id="where-fees-go-feeincome"><a href="#where-fees-go-feeincome">Where fees go: @FeeIncome</a></h2>
+<p>Every fee leg is credited to <code>@FeeIncome</code> in the transaction's currency, a house account of type income. Read it with <code>ops.GetHouseAccount</code>.</p>
+<figure class="code"><figcaption>Oja's naira fee income after the calls above</figcaption><pre><code>income, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(income.<span class="t">Indicator</span>, income.<span class="t">Type</span>, <span class="s">&quot;balance:&quot;</span>, income.<span class="t">Balance</span>.<span class="t">Display</span>)
+
+h, err := ops.<span class="t">HouseHistory</span>(ctx, income.<span class="t">Ref</span>(), ledger.<span class="t">HistoryQuery</span>{<span class="t">Limit</span>: <span class="n">3</span>})
+check(err)
+<span class="k">for</span> _, it := <span class="k">range</span> h.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(it.<span class="t">Reference</span>, it.<span class="t">Amount</span>.<span class="t">Display</span>, it.<span class="t">Description</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@FeeIncome income balance: 1831.20
+p2p_20004-1 10.00 Transfer
+p2p_20003-1 5.00 Transfer
+payout_7001-1 766.20 Withdrawal</pre></figure>
+<ul><li>In Blnk, each fee is its own leg with a reference like <code>p2p_20004-1</code>, so <code>@FeeIncome</code>'s history lists the fee legs only.</li><li>If your books already use another account, such as <code>@Fees</code>, set <code>Config.FeeIncomeAccount</code>. See <a href="house-accounts.html">House accounts</a>.</li></ul>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>A ₦50,000 Paystack deposit with a ₦750 fee:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>@PaystackClearing</code></td><td>₦50,000</td><td></td></tr><tr><td>Ada's account</td><td></td><td>₦49,250</td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦750</td></tr></tbody></table></div>
+<p>A ₦20,000 Flutterwave withdrawal with a ₦766.20 fee:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's account</td><td>₦20,766.20</td><td></td></tr><tr><td><code>@FlutterwaveClearing</code></td><td></td><td>₦20,000</td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦766.20</td></tr></tbody></table></div>
+<p>A ₦3,000 transfer with a ₦10 fee:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's account</td><td>₦3,010</td><td></td></tr><tr><td>Tunde's account</td><td></td><td>₦3,000</td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦10</td></tr></tbody></table></div>
+<p>A movement with no fee is a single entry from one account to the other, with no <code>@FeeIncome</code> leg.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code><span class="c">// No Fee and no Config.Fees: refused before anything reaches Blnk.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_e1&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+<span class="c">// Config.Fees has no price for a USD transfer.</span>
+_, err = pw.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaUSD, <span class="t">To</span>: tunde.<span class="t">Accounts</span>[<span class="s">&quot;USD&quot;</span>].<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_e2&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrFeePricing</span>), err)
+
+<span class="c">// A fee in another currency than the transaction.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0.10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_e3&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+<span class="c">// A deposit fee as large as the deposit.</span>
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;paystack_e4&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Transfer: ledger: invalid input: fee is required; pass ledger.NoFee for a free transaction, or set Config.Fees
+true ledger.Wallet.Transfer: ledger: fee could not be priced: no price for a transfer in USD
+true ledger.Wallet.Transfer: ledger: invalid input: fee currency USD differs from amount currency NGN
+true ledger.Wallet.Deposit: ledger: invalid input: fee must be less than the deposit amount</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>no <code>Fee</code> and no <code>Config.Fees</code>; a fee in another currency than the amount; a negative fee; a deposit fee equal to or larger than the deposit</td><td>fix the call; pass <code>ledger.NoFee</code> for a free movement</td></tr><tr><td><code>ErrFeePricing</code></td><td><code>Config.Fees</code> returned an error, an empty <code>Money</code>, or a fee in another currency</td><td>fix the price list; <code>errors.As</code> or the message gives your function's error</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>a retry priced differently from the first attempt</td><td>retry with the original <code>Fee</code></td></tr><tr><td><code>ErrInsufficientFunds</code></td><td>the sender can't cover <code>Amount</code> plus <code>Fee</code></td><td>ask the customer to top up</td></tr><tr><td><code>ErrLimitExceeded</code></td><td><code>Amount</code> plus <code>Fee</code> is over the customer's limit</td><td>see <a href="limits.html">Limits</a></td></tr></tbody></table></div>
+<h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
+<ul><li><a href="quotes.html">Quotes</a>: show the fee before the customer confirms.</li><li><a href="limits.html">Limits and KYC tiers</a>: fees count towards limits.</li><li><a href="house-accounts.html">House accounts</a>: <code>@FeeIncome</code> and the rest of the chart of accounts.</li><li><a href="deposits.html">Deposits</a>, <a href="withdrawals.html">Withdrawals</a>, <a href="transfers.html">Transfers</a>, <a href="currency-exchange.html">Currency exchange</a>, <a href="bulk-payouts.html">Bulk payouts</a>.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="bulk-payouts.html"><small>Previous</small>Bulk payouts and payroll</a><a class="next" href="limits.html"><small>Next</small>Limits and KYC tiers</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

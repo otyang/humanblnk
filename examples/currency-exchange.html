@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Currency exchange · humanblnk</title>
+<meta name="description" content="Convert money between a customer&#x27;s accounts in two currencies at your rate, with exact rounding, an optional fee, and both sides posted together or not at all.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Currency exchange</h1>
+<p class="lead">Convert money between a customer's accounts in two currencies at your rate, with exact rounding, an optional fee, and both sides posted together or not at all.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#sell-a-fixed-amount">Sell a fixed amount</a><a href="#buy-a-fixed-amount">Buy a fixed amount</a><a href="#rounding">Rounding</a><a href="#the-fx-pool-oja-s-position">The FX pool: Oja's position</a><a href="#retries">Retries</a><a href="#options">Options</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code>pool := <span class="k">func</span>() {
+	<span class="k">for</span> _, cur := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;USD&quot;</span>, <span class="s">&quot;NGN&quot;</span>} {
+		h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FXPoolAccount</span>, <span class="t">Currency</span>: cur})
+		check(err)
+		fmt.<span class="t">Println</span>(<span class="s">&quot;@FXPool&quot;</span>, cur, h.<span class="t">Balance</span>.<span class="t">Display</span>)
+	}
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada has dollars from freelance work and wants naira. Oja quotes her ₦1,532.40 per $1. <code>wallet.Exchange</code> takes the dollars from her USD account into Oja's FX pool and pays the naira out of the pool into her NGN account. Both legs post in one atomic Blnk batch: she never ends up with one side and not the other.</p>
+<p>Pick the input by what the customer fixes:</p>
+<div class="tablewrap"><table><thead><tr><th>The customer says</th><th>Use</th></tr></thead><tbody><tr><td>"Convert $100"</td><td><code>Sell: ledger.Amount(&quot;100&quot;, &quot;USD&quot;)</code>; the naira is worked out</td></tr><tr><td>"I need exactly $25"</td><td><code>Buy: ledger.Amount(&quot;25&quot;, &quot;USD&quot;)</code>; the naira to sell is worked out</td></tr><tr><td>"What would I get?"</td><td><code>wallet.QuoteExchange</code> with the same input, see <a href="quotes.html">Quotes</a></td></tr><tr><td>Money to another person in another currency</td><td>an exchange into your own account, then a <a href="transfers.html">transfer</a></td></tr></tbody></table></div>
+<p>Set exactly one of <code>Sell</code> and <code>Buy</code>.</p>
+<h2 id="sell-a-fixed-amount"><a href="#sell-a-fixed-amount">Sell a fixed amount</a></h2>
+<figure class="code"><figcaption>Ada sells $100 at ₦1,532.40</figcaption><pre><code><span class="c">// Ada converts $100 to naira at the rate Oja quoted: ₦1,532.40 per $1.</span>
+fx := ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>:      adaUSD,
+	<span class="t">To</span>:        adaNGN,
+	<span class="t">Sell</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="c">// exactly this leaves her USD account</span>
+	<span class="t">Rate</span>:      <span class="s">&quot;1532.40&quot;</span>,                   <span class="c">// NGN per 1 USD</span>
+	<span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ0T5C&quot;</span>,
+	<span class="c">// Fee left out: Config.Fees charges 1% of the dollars, on top</span>
+}
+x, err := wallet.<span class="t">Exchange</span>(ctx, fx)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Sold:&quot;</span>, x.<span class="t">Sold</span>.<span class="t">Display</span>, x.<span class="t">Sold</span>.<span class="t">Currency</span>, <span class="s">&quot;| Fee:&quot;</span>, x.<span class="t">Fee</span>.<span class="t">Display</span>, <span class="s">&quot;| Bought:&quot;</span>, x.<span class="t">Bought</span>.<span class="t">Display</span>, x.<span class="t">Bought</span>.<span class="t">Currency</span>, <span class="s">&quot;| Rate:&quot;</span>, x.<span class="t">Rate</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Debit leg:&quot;</span>, x.<span class="t">Debit</span>.<span class="t">Reference</span>, x.<span class="t">Debit</span>.<span class="t">Amount</span>.<span class="t">Display</span>, x.<span class="t">Debit</span>.<span class="t">Amount</span>.<span class="t">Currency</span>, x.<span class="t">Debit</span>.<span class="t">EntryStatus</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Credit leg:&quot;</span>, x.<span class="t">Credit</span>.<span class="t">Reference</span>, x.<span class="t">Credit</span>.<span class="t">Amount</span>.<span class="t">Display</span>, x.<span class="t">Credit</span>.<span class="t">Amount</span>.<span class="t">Currency</span>, x.<span class="t">Credit</span>.<span class="t">EntryStatus</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;pair:&quot;</span>, x.<span class="t">Debit</span>.<span class="t">MetaData</span>[<span class="s">&quot;fx_pair&quot;</span>], <span class="s">&quot;rate:&quot;</span>, x.<span class="t">Debit</span>.<span class="t">MetaData</span>[<span class="s">&quot;fx_rate&quot;</span>])
+
+usd, err := wallet.<span class="t">GetAccount</span>(ctx, adaUSD)
+check(err)
+ngn, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada USD:&quot;</span>, usd.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;| Ada NGN:&quot;</span>, ngn.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Sold: 100.00 USD | Fee: 1.00 | Bought: 153240.00 NGN | Rate: 1532.40
+Debit leg: fx_01J8ZQ0T5C_sell 101.00 USD posted
+Credit leg: fx_01J8ZQ0T5C_buy 153240.00 NGN posted
+pair: USD/NGN rate: 1532.40
+Ada USD: 199.00 | Ada NGN: 153240.00</pre></figure>
+<ul><li><code>Rate</code> is units of the buy currency per 1 unit of the sell currency, as a decimal string. Here: naira per dollar.</li><li>The fee comes from <code>Config.Fees</code> with <code>Kind: ledger.FeeExchange</code>, the sold amount and <code>BuyCurrency</code>. It is in the sell currency and charged on top: Ada pays $101.</li><li>The receipt has both legs. <code>Debit</code> is the leg out of Ada's USD account, with reference <code>fx_01J8ZQ0T5C_sell</code>; <code>Credit</code> is the leg into her NGN account, <code>fx_01J8ZQ0T5C_buy</code>.</li><li>Both legs carry <code>fx_pair</code>, <code>fx_rate</code>, <code>fx_reference</code>, <code>fx_sell</code> and <code>fx_buy</code> in their metadata.</li></ul>
+<h2 id="buy-a-fixed-amount"><a href="#buy-a-fixed-amount">Buy a fixed amount</a></h2>
+<figure class="code"><figcaption>Tunde needs exactly $25</figcaption><pre><code><span class="c">// Tunde needs exactly $25.00 for a subscription: Buy fixes what arrives.</span>
+y, err := wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>:      tundeNGN,
+	<span class="t">To</span>:        tundeUSD,
+	<span class="t">Buy</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;25&quot;</span>, <span class="s">&quot;USD&quot;</span>),
+	<span class="t">Rate</span>:      <span class="s">&quot;0.000652&quot;</span>, <span class="c">// USD per 1 NGN</span>
+	<span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ1A2B&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Sold:&quot;</span>, y.<span class="t">Sold</span>.<span class="t">Display</span>, y.<span class="t">Sold</span>.<span class="t">Currency</span>, <span class="s">&quot;| Fee:&quot;</span>, y.<span class="t">Fee</span>.<span class="t">Display</span>, <span class="s">&quot;| Bought:&quot;</span>, y.<span class="t">Bought</span>.<span class="t">Display</span>, y.<span class="t">Bought</span>.<span class="t">Currency</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Sold: 38343.56 NGN | Fee: 0.00 | Bought: 25.00 USD</pre></figure>
+<ul><li>The rate is still buy per sell: dollars per naira here, because Tunde sells naira.</li><li>Oja's pricing charges nothing for selling naira, so <code>Fee</code> is zero. Set <code>Fee</code> on the input for a fixed fee, or <code>ledger.NoFee</code> for a free one.</li></ul>
+<h2 id="rounding"><a href="#rounding">Rounding</a></h2>
+<p>Amounts are worked out in exact fractions, then rounded once to the currency's smallest unit. Rounding never costs the house:</p>
+<ul><li>with <code>Sell</code>, the amount bought rounds <strong>down</strong>;</li><li>with <code>Buy</code>, the amount sold rounds <strong>up</strong>.</li></ul>
+<figure class="code"><pre><code><span class="c">// Selling: the amount bought rounds down. 3.33 × 1532.47 = 5103.1251 naira.</span>
+q, err := wallet.<span class="t">QuoteExchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3.33&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;1532.47&quot;</span>,
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;fx_round_1&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;sell 3.33 USD -&gt; buy&quot;</span>, q.<span class="t">Bought</span>.<span class="t">Display</span>, <span class="s">&quot;NGN&quot;</span>)
+
+<span class="c">// Buying: the amount sold rounds up. 1000 / 1532.47 = 0.65254... dollars.</span>
+q, err = wallet.<span class="t">QuoteExchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Buy</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;1532.47&quot;</span>,
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;fx_round_2&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;buy 1000 NGN -&gt; sell&quot;</span>, q.<span class="t">Sold</span>.<span class="t">Display</span>, <span class="s">&quot;USD&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>sell 3.33 USD -&gt; buy 5103.12 NGN
+buy 1000 NGN -&gt; sell 0.66 USD</pre></figure>
+<p>An amount so small that one side rounds to zero is refused with <code>ErrInvalidInput</code>.</p>
+<h2 id="the-fx-pool-oja-s-position"><a href="#the-fx-pool-oja-s-position">The FX pool: Oja's position</a></h2>
+<p>Every exchange passes through <code>@FXPool</code>, one balance per currency. Each balance is Oja's open position in that currency.</p>
+<figure class="code"><figcaption>After both exchanges</figcaption><pre><code><span class="c">// Oja took in $101 from Ada and paid out naira; Tunde did the opposite.</span>
+pool()
+fees, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;USD&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;@FeeIncome USD&quot;</span>, fees.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@FXPool USD 75.00
+@FXPool NGN -114896.44
+@FeeIncome USD 1.00</pre></figure>
+<ul><li>A positive pool balance means more of that currency came in from customers than went out. A negative one means Oja paid out more than it took in.</li><li>Here Oja took in $75 more than it paid out, and paid out ₦114,896.44 more than it took in. Closing that position with a bank or liquidity provider happens outside this call; watch it with <a href="reports.html">Reports</a> or <a href="balance-alerts.html">Balance alerts</a>.</li><li><code>Pool</code> on the input uses another house account instead, e.g. one pool per liquidity provider.</li><li>The $1 fee went to <code>@FeeIncome</code> in USD.</li></ul>
+<h2 id="retries"><a href="#retries">Retries</a></h2>
+<figure class="code"><pre><code>again, err := wallet.<span class="t">Exchange</span>(ctx, fx) <span class="c">// the app timed out and sends it again</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;replayed:&quot;</span>, again.<span class="t">Replayed</span>, <span class="s">&quot;same legs:&quot;</span>, again.<span class="t">Debit</span>.<span class="t">TransactionID</span> == x.<span class="t">Debit</span>.<span class="t">TransactionID</span>)
+
+changed := fx
+changed.<span class="t">Rate</span> = <span class="s">&quot;1540.00&quot;</span> <span class="c">// a new rate needs a new reference</span>
+_, err = wallet.<span class="t">Exchange</span>(ctx, changed)
+fmt.<span class="t">Println</span>(<span class="s">&quot;conflict:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))
+pool()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>replayed: true same legs: true
+conflict: true
+@FXPool USD 75.00
+@FXPool NGN -114896.44</pre></figure>
+<ul><li>The same input with the same reference returns both original legs with <code>Replayed: true</code>.</li><li>A new rate is a new exchange. With the old reference it is <code>ErrDuplicateReference</code>, and nothing moves.</li></ul>
+<h2 id="options"><a href="#options">Options</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it changes</th></tr></thead><tbody><tr><td><code>From</code></td><td>customer account debited, in the sell currency</td></tr><tr><td><code>To</code></td><td>customer account credited, in the buy currency</td></tr><tr><td><code>Sell</code></td><td>how much leaves <code>From</code>; set this or <code>Buy</code></td></tr><tr><td><code>Buy</code></td><td>how much must arrive in <code>To</code>; set this or <code>Sell</code></td></tr><tr><td><code>Rate</code></td><td>buy units per 1 sell unit; a positive decimal string</td></tr><tr><td><code>Fee</code></td><td>in the sell currency, on top; required unless <code>Config.Fees</code> is set</td></tr><tr><td><code>Reference</code></td><td>required; the legs are <code>Reference</code> + <code>_sell</code> and <code>Reference</code> + <code>_buy</code></td></tr><tr><td><code>Pool</code></td><td>the house account in the middle; default <code>@FXPool</code></td></tr><tr><td><code>Description</code></td><td>on both legs; default "Exchange USD to NGN"</td></tr><tr><td><code>MetaData</code></td><td>your own keys, added to both legs</td></tr></tbody></table></div>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>Two transactions in one atomic bulk request, both <code>txn_type: exchange</code>. For Ada's $100:</p>
+<div class="tablewrap"><table><thead><tr><th>Leg</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>_sell</code></td><td>Ada's USD account</td><td>$101.00</td><td></td></tr><tr><td><code>_buy</code></td><td><code>@FXPool</code> (NGN)</td><td>₦153,240.00</td><td></td></tr></tbody></table></div>
+<p>The <code>_buy</code> leg has <code>allow_overdraft</code> set, so the pool can pay out before it holds that currency. Limits apply to the <code>_sell</code> leg, as for any money leaving a customer account.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Buy</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Rate</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;Sell and Buy:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: tundeUSD, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;1&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;same currency:&quot;</span>, err)
+
+_, err = wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: tundeNGN, <span class="t">To</span>: tundeUSD, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0.01&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;0.000652&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;too small:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FXPoolAccount</span>), <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>),
+	<span class="t">Rate</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;e5&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;house account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+
+check(ops.<span class="t">FreezeAccount</span>(ctx, adaNGN, <span class="s">&quot;KYC review&quot;</span>))
+_, err = wallet.<span class="t">Exchange</span>(ctx, ledger.<span class="t">ExchangeInput</span>{
+	<span class="t">From</span>: adaUSD, <span class="t">To</span>: adaNGN, <span class="t">Sell</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Rate</span>: <span class="s">&quot;1532.40&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;e6&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen destination:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
+Sell and Buy: true
+same currency: ledger.Wallet.Exchange: ledger: invalid input: both accounts are in USD; use Transfer
+too small: true
+house account: true
+frozen destination: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td><code>From</code> can't cover the sell amount plus fee</td><td>show the balance</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the sell leg is over <code>From</code>'s limit</td><td>see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrInvalidInput</code></td><td>both or neither of <code>Sell</code> and <code>Buy</code>; a bad rate; both accounts in one currency; an amount that rounds to zero; an amount in the wrong currency; no <code>Reference</code></td><td>fix the input</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>From</code> or <code>To</code> is a house account</td><td>pass customer accounts</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td>either account is frozen or closed</td><td>stop the exchange</td></tr><tr><td><code>ErrLedgerFrozen</code></td><td><code>From</code>'s ledger is frozen</td><td>wait until operations unfreezes it</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference was used for a different exchange</td><td>give each new rate or amount a new reference</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="quotes.html">Quotes for confirm screens</a>: <code>QuoteExchange</code> shows the fee, both amounts and the balance after.</li><li><a href="fees.html">Fees</a>: pricing exchanges, and <code>FeeRequest.Convert</code> for a fee set in another currency.</li><li><a href="money.html">Money and precision</a>: how amounts are stored.</li><li><a href="house-accounts.html">House accounts</a> and <a href="reports.html">Reports</a>: reading the pool.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="quotes.html"><small>Previous</small>Quotes for confirm screens</a><a class="next" href="split-payments.html"><small>Next</small>Split payments and marketplaces</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

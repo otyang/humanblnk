@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Split payments and marketplaces · humanblnk</title>
+<meta name="description" content="Pay one amount out to several accounts in a single transaction: a seller, a rider and Oja&#x27;s commission, with every share computed exactly.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Split payments and marketplaces</h1>
+<p class="lead">Pay one amount out to several accounts in a single transaction: a seller, a rider and Oja's commission, with every share computed exactly.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#a-card-payment-arriving">A card payment arriving</a><a href="#the-parts-splitpart">The parts: SplitPart</a><a href="#rounding">Rounding</a><a href="#paying-from-a-customer-account">Paying from a customer account</a><a href="#holding-the-money-first-pending">Holding the money first: Pending</a><a href="#the-receipt-and-each-leg">The receipt and each leg</a><a href="#splitinput-fields">SplitInput fields</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// splitBalance reads an account&#x27;s balance for display.</span>
+<span class="k">func</span> splitBalance(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>) <span class="b">string</span> {
+	a, err := w.<span class="t">GetAccount</span>(ctx, id)
+	check(err)
+	<span class="k">return</span> a.<span class="t">Balance</span>.<span class="t">Display</span>
+}</code></pre></figure><figure class="code"><pre><code>try := <span class="k">func</span>(parts ...ledger.<span class="t">SplitPart</span>) <span class="b">error</span> {
+	_, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{<span class="t">From</span>: clearing, <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_bad&quot;</span>, <span class="t">Parts</span>: parts})
+	<span class="k">return</span> err
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada pays ₦25,000 by card for an order from Chidi Stores. Oja keeps 5% commission, Tunde gets a fixed ₦1,500 for the delivery, and Chidi Stores gets the rest. All three must be paid from the one payment, at the same moment, and the shares must add up to the kobo.</p>
+<p><code>wallet.Split</code> does this. It turns every part into an exact amount in your code, then sends one Blnk transaction with one destination per part.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th><code>From</code></th><th><code>AllowOverdraft</code></th></tr></thead><tbody><tr><td>A card or bank payment arrives through a provider</td><td>the provider's clearing account, e.g. <code>ledger.AccountID(ledger.ClearingAccount(&quot;paystack&quot;))</code></td><td><code>true</code></td></tr><tr><td>A customer pays from their wallet balance</td><td>the customer's account</td><td><code>false</code> (the default)</td></tr></tbody></table></div>
+<h2 id="a-card-payment-arriving"><a href="#a-card-payment-arriving">A card payment arriving</a></h2>
+<p>The money comes from outside, so <code>From</code> is <code>@PaystackClearing</code>, the account that tracks what Paystack owes Oja. It goes negative like it does for a deposit, which is why <code>AllowOverdraft</code> is set.</p>
+<figure class="code"><figcaption>₦25,000 order: 5% commission, ₦1,500 delivery, the rest to the seller</figcaption><pre><code><span class="c">// Ada pays ₦25,000 by card for an order from Chidi Stores. Paystack collects it.</span>
+order, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>:           ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>)), <span class="c">// @PaystackClearing</span>
+	<span class="t">AllowOverdraft</span>: <span class="b">true</span>,                                                 <span class="c">// money arriving from outside</span>
+	<span class="t">Amount</span>:         ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>:      <span class="s">&quot;order_10442&quot;</span>, <span class="c">// Paystack&#x27;s payment id</span>
+	<span class="t">Description</span>:    <span class="s">&quot;Order 10442&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Percent</span>: <span class="s">&quot;5&quot;</span>, <span class="t">Narration</span>: <span class="s">&quot;Oja commission&quot;</span>},
+		{<span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Narration</span>: <span class="s">&quot;Delivery&quot;</span>},
+		{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>, <span class="t">Narration</span>: <span class="s">&quot;Order 10442&quot;</span>},
+	},
+})
+check(err)
+fmt.<span class="t">Println</span>(order.<span class="t">Status</span>, order.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;in&quot;</span>, <span class="b">len</span>(order.<span class="t">Legs</span>), <span class="s">&quot;legs&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores:&quot;</span>, splitBalance(wallet, chidi))
+fmt.<span class="t">Println</span>(<span class="s">&quot;Tunde (rider):&quot;</span>, splitBalance(wallet, tundeNGN))
+fee, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;@FeeIncome:&quot;</span>, fee.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED 25000.00 in 3 legs
+Chidi Stores: 22250.00
+Tunde (rider): 1500.00
+@FeeIncome: 1250.00</pre></figure>
+<ul><li><code>Percent: &quot;5&quot;</code> is 5% of <code>Amount</code>. Decimals like <code>&quot;7.5&quot;</code> work too.</li><li><code>Amount</code> on a part is a fixed sum in the payment's currency.</li><li><code>Rest: true</code> takes whatever is left after the other parts. At most one part can be <code>Rest</code>.</li><li>A part's <code>To</code> can be a customer account or a house account such as <code>ledger.FeeIncomeAccount</code>.</li><li><code>Reference</code> is the idempotency key. Use the provider's payment id; a retry with the same parts returns the original with <code>Replayed</code> set.</li></ul>
+<h2 id="the-parts-splitpart"><a href="#the-parts-splitpart">The parts: SplitPart</a></h2>
+<p>Set exactly one of <code>Amount</code>, <code>Percent</code> or <code>Rest</code> on each part.</p>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>To</code></td><td>the recipient: a customer account, or a house account as <code>ledger.AccountID(&quot;@Name&quot;)</code></td></tr><tr><td><code>Amount</code></td><td>a fixed amount. Its currency, if given, must match the payment</td></tr><tr><td><code>Percent</code></td><td>a share of the total, more than 0 and at most 100, e.g. <code>&quot;10&quot;</code> or <code>&quot;2.5&quot;</code></td></tr><tr><td><code>Rest</code></td><td>everything not taken by the other parts. Must be more than zero</td></tr><tr><td><code>Narration</code></td><td>the text on that leg. Defaults to <code>SplitInput.Description</code></td></tr></tbody></table></div>
+<h2 id="rounding"><a href="#rounding">Rounding</a></h2>
+<p>Percentages rarely land on whole kobo. Each percentage part is rounded down, and the leftover kobo (the dust) goes to the <code>Rest</code> part. With no <code>Rest</code> part, the dust goes to the first percentage part. Nothing is left to Blnk's own rounding.</p>
+<figure class="code"><figcaption>₦100.01 split 50/50, then 7.5% with a Rest part</figcaption><pre><code><span class="c">// ₦100.01 shared 50/50 between two sellers: 50.005 each is not a real amount.</span>
+odd, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>)), <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100.01&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_10443&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: chidi, <span class="t">Percent</span>: <span class="s">&quot;50&quot;</span>},
+		{<span class="t">To</span>: tundeNGN, <span class="t">Percent</span>: <span class="s">&quot;50&quot;</span>},
+	},
+})
+check(err)
+<span class="k">for</span> _, leg := <span class="k">range</span> odd.<span class="t">Legs</span> {
+	fmt.<span class="t">Println</span>(names[leg.<span class="t">Account</span>], leg.<span class="t">Amount</span>.<span class="t">Display</span>) <span class="c">// the first percentage part gets the 1 kobo</span>
+}
+
+<span class="c">// With a Rest part, the Rest part gets the dust instead.</span>
+withRest, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>)), <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100.01&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_10444&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Percent</span>: <span class="s">&quot;7.5&quot;</span>}, <span class="c">// 7.50075 → 7.50</span>
+		{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>},
+	},
+})
+check(err)
+<span class="k">for</span> _, leg := <span class="k">range</span> withRest.<span class="t">Legs</span> {
+	fmt.<span class="t">Println</span>(names[leg.<span class="t">Account</span>], leg.<span class="t">Amount</span>.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Chidi Stores 50.01
+Tunde 50.00
+@FeeIncome 7.50
+Chidi Stores 92.51</pre></figure>
+<aside class="note">Dust is only ever a few kobo, fewer than the number of parts. If fixed amounts and percentages leave more than that unassigned, and there is no <code>Rest</code> part, the split is refused rather than handing the gap to someone.</aside>
+<h2 id="paying-from-a-customer-account"><a href="#paying-from-a-customer-account">Paying from a customer account</a></h2>
+<p>When Ada pays from her wallet balance, <code>From</code> is her account. Customer accounts never go negative, so a split larger than her available balance fails with <code>ErrInsufficientFunds</code>.</p>
+<figure class="code"><figcaption>Ada pays ₦12,000 from her balance with a ₦200 service charge</figcaption><pre><code><span class="c">// Ada pays ₦12,000 from her wallet balance. Customer accounts never go negative.</span>
+paid, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>:      adaNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;order_10445&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;200&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Narration</span>: <span class="s">&quot;Service charge&quot;</span>},
+		{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>, <span class="t">Narration</span>: <span class="s">&quot;Order 10445&quot;</span>},
+	},
+})
+check(err)
+fmt.<span class="t">Println</span>(paid.<span class="t">Status</span>, <span class="s">&quot;Ada now:&quot;</span>, splitBalance(wallet, adaNGN))
+
+_, err = wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_10446&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Percent</span>: <span class="s">&quot;5&quot;</span>}, {<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>}},
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;too much:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED Ada now: 38000.00
+too much: true</pre></figure>
+<ul><li>The split counts against Ada's <a href="limits.html">limits</a>, like a transfer.</li><li>The account status of <code>From</code> and of every customer recipient is checked first: a <a href="freeze.html">frozen</a> or closed account refuses the whole split.</li></ul>
+<h2 id="holding-the-money-first-pending"><a href="#holding-the-money-first-pending">Holding the money first: Pending</a></h2>
+<p><code>Pending: true</code> reserves the money and creates every leg INFLIGHT. Ada's balance stays the same, but her available balance drops. Confirm it when the order is accepted, or cancel it to release the money.</p>
+<figure class="code"><figcaption>Hold ₦8,000 until the stock is confirmed</figcaption><pre><code><span class="c">// Hold the money while Chidi Stores confirms the stock.</span>
+held, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;8000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_10447&quot;</span>,
+	<span class="t">Pending</span>: <span class="b">true</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Percent</span>: <span class="s">&quot;5&quot;</span>},
+		{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>},
+	},
+})
+check(err)
+acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(held.<span class="t">Status</span>, <span class="s">&quot;Ada balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, acct.<span class="t">Available</span>.<span class="t">Display</span>)
+
+part := ledger.<span class="t">Amount</span>(<span class="s">&quot;4000&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
+_, err = wallet.<span class="t">Confirm</span>(ctx, held.<span class="t">TransactionID</span>, &amp;part)
+fmt.<span class="t">Println</span>(<span class="s">&quot;partial confirm of the whole split:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+done, err := wallet.<span class="t">Confirm</span>(ctx, held.<span class="t">TransactionID</span>, <span class="b">nil</span>) <span class="c">// every leg at once</span>
+check(err)
+fmt.<span class="t">Println</span>(done.<span class="t">Status</span>, <span class="s">&quot;Ada now:&quot;</span>, splitBalance(wallet, adaNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>INFLIGHT Ada balance: 38000.00 available: 30000.00
+partial confirm of the whole split: true
+APPLIED Ada now: 30000.00</pre></figure>
+<ul><li><code>wallet.Confirm(ctx, id, nil)</code> posts every leg. <code>wallet.Cancel(ctx, id)</code> releases them all.</li><li>A transaction with several legs can't be partly confirmed by its parent id. Confirm in full, or confirm one leg at a time by that leg's own transaction id. See <a href="card-holds.html">Card holds</a>.</li></ul>
+<h2 id="the-receipt-and-each-leg"><a href="#the-receipt-and-each-leg">The receipt and each leg</a></h2>
+<p>The receipt has one <code>Leg</code> per part: the account, the exact amount, the narration and the leg's own transaction id.</p>
+<figure class="code"><pre><code>names := <span class="k">map</span>[<span class="b">string</span>]<span class="b">string</span>{<span class="b">string</span>(chidi): <span class="s">&quot;Chidi Stores&quot;</span>, <span class="b">string</span>(tundeNGN): <span class="s">&quot;Tunde&quot;</span>, ledger.<span class="t">FeeIncomeAccount</span>: <span class="s">&quot;@FeeIncome&quot;</span>}
+<span class="k">for</span> _, leg := <span class="k">range</span> order.<span class="t">Legs</span> {
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-13s %9s  %-15s leg id: %t\n&quot;</span>, names[leg.<span class="t">Account</span>], leg.<span class="t">Amount</span>.<span class="t">Display</span>, leg.<span class="t">Narration</span>, leg.<span class="t">TransactionID</span> != <span class="s">&quot;&quot;</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@FeeIncome      1250.00  Oja commission  leg id: true
+Tunde           1500.00  Delivery        leg id: true
+Chidi Stores   22250.00  Order 10442     leg id: true</pre></figure>
+<p>Blnk stores a split only as its legs, one transaction per destination, each pointing to the parent with <code>ParentTransaction</code>. The parent id from the receipt still works for lookups: the library rebuilds the parent from its legs.</p>
+<figure class="code"><figcaption>Look the payment up again, and find the leg that paid the seller</figcaption><pre><code>again, err := wallet.<span class="t">GetTransaction</span>(ctx, order.<span class="t">TransactionID</span>) <span class="c">// rebuilt from its legs</span>
+check(err)
+fmt.<span class="t">Println</span>(again.<span class="t">Reference</span>, again.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="b">len</span>(again.<span class="t">Legs</span>), <span class="s">&quot;legs&quot;</span>)
+
+byRef, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;order_10442&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;same payment:&quot;</span>, byRef.<span class="t">TransactionID</span> == order.<span class="t">TransactionID</span>)
+
+<span class="c">// The id of the leg that paid Chidi Stores, for a refund or a dispute later.</span>
+<span class="k">var</span> chidiLeg <span class="b">string</span>
+<span class="k">for</span> _, leg := <span class="k">range</span> again.<span class="t">Legs</span> {
+	<span class="k">if</span> leg.<span class="t">Account</span> == <span class="b">string</span>(chidi) {
+		chidiLeg = leg.<span class="t">TransactionID</span>
+	}
+}
+leg, err := wallet.<span class="t">GetTransaction</span>(ctx, chidiLeg)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi&#x27;s leg:&quot;</span>, leg.<span class="t">Amount</span>.<span class="t">Display</span>, leg.<span class="t">Status</span>, <span class="s">&quot;parent:&quot;</span>, leg.<span class="t">ParentTransaction</span> == order.<span class="t">TransactionID</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>order_10442 25000.00 3 legs
+same payment: true
+Chidi&#x27;s leg: 22250.00 APPLIED parent: true</pre></figure>
+<p>Keep each leg's transaction id. A <a href="refunds.html">refund</a> or a <a href="disputes.html">dispute</a> of a split that paid several people must name the leg it is about.</p>
+<aside class="tip">Find a leg by its <code>Account</code>, not by its position. Blnk doesn't keep legs in the order you sent them. After a lookup, a house account shows as its Blnk balance id rather than <code>@FeeIncome</code>.</aside>
+<h2 id="splitinput-fields"><a href="#splitinput-fields">SplitInput fields</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>From</code></td><td>the account debited: a customer account, or a house account such as <code>@PaystackClearing</code></td></tr><tr><td><code>Amount</code></td><td>the total debited from <code>From</code></td></tr><tr><td><code>Parts</code></td><td>two or more recipients</td></tr><tr><td><code>Reference</code></td><td>required. The idempotency key</td></tr><tr><td><code>AllowOverdraft</code></td><td>lets <code>From</code> go negative. Set it when <code>From</code> is a provider clearing account</td></tr><tr><td><code>Pending</code></td><td>create every leg INFLIGHT; confirm or cancel later</td></tr><tr><td><code>Description</code></td><td>the transaction's description, and the narration of parts that have none. Defaults to "Split"</td></tr><tr><td><code>MetaData</code></td><td>your own keys. <code>txn_type</code> is set to <code>split</code></td></tr></tbody></table></div>
+<p>A split has no <code>Fee</code> field. Take Oja's cut as a part paid to <code>ledger.FeeIncomeAccount</code>, as in the first sample.</p>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>The ₦25,000 card order makes one Blnk transaction with three destinations, stored as three legs:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>@PaystackClearing</code></td><td>₦25,000.00</td><td></td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦1,250.00</td></tr><tr><td>Tunde</td><td></td><td>₦1,500.00</td></tr><tr><td>Chidi Stores</td><td></td><td>₦22,250.00</td></tr></tbody></table></div>
+<p>Each leg is sent as an exact <code>precise_distribution</code> in kobo, so Blnk does no rounding of its own. A payment from Ada's account looks the same with Ada's account on the debit side. With <code>Pending</code>, the same entries are INFLIGHT until confirmed. <code>@PaystackClearing</code> is cleared when Paystack settles: see <a href="settlement.html">Settlement</a>.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>clearing := ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>))
+try := <span class="k">func</span>(parts ...ledger.<span class="t">SplitPart</span>) <span class="b">error</span> {
+	_, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{<span class="t">From</span>: clearing, <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_bad&quot;</span>, <span class="t">Parts</span>: parts})
+	<span class="k">return</span> err
+}
+err = try(ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: chidi, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;600&quot;</span>, <span class="s">&quot;NGN&quot;</span>)},
+	ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300&quot;</span>, <span class="s">&quot;NGN&quot;</span>)})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+err = try(ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: chidi, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>)},
+	ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: tundeNGN, <span class="t">Rest</span>: <span class="b">true</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+err = try(ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: chidi, <span class="t">Percent</span>: <span class="s">&quot;80&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;800&quot;</span>, <span class="s">&quot;NGN&quot;</span>)},
+	ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: tundeNGN, <span class="t">Rest</span>: <span class="b">true</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+err = try(ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+check(ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN, <span class="s">&quot;KYC review&quot;</span>))
+err = try(ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: chidi, <span class="t">Percent</span>: <span class="s">&quot;90&quot;</span>}, ledger.<span class="t">SplitPart</span>{<span class="t">To</span>: tundeNGN, <span class="t">Rest</span>: <span class="b">true</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen recipient:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Split: ledger: invalid input: parts add up to 900, not 1000 NGN; add a Rest part or fix the amounts
+true ledger.Wallet.Split: ledger: invalid input: nothing is left for the rest part
+true ledger.Wallet.Split: ledger: invalid input: part 0: set exactly one of Amount, Percent or Rest
+true ledger.Wallet.Split: ledger: invalid input: a split needs at least two parts
+frozen recipient: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>fewer than two parts; a part with none or more than one of <code>Amount</code>, <code>Percent</code> and <code>Rest</code>; two <code>Rest</code> parts; nothing left for <code>Rest</code>; parts adding up to more than <code>Amount</code>, or to less with no <code>Rest</code>; a bad percent; a part in another currency; no <code>Reference</code></td><td>fix the parts</td></tr><tr><td><code>ErrInsufficientFunds</code></td><td><code>From</code> is a customer account without enough available balance</td><td>ask the customer to top up, or charge less</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td><code>From</code> or a customer recipient is frozen or closed</td><td>resolve the account first; see <a href="freeze.html">Freeze accounts</a></td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the split is over <code>From</code>'s limit</td><td>see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference was used for a different transaction</td><td>use a new reference</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="refunds.html">Refunds</a> and <a href="disputes.html">Disputes</a>: undoing one leg of a split.</li><li><a href="escrow.html">Escrow</a>: hold a buyer's money until delivery, then pay the seller.</li><li><a href="fees.html">Fees</a>: charging a fee on ordinary transfers.</li><li><a href="settlement.html">Settlement</a>: clearing <code>@PaystackClearing</code> when Paystack pays out.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="currency-exchange.html"><small>Previous</small>Currency exchange</a><a class="next" href="refunds.html"><small>Next</small>Refunds</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

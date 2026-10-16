@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Disputes · humanblnk</title>
+<meta name="description" content="Freeze the money in question at the recipient while a complaint is looked into, then send it back to the payer or release it, in full or in part.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Disputes</h1>
+<p class="lead">Freeze the money in question at the recipient while a complaint is looked into, then send it back to the payer or release it, in full or in part.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#opening-a-dispute">Opening a dispute</a><a href="#the-payer-wins-disputeupheld">The payer wins: DisputeUpheld</a><a href="#the-recipient-wins-disputerejected">The recipient wins: DisputeRejected</a><a href="#part-of-a-payment-part-of-a-decision">Part of a payment, part of a decision</a><a href="#payments-with-a-fee-and-splits">Payments with a fee, and splits</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// disputeShow prints an account&#x27;s balance and what can be spent now.</span>
+<span class="k">func</span> disputeShow(w ledger.<span class="t">Wallet</span>, name <span class="b">string</span>, id ledger.<span class="t">AccountID</span>) {
+	a, err := w.<span class="t">GetAccount</span>(ctx, id)
+	check(err)
+	fmt.<span class="t">Println</span>(name+<span class="s">&quot;:&quot;</span>, <span class="s">&quot;balance&quot;</span>, a.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada paid Chidi Stores ₦9,800 and says the item never arrived. Chidi Stores has already been paid, so the money sits in its account. While Oja looks into it, Chidi Stores must not be able to spend that money, and nothing should move until there is a decision.</p>
+<p><code>wallet.OpenDispute</code> puts the disputed amount on hold in the recipient's account, pointed back at the payer. <code>wallet.ResolveDispute</code> ends it.</p>
+<div class="tablewrap"><table><thead><tr><th>Decision</th><th>Call</th><th>What happens to the held money</th></tr></thead><tbody><tr><td>Open the case</td><td><code>OpenDispute</code></td><td>held at the recipient</td></tr><tr><td>The payer wins</td><td><code>ResolveDispute(…, ledger.DisputeUpheld, nil)</code></td><td>goes to the payer</td></tr><tr><td>The payer wins part of it</td><td><code>ResolveDispute(…, ledger.DisputeUpheld, &amp;amount)</code></td><td>that amount goes to the payer; the rest stays held</td></tr><tr><td>The recipient wins</td><td><code>ResolveDispute(…, ledger.DisputeRejected, nil)</code></td><td>released back to the recipient</td></tr></tbody></table></div>
+<h2 id="opening-a-dispute"><a href="#opening-a-dispute">Opening a dispute</a></h2>
+<figure class="code"><figcaption>Ada disputes a ₦9,800 payment</figcaption><pre><code>pay, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9800&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_10461&quot;</span>})
+check(err)
+
+<span class="c">// Ada says the item never arrived. Hold that money at Chidi Stores.</span>
+d, err := wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{
+	<span class="t">TransactionID</span>: pay.<span class="t">TransactionID</span>,
+	<span class="t">Reference</span>:     <span class="s">&quot;dispute_2231&quot;</span>, <span class="c">// required</span>
+	<span class="t">Reason</span>:        <span class="s">&quot;item not received&quot;</span>,
+	<span class="t">MetaData</span>:      <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;ticket&quot;</span>: <span class="s">&quot;CS-2231&quot;</span>},
+})
+check(err)
+fmt.<span class="t">Println</span>(d.<span class="t">TransactionID</span> != <span class="s">&quot;&quot;</span>, d.<span class="t">Status</span>, d.<span class="t">Amount</span>.<span class="t">Display</span>, d.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>])
+fmt.<span class="t">Println</span>(<span class="s">&quot;dispute_of:&quot;</span>, d.<span class="t">MetaData</span>[<span class="s">&quot;dispute_of&quot;</span>] == pay.<span class="t">TransactionID</span>)
+disputeShow(wallet, <span class="s">&quot;Chidi Stores&quot;</span>, chidi)
+adaAcct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada: balance&quot;</span>, adaAcct.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;pending in&quot;</span>, adaAcct.<span class="t">PendingIn</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true INFLIGHT 9800.00 dispute
+dispute_of: true
+Chidi Stores: balance 9800.00 available 0.00
+Ada: balance 90200.00 pending in 9800.00</pre></figure>
+<ul><li>The dispute is a hold: an INFLIGHT transaction from Chidi Stores to Ada. Its <code>TransactionID</code> is the dispute id you pass to <code>ResolveDispute</code>.</li><li>Chidi Stores' balance is unchanged, but its available balance drops by the disputed amount, so it can't spend it. Ada sees the amount as pending in.</li><li>The hold has no expiry. It stays until you resolve the dispute.</li><li><code>meta_data.dispute_of</code> holds the disputed transaction's id and <code>dispute_reason</code> the reason.</li></ul>
+<h3 id="disputeinput-fields">DisputeInput fields</h3>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>TransactionID</code></td><td>the disputed transaction. It must be posted. For a split paying several people, the leg's id</td></tr><tr><td><code>Amount</code></td><td>how much is disputed. Empty means the whole amount</td></tr><tr><td><code>Reference</code></td><td>required; the hold's idempotency key</td></tr><tr><td><code>Reason</code></td><td>stored as <code>dispute_reason</code>. The hold's description is "Dispute: " and the reason, or the original's reference when there is no reason</td></tr><tr><td><code>MetaData</code></td><td>your own keys, e.g. your support ticket</td></tr></tbody></table></div>
+<h2 id="the-payer-wins-disputeupheld"><a href="#the-payer-wins-disputeupheld">The payer wins: DisputeUpheld</a></h2>
+<figure class="code"><pre><code><span class="c">// The investigation finds for Ada: the held money goes back to her.</span>
+won, err := wallet.<span class="t">ResolveDispute</span>(ctx, d.<span class="t">TransactionID</span>, ledger.<span class="t">DisputeUpheld</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(won.<span class="t">Status</span>, won.<span class="t">Amount</span>.<span class="t">Display</span>)
+disputeShow(wallet, <span class="s">&quot;Chidi Stores&quot;</span>, chidi)
+disputeShow(wallet, <span class="s">&quot;Ada&quot;</span>, adaNGN)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED 9800.00
+Chidi Stores: balance 0.00 available 0.00
+Ada: balance 100000.00 available 100000.00</pre></figure>
+<p>The held money is posted to Ada. Chidi Stores' balance drops by the amount.</p>
+<h2 id="the-recipient-wins-disputerejected"><a href="#the-recipient-wins-disputerejected">The recipient wins: DisputeRejected</a></h2>
+<figure class="code"><figcaption>The courier's photo shows the right item delivered</figcaption><pre><code>pay2, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_10462&quot;</span>})
+check(err)
+d2, err := wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: pay2.<span class="t">TransactionID</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;dispute_2232&quot;</span>, <span class="t">Reason</span>: <span class="s">&quot;wrong colour&quot;</span>})
+check(err)
+
+<span class="c">// The courier&#x27;s photo shows the right item delivered: Chidi Stores wins.</span>
+lost, err := wallet.<span class="t">ResolveDispute</span>(ctx, d2.<span class="t">TransactionID</span>, ledger.<span class="t">DisputeRejected</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(lost.<span class="t">Status</span>, lost.<span class="t">Amount</span>.<span class="t">Display</span>)
+disputeShow(wallet, <span class="s">&quot;Chidi Stores&quot;</span>, chidi)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>VOID 5000.00
+Chidi Stores: balance 5000.00 available 5000.00</pre></figure>
+<p>The hold is released and Chidi Stores can spend the money again. A rejected dispute always releases everything still held, so it takes no amount.</p>
+<h2 id="part-of-a-payment-part-of-a-decision"><a href="#part-of-a-payment-part-of-a-decision">Part of a payment, part of a decision</a></h2>
+<p>Dispute only part of a payment with <code>Amount</code>. When upholding, pass an amount to send only that much back. The rest stays held until you resolve again: uphold more, or reject to release the rest.</p>
+<figure class="code"><figcaption>One ₦4,000 item of a ₦12,000 order; half of the claim is upheld</figcaption><pre><code>pay3, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_10463&quot;</span>})
+check(err)
+
+<span class="c">// Ada disputes one ₦4,000 item of a ₦12,000 order.</span>
+d3, err := wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{
+	<span class="t">TransactionID</span>: pay3.<span class="t">TransactionID</span>,
+	<span class="t">Amount</span>:        ledger.<span class="t">Amount</span>(<span class="s">&quot;4000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// zero = the whole payment</span>
+	<span class="t">Reference</span>:     <span class="s">&quot;dispute_2233&quot;</span>,
+	<span class="t">Reason</span>:        <span class="s">&quot;one item damaged&quot;</span>,
+})
+check(err)
+disputeShow(wallet, <span class="s">&quot;Chidi Stores&quot;</span>, chidi)
+
+<span class="c">// Oja finds half of it justified: ₦2,000 back to Ada, the rest stays held.</span>
+half := ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
+r, err := wallet.<span class="t">ResolveDispute</span>(ctx, d3.<span class="t">TransactionID</span>, ledger.<span class="t">DisputeUpheld</span>, &amp;half)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;to Ada:&quot;</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>)
+disputeShow(wallet, <span class="s">&quot;Chidi Stores&quot;</span>, chidi)
+
+<span class="c">// Close it: whatever is still held goes back to Chidi Stores.</span>
+r, err = wallet.<span class="t">ResolveDispute</span>(ctx, d3.<span class="t">TransactionID</span>, ledger.<span class="t">DisputeRejected</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(r.<span class="t">Status</span>, <span class="s">&quot;released:&quot;</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>)
+disputeShow(wallet, <span class="s">&quot;Chidi Stores&quot;</span>, chidi)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Chidi Stores: balance 17000.00 available 13000.00
+to Ada: 2000.00
+Chidi Stores: balance 15000.00 available 13000.00
+VOID released: 2000.00
+Chidi Stores: balance 15000.00 available 15000.00</pre></figure>
+<h2 id="payments-with-a-fee-and-splits"><a href="#payments-with-a-fee-and-splits">Payments with a fee, and splits</a></h2>
+<p>A payment with a fee is stored as two legs: the recipient's and <code>@FeeIncome</code>'s. The dispute picks the recipient's leg by itself, so the fee is not held. A <a href="split-payments.html">split</a> that paid several recipients must be disputed leg by leg, by the leg's own id.</p>
+<figure class="code"><pre><code><span class="c">// A payment with a fee: the dispute holds the ₦7,000 Chidi Stores got, not the ₦50 fee.</span>
+feePay, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;7000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;pay_10464&quot;</span>})
+check(err)
+d4, err := wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: feePay.<span class="t">TransactionID</span>, <span class="t">Reference</span>: <span class="s">&quot;dispute_2234&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;held:&quot;</span>, d4.<span class="t">Amount</span>.<span class="t">Display</span>)
+
+<span class="c">// A split paying two recipients: name the leg.</span>
+order, err := wallet.<span class="t">Split</span>(ctx, ledger.<span class="t">SplitInput</span>{
+	<span class="t">From</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>)), <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;order_10465&quot;</span>,
+	<span class="t">Parts</span>: []ledger.<span class="t">SplitPart</span>{
+		{<span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Narration</span>: <span class="s">&quot;Delivery&quot;</span>},
+		{<span class="t">To</span>: chidi, <span class="t">Rest</span>: <span class="b">true</span>},
+	},
+})
+check(err)
+_, err = wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: order.<span class="t">TransactionID</span>, <span class="t">Reference</span>: <span class="s">&quot;dispute_2235&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;whole split:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+<span class="k">for</span> _, leg := <span class="k">range</span> order.<span class="t">Legs</span> {
+	<span class="k">if</span> leg.<span class="t">Account</span> == <span class="b">string</span>(chidi) {
+		d5, err := wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: leg.<span class="t">TransactionID</span>, <span class="t">Reference</span>: <span class="s">&quot;dispute_2235&quot;</span>})
+		check(err)
+		fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi&#x27;s leg held:&quot;</span>, d5.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;pointed at the card side:&quot;</span>, d5.<span class="t">Destination</span> != <span class="b">string</span>(adaNGN))
+	}
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>held: 7000.00
+whole split: true
+Chidi&#x27;s leg held: 18500.00 pointed at the card side: true</pre></figure>
+<p>For a card order split out of <code>@PaystackClearing</code>, the hold points back at <code>@PaystackClearing</code>. If the dispute is upheld, the money goes back there, and you return it to Ada's card through Paystack. A split paid to one customer and <code>@FeeIncome</code> works like a payment with a fee.</p>
+<aside class="note">For a pending payment that was later confirmed, dispute the id that <code>Confirm</code> returned. The id of the hold is not a posted transaction.</aside>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>Opening the ₦9,800 dispute makes an INFLIGHT transaction with <code>txn_type: dispute</code>. Nothing is posted yet:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Chidi Stores</td><td>₦9,800.00 (pending)</td><td></td></tr><tr><td>Ada</td><td></td><td>₦9,800.00 (pending)</td></tr></tbody></table></div>
+<p><code>DisputeUpheld</code> commits it, so the entries post. With an amount, only that amount posts and the rest stays pending. <code>DisputeRejected</code> voids what is still pending, so no entries post for it. The original payment is never changed.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>pay6, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_601&quot;</span>})
+check(err)
+
+_, err = wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: pay6.<span class="t">TransactionID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;dispute_2240&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;more than paid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAmountExceeded</span>))
+
+<span class="c">// Tunde has already spent part of the money.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_602&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: pay6.<span class="t">TransactionID</span>, <span class="t">Reference</span>: <span class="s">&quot;dispute_2241&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;recipient short:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+held, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pay_10466&quot;</span>, <span class="t">Pending</span>: <span class="b">true</span>})
+check(err)
+_, err = wallet.<span class="t">OpenDispute</span>(ctx, ledger.<span class="t">DisputeInput</span>{<span class="t">TransactionID</span>: held.<span class="t">TransactionID</span>, <span class="t">Reference</span>: <span class="s">&quot;dispute_2242&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;still pending:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+part := ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
+_, err = wallet.<span class="t">ResolveDispute</span>(ctx, d4.<span class="t">TransactionID</span>, ledger.<span class="t">DisputeRejected</span>, &amp;part)
+fmt.<span class="t">Println</span>(<span class="s">&quot;partial reject:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">ResolveDispute</span>(ctx, d.<span class="t">TransactionID</span>, ledger.<span class="t">DisputeUpheld</span>, <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;already resolved:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>more than paid: true
+recipient short: true
+still pending: true
+partial reject: true
+already resolved: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrAmountExceeded</code></td><td><code>Amount</code> is more than the disputed transaction; upholding more than is still held</td><td>use at most the amount still held</td></tr><tr><td><code>ErrInsufficientFunds</code></td><td>the recipient no longer has the disputed amount available</td><td>dispute what is there, or recover the rest another way, e.g. an <a href="adjustments.html">adjustment</a></td></tr><tr><td><code>ErrInvalidInput</code></td><td>the transaction isn't posted; a split with several recipients given by its parent id; an amount on a rejected dispute; no <code>Reference</code>; an unknown outcome</td><td>fix the call; dispute the leg</td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td>resolving a dispute that is already fully resolved</td><td>nothing to do</td></tr><tr><td><code>ErrNotFound</code></td><td>no transaction with that id</td><td>check the id</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td>the recipient is frozen or closed when the dispute is opened</td><td>see <a href="freeze.html">Freeze accounts</a></td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="refunds.html">Refunds</a>: send money back without a hold first.</li><li><a href="card-holds.html">Card holds</a>: how holds, confirm and cancel work underneath.</li><li><a href="escrow.html">Escrow</a>: hold the money before the seller is paid, instead of after.</li><li><a href="split-payments.html">Split payments</a>: where leg ids come from.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="escrow.html"><small>Previous</small>Escrow</a><a class="next" href="savings-pots.html"><small>Next</small>Savings pots and standing orders</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

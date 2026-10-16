@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Savings pots and standing orders · humanblnk</title>
+<meta name="description" content="Let customers put money aside in named pots with a goal, and move money on a schedule: a monthly savings plan, a weekly allowance, a subscription.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Savings pots and standing orders</h1>
+<p class="lead">Let customers put money aside in named pots with a goal, and move money on a schedule: a monthly savings plan, a weekly allowance, a subscription.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#opening-pots">Opening pots</a><a href="#moving-money-in-and-out">Moving money in and out</a><a href="#a-standing-order-wallet-schedule">A standing order: wallet.Schedule</a><a href="#retrying">Retrying</a><a href="#when-occurrences-run">When occurrences run</a><a href="#when-the-money-isn-t-there">When the money isn't there</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// potBalance reads an account&#x27;s balance for display.</span>
+<span class="k">func</span> potBalance(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>) <span class="b">string</span> {
+	a, err := w.<span class="t">GetAccount</span>(ctx, id)
+	check(err)
+	<span class="k">return</span> a.<span class="t">Balance</span>.<span class="t">Display</span>
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada wants to save ₦600,000 for next year's rent. She opens a "Rent" pot in the Oja app, moves money in when she can, and sets up ₦25,000 to go in on the 1st of every month. If she is short one month, that month is skipped and the plan carries on.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Open a pot under a customer account</td><td><code>wallet.OpenPot</code></td></tr><tr><td>List a customer's pots</td><td><code>wallet.ListPots</code></td></tr><tr><td>Move money into or out of a pot now</td><td><code>wallet.Transfer</code></td></tr><tr><td>Move the same amount on a schedule</td><td><code>wallet.Schedule</code></td></tr><tr><td>Move money once, later</td><td><code>wallet.Transfer</code> with <code>ScheduledFor</code>; see <a href="transfers.html">Transfers</a></td></tr></tbody></table></div>
+<h2 id="opening-pots"><a href="#opening-pots">Opening pots</a></h2>
+<p>A pot is an account under a customer account. It takes its parent's currency, ledger and identity.</p>
+<figure class="code"><figcaption>A rent pot with a goal, and a travel pot without one</figcaption><pre><code>rent, err := wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{
+	<span class="t">ParentID</span>: adaNGN,
+	<span class="t">Name</span>:     <span class="s">&quot;Rent&quot;</span>, <span class="c">// unique per parent; opening it again returns this pot</span>
+	<span class="t">Goal</span>:     ledger.<span class="t">Amount</span>(<span class="s">&quot;600000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+})
+check(err)
+travel, err := wallet.<span class="t">OpenPot</span>(ctx, ledger.<span class="t">PotInput</span>{<span class="t">ParentID</span>: adaNGN, <span class="t">Name</span>: <span class="s">&quot;Travel&quot;</span>}) <span class="c">// no goal</span>
+check(err)
+fmt.<span class="t">Println</span>(rent.<span class="t">ID</span>, rent.<span class="t">Name</span>, rent.<span class="t">Kind</span>, rent.<span class="t">Currency</span>, <span class="s">&quot;goal:&quot;</span>, rent.<span class="t">Goal</span>.<span class="t">Display</span>)
+fmt.<span class="t">Println</span>(travel.<span class="t">Name</span>, <span class="s">&quot;has a goal:&quot;</span>, !travel.<span class="t">Goal</span>.<span class="t">IsZero</span>())
+
+pots, err := wallet.<span class="t">ListPots</span>(ctx, adaNGN)
+check(err)
+<span class="k">for</span> _, p := <span class="k">range</span> pots {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;pot:&quot;</span>, p.<span class="t">Name</span>, <span class="s">&quot;parent is Ada&#x27;s account:&quot;</span>, p.<span class="t">Parent</span> == adaNGN)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>bln_000006 Rent pot NGN goal: 600000.00
+Travel has a goal: false
+pot: Rent parent is Ada&#x27;s account: true
+pot: Travel parent is Ada&#x27;s account: true</pre></figure>
+<ul><li><code>Name</code> is unique per parent. Opening the same name again returns the existing pot.</li><li><code>Goal</code> is optional and only recorded. Nothing stops a pot going past it, and nothing moves when it is reached.</li><li><code>Pot</code> embeds <code>*Account</code>, so it has <code>ID</code>, <code>Balance</code>, <code>Available</code> and the rest, plus <code>Name</code>, <code>Parent</code> and <code>Goal</code>.</li><li><code>ListPots</code> returns the pots under one parent. <code>GetCustomer</code> leaves pots out.</li></ul>
+<h2 id="moving-money-in-and-out"><a href="#moving-money-in-and-out">Moving money in and out</a></h2>
+<p>There is no special call. A pot is an account, so money moves with <code>Transfer</code>, in either direction.</p>
+<figure class="code"><pre><code><span class="c">// Into the pot: an ordinary transfer from Ada&#x27;s main account.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;40000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;pot_in_0901&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Save for rent&quot;</span>,
+})
+check(err)
+
+<span class="c">// Out of the pot: the same call the other way.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: rent.<span class="t">ID</span>, <span class="t">To</span>: adaNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;pot_out_0903&quot;</span>,
+})
+check(err)
+
+p, err := wallet.<span class="t">GetAccount</span>(ctx, rent.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Rent pot:&quot;</span>, p.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;of&quot;</span>, rent.<span class="t">Goal</span>.<span class="t">Display</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s main account:&quot;</span>, potBalance(wallet, adaNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Rent pot: 35000.00 of 600000.00
+Ada&#x27;s main account: 65000.00</pre></figure>
+<ul><li>Pass a fee as for any transfer: <code>ledger.NoFee</code> here, or let <code>Config.Fees</code> price it. See <a href="fees.html">Fees</a>.</li><li>Pots aren't limited, but a transfer out of Ada's main account counts against her <a href="limits.html">limits</a>.</li></ul>
+<h2 id="a-standing-order-wallet-schedule"><a href="#a-standing-order-wallet-schedule">A standing order: wallet.Schedule</a></h2>
+<p><code>Schedule</code> creates every occurrence at once, as a Blnk scheduled transaction. Blnk posts each one itself when its time comes.</p>
+<figure class="code"><figcaption>₦25,000 into the rent pot on the 1st of every month for a year</figcaption><pre><code>lagos := time.<span class="t">FixedZone</span>(<span class="s">&quot;WAT&quot;</span>, <span class="n">3600</span>)
+plan, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
+	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{
+		<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+		<span class="t">Reference</span>:   <span class="s">&quot;rent_plan_ada&quot;</span>, <span class="c">// occurrence i gets &quot;rent_plan_ada_i&quot;</span>
+		<span class="t">Description</span>: <span class="s">&quot;Rent savings&quot;</span>,
+	},
+	<span class="t">First</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">7</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos),
+	<span class="t">Every</span>: ledger.<span class="t">Monthly</span>,
+	<span class="t">Count</span>: <span class="n">12</span>, <span class="c">// 1 to 120</span>
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="b">len</span>(plan), <span class="s">&quot;occurrences&quot;</span>)
+<span class="k">for</span> _, r := <span class="k">range</span> plan[:<span class="n">3</span>] {
+	fmt.<span class="t">Println</span>(r.<span class="t">Reference</span>, r.<span class="t">EntryStatus</span>, r.<span class="t">Raw</span>.<span class="t">ScheduledFor</span>.<span class="t">In</span>(lagos).<span class="t">Format</span>(<span class="s">&quot;2 Jan 2006 15:04&quot;</span>), r.<span class="t">MetaData</span>[<span class="s">&quot;occurrence&quot;</span>])
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada still has:&quot;</span>, potBalance(wallet, adaNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>12 occurrences
+rent_plan_ada_1 scheduled 1 Oct 2026 07:00 1
+rent_plan_ada_2 scheduled 1 Nov 2026 07:00 2
+rent_plan_ada_3 scheduled 1 Dec 2026 07:00 3
+Ada still has: 65000.00</pre></figure>
+<ul><li>Occurrence <code>i</code> gets the reference <code>Reference</code> + <code>_i</code>: <code>rent_plan_ada_1</code> to <code>rent_plan_ada_12</code>.</li><li>Every occurrence carries <code>recurring_reference</code>, <code>occurrence</code> and <code>occurrences</code> in its metadata, so you can find the whole plan.</li><li>Nothing leaves Ada's account until an occurrence runs, and her balance isn't checked when the plan is made.</li><li>The fee is priced once, when you call <code>Schedule</code>, and the same fee is charged on every occurrence.</li></ul>
+<h3 id="recurringinput-fields">RecurringInput fields</h3>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>Transfer</code></td><td>the transfer to repeat. <code>Reference</code> is required and is the base of every occurrence's reference. <code>Pending</code> is not allowed</td></tr><tr><td><code>First</code></td><td>when the first occurrence runs. Must be in the future</td></tr><tr><td><code>Every</code></td><td>the gap between occurrences, an <code>Interval</code></td></tr><tr><td><code>Count</code></td><td>how many occurrences, from 1 to 120</td></tr></tbody></table></div>
+<h3 id="intervals">Intervals</h3>
+<div class="tablewrap"><table><thead><tr><th>Interval</th><th>Meaning</th></tr></thead><tbody><tr><td><code>ledger.Daily</code></td><td><code>Interval{Days: 1}</code></td></tr><tr><td><code>ledger.Weekly</code></td><td><code>Interval{Days: 7}</code></td></tr><tr><td><code>ledger.Monthly</code></td><td><code>Interval{Months: 1}</code></td></tr><tr><td><code>ledger.Interval{Days: 14}</code></td><td>every two weeks</td></tr><tr><td><code>ledger.Interval{Months: 3}</code></td><td>every quarter</td></tr></tbody></table></div>
+<figure class="code"><figcaption>The second run for each interval, starting 4 January 2027</figcaption><pre><code>first := time.<span class="t">Date</span>(<span class="n">2027</span>, <span class="n">1</span>, <span class="n">4</span>, <span class="n">8</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos)
+<span class="k">for</span> _, every := <span class="k">range</span> []ledger.<span class="t">Interval</span>{ledger.<span class="t">Daily</span>, ledger.<span class="t">Weekly</span>, {<span class="t">Days</span>: <span class="n">14</span>}, ledger.<span class="t">Monthly</span>, {<span class="t">Months</span>: <span class="n">3</span>}} {
+	occ, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
+		<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: travel.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+			<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;travel_%dm%dd&quot;</span>, every.<span class="t">Months</span>, every.<span class="t">Days</span>)},
+		<span class="t">First</span>: first, <span class="t">Every</span>: every, <span class="t">Count</span>: <span class="n">2</span>,
+	})
+	check(err)
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%+v second run: %s\n&quot;</span>, every, occ[<span class="n">1</span>].<span class="t">Raw</span>.<span class="t">ScheduledFor</span>.<span class="t">In</span>(lagos).<span class="t">Format</span>(<span class="s">&quot;2 Jan 2006&quot;</span>))
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>{Months:0 Days:1} second run: 5 Jan 2027
+{Months:0 Days:7} second run: 11 Jan 2027
+{Months:0 Days:14} second run: 18 Jan 2027
+{Months:1 Days:0} second run: 4 Feb 2027
+{Months:3 Days:0} second run: 4 Apr 2027</pre></figure>
+<aside class="warn">Monthly dates follow Go's <code>time.AddDate</code>. A plan starting on the 31st lands on the 1st of the next month in shorter months. Start monthly plans on the 28th or earlier.</aside>
+<h2 id="retrying"><a href="#retrying">Retrying</a></h2>
+<p>Calling <code>Schedule</code> again with the same input returns the occurrences already created, each with <code>Replayed</code> set. Nothing is scheduled twice.</p>
+<figure class="code"><pre><code><span class="c">// The app timed out and sends the same plan again.</span>
+again, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
+	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_plan_ada&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Rent savings&quot;</span>},
+	<span class="t">First</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">1</span>, <span class="n">7</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, lagos), <span class="t">Every</span>: ledger.<span class="t">Monthly</span>, <span class="t">Count</span>: <span class="n">12</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="b">len</span>(again), <span class="s">&quot;occurrences, replayed:&quot;</span>, again[<span class="n">0</span>].<span class="t">Replayed</span>, <span class="s">&quot;same id:&quot;</span>, again[<span class="n">0</span>].<span class="t">TransactionID</span> == plan[<span class="n">0</span>].<span class="t">TransactionID</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>12 occurrences, replayed: true same id: true</pre></figure>
+<aside class="note">A retry must still have <code>First</code> in the future. Once the first occurrence's time has passed, the same input is refused with <code>ErrInvalidInput</code>.</aside>
+<h2 id="when-occurrences-run"><a href="#when-occurrences-run">When occurrences run</a></h2>
+<p>In production, Blnk posts each occurrence at its time. In tests, move the in-memory Blnk's clock with <code>core.SetNow</code> or <code>core.Advance</code>, and whatever is due runs. See <a href="testing.html">Testing</a>.</p>
+<figure class="code"><figcaption>After 2 November, two occurrences have posted</figcaption><pre><code><span class="c">// In tests, move the in-memory Blnk&#x27;s clock. In production Blnk posts them itself.</span>
+core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">11</span>, <span class="n">2</span>, <span class="n">9</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>))
+
+<span class="k">for</span> _, ref := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;rent_plan_ada_1&quot;</span>, <span class="s">&quot;rent_plan_ada_2&quot;</span>, <span class="s">&quot;rent_plan_ada_3&quot;</span>} {
+	r, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, ref)
+	check(err)
+	fmt.<span class="t">Println</span>(ref, r.<span class="t">EntryStatus</span>)
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;Rent pot:&quot;</span>, potBalance(wallet, rent.<span class="t">ID</span>), <span class="s">&quot;Ada:&quot;</span>, potBalance(wallet, adaNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>rent_plan_ada_1 posted
+rent_plan_ada_2 posted
+rent_plan_ada_3 scheduled
+Rent pot: 85000.00 Ada: 15000.00</pre></figure>
+<h2 id="when-the-money-isn-t-there"><a href="#when-the-money-isn-t-there">When the money isn't there</a></h2>
+<p>An occurrence that runs when Ada's balance is too low is refused by Blnk with status <code>REJECTED</code>. The later occurrences are not affected.</p>
+<figure class="code"><figcaption>Ada is ₦15,000 short on 1 December</figcaption><pre><code><span class="c">// Ada spends most of her balance before 1 December.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: travel.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pot_in_1120&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada before:&quot;</span>, potBalance(wallet, adaNGN))
+
+core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">12</span>, <span class="n">2</span>, <span class="n">9</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>))
+missed, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;rent_plan_ada_3&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(missed.<span class="t">Reference</span>, missed.<span class="t">Status</span>, missed.<span class="t">EntryStatus</span>)
+
+next, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;rent_plan_ada_4&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(next.<span class="t">Reference</span>, next.<span class="t">EntryStatus</span>) <span class="c">// the plan carries on</span></code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Ada before: 10000.00
+rent_plan_ada_3 REJECTED rejected
+rent_plan_ada_4 scheduled</pre></figure>
+<p>Watch for <code>ledger.EventTransactionRejected</code> on your <a href="webhooks.html">webhook</a> to tell Ada her saving was skipped. To make it up, send a one-off transfer.</p>
+<aside class="warn">humanblnk has no call to cancel scheduled occurrences, and <code>Cancel</code> only works on pending (INFLIGHT) transactions. An account with occurrences still scheduled can't be closed. Choose <code>Count</code> with this in mind. Blnk posts occurrences itself, so freezing an account doesn't stop them either.</aside>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>Each occurrence is its own transaction with <code>scheduled_for</code> set and status <code>SCHEDULED</code>. When it runs, it posts like a transfer:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada</td><td>₦25,000.00</td><td></td></tr><tr><td>Rent pot</td><td></td><td>₦25,000.00</td></tr></tbody></table></div>
+<p>Opening a pot makes a Blnk balance with <code>account_kind: pot</code>, <code>parent_account</code> and <code>pot_name</code> in its metadata, and <code>pot_goal</code> when there is a goal. No money moves when a pot is opened.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>base := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;plan_bad&quot;</span>}
+later := core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)
+
+_, err = wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{<span class="t">Transfer</span>: base, <span class="t">First</span>: later, <span class="t">Every</span>: ledger.<span class="t">Weekly</span>, <span class="t">Count</span>: <span class="n">121</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{<span class="t">Transfer</span>: base, <span class="t">First</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(-time.<span class="t">Hour</span>), <span class="t">Every</span>: ledger.<span class="t">Weekly</span>, <span class="t">Count</span>: <span class="n">4</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{<span class="t">Transfer</span>: base, <span class="t">First</span>: later, <span class="t">Count</span>: <span class="n">4</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+pending := base
+pending.<span class="t">Pending</span> = <span class="b">true</span>
+_, err = wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{<span class="t">Transfer</span>: pending, <span class="t">First</span>: later, <span class="t">Every</span>: ledger.<span class="t">Weekly</span>, <span class="t">Count</span>: <span class="n">4</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = wallet.<span class="t">Cancel</span>(ctx, next.<span class="t">TransactionID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;cancel a scheduled occurrence:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotPending</span>))
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead&quot;</span>,
+	<span class="t">SweepTo</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">PayoutClearingAccount</span>)})
+fmt.<span class="t">Println</span>(<span class="s">&quot;close with a plan running:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Schedule: ledger: invalid input: count must be between 1 and 120
+true ledger.Wallet.Schedule: ledger: invalid input: first occurrence must be in the future
+true ledger.Wallet.Schedule: ledger: invalid input: interval must be positive
+true ledger.Wallet.Schedule: ledger: invalid input: a scheduled transfer cannot also be pending
+cancel a scheduled occurrence: true
+close with a plan running: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td><code>Count</code> outside 1 to 120; <code>First</code> not in the future; a zero or negative interval; <code>Pending</code> set; no <code>Reference</code></td><td>fix the plan</td></tr><tr><td><code>ErrNotPending</code></td><td><code>Cancel</code> on a scheduled occurrence</td><td>let it run, or reverse it after it posts</td></tr><tr><td><code>ErrPendingActivity</code></td><td>closing an account with occurrences still scheduled</td><td>wait for them to run</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the transfer is over the sender's limit when the plan is made</td><td>see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrWrongKind</code></td><td><code>OpenPot</code> with a house account as the parent</td><td>use a customer account</td></tr></tbody></table></div>
+<p>If an occurrence fails while the plan is being created, <code>Schedule</code> returns the occurrences already made with the error. Call it again with the same input to finish the plan.</p>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="customer-accounts.html">Create customer accounts</a>: pots next to main accounts and escrows.</li><li><a href="transfers.html">Transfers</a>: one-off and one-time scheduled transfers.</li><li><a href="bulk-payouts.html">Bulk payouts</a>: many transfers now rather than one transfer many times.</li><li><a href="close-account.html">Close an account</a>: pots and scheduled transfers block closing.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="disputes.html"><small>Previous</small>Disputes</a><a class="next" href="bulk-payouts.html"><small>Next</small>Bulk payouts and payroll</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

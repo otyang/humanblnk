@@ -7,6 +7,15 @@ change the API; such changes are listed under **Changed**.
 
 ## [Unreleased]
 
+### Added
+- Example pages for every use case, in `examples/` and at
+  https://otyang.github.io/humanblnk/examples/. Every sample on them runs in
+  the test suite, and the output shown is what it printed.
+
+### Fixed
+- A savings pot's goal had an empty `Display` when returned by `OpenPot` and
+  `ListPots`.
+
 ## [0.1.0] - 2026-10-16
 
 First release: a wallet and financial-operations domain layer for Go, built on

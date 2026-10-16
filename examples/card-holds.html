@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Card holds and capture · humanblnk</title>
+<meta name="description" content="Reserve money on an account like a card authorisation, then capture all or part of it, release the rest, or let it lapse on a timer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Card holds and capture</h1>
+<p class="lead">Reserve money on an account like a card authorisation, then capture all or part of it, release the rest, or let it lapse on a timer.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#authorise-wallet-hold">Authorise: wallet.Hold</a><a href="#capture-in-full">Capture in full</a><a href="#capture-part-release-the-rest">Capture part, release the rest</a><a href="#paying-a-merchant-s-own-account">Paying a merchant's own account</a><a href="#timers-expiresat-and-captureat">Timers: ExpiresAt and CaptureAt</a><a href="#holds-and-limits">Holds and limits</a><a href="#options">Options</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code>payable := <span class="k">func</span>() {
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">MerchantPayableAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	check(err)
+	fmt.<span class="t">Println</span>(<span class="s">&quot;@MerchantPayable:&quot;</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;pending in:&quot;</span>, h.<span class="t">PendingIn</span>.<span class="t">Display</span>)
+}</code></pre></figure><figure class="code"><pre><code>show := <span class="k">func</span>(who <span class="b">string</span>) {
+	a, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+	check(err)
+	fmt.<span class="t">Println</span>(who+<span class="s">&quot;:&quot;</span>, a.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>, <span class="s">&quot;pending out:&quot;</span>, a.<span class="t">PendingOut</span>.<span class="t">Display</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada pays for dinner with her Oja virtual card. The card network first asks Oja to authorise ₦18,500, and only later captures what the restaurant settles. In between, the money must stay out of Ada's reach. <code>wallet.Hold</code> reserves it without moving it; <code>wallet.Confirm</code> captures it and <code>wallet.Cancel</code> releases it.</p>
+<p>Pick the call by situation:</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>A card authorisation</td><td><code>wallet.Hold</code> with <code>ExpiresAt</code></td></tr><tr><td>The merchant captures the full amount</td><td><code>wallet.Confirm(ctx, id, nil)</code></td></tr><tr><td>The merchant captures less, or in several parts</td><td><code>wallet.Confirm</code> with an amount, then <code>wallet.Cancel</code> for the rest</td></tr><tr><td>The authorisation is reversed</td><td><code>wallet.Cancel</code></td></tr><tr><td>A hold that captures itself at a set time</td><td><code>CaptureAt</code></td></tr><tr><td>A held payment between two customers</td><td><code>wallet.Transfer</code> with <code>Pending: true</code>, see <a href="transfers.html">Transfers</a></td></tr><tr><td>A payout waiting on a provider</td><td><code>wallet.Withdraw</code>, see <a href="withdrawals.html">Withdrawals and payouts</a></td></tr><tr><td>Money held until an order is delivered</td><td><code>wallet.OpenEscrow</code>, see <a href="escrow.html">Escrow</a></td></tr></tbody></table></div>
+<h2 id="authorise-wallet-hold"><a href="#authorise-wallet-hold">Authorise: wallet.Hold</a></h2>
+<figure class="code"><figcaption>The restaurant asks for ₦18,500</figcaption><pre><code><span class="c">// Ada&#x27;s virtual card is used at a restaurant: the network asks to authorise ₦18,500.</span>
+auth, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>:   adaNGN,
+	<span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>, <span class="c">// owed to the card network once captured</span>
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;18500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>:   <span class="s">&quot;card_auth_449201&quot;</span>, <span class="c">// the network&#x27;s authorisation id</span>
+	<span class="t">ExpiresAt</span>:   now.<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>),
+	<span class="t">Description</span>: <span class="s">&quot;Mama Nkechi&#x27;s Kitchen&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(auth.<span class="t">EntryStatus</span>, auth.<span class="t">Amount</span>.<span class="t">Display</span>, auth.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>])
+show(<span class="s">&quot;Ada&quot;</span>)
+payable()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>pending 18500.00 hold
+Ada: 100000.00 available: 81500.00 pending out: 18500.00
+@MerchantPayable: 0.00 pending in: 18500.00</pre></figure>
+<ul><li><code>Destination</code> is where captured money goes: a house account such as <code>ledger.MerchantPayableAccount</code> (<code>@MerchantPayable</code>), or a merchant's own account. It is required.</li><li><code>Reference</code> is required. Use the network's authorisation id so a repeated request returns the same hold.</li><li>The hold is <code>pending</code>. <code>Balance</code> is unchanged, <code>Available</code> drops by ₦18,500 and <code>PendingOut</code> shows it. The destination shows it as <code>PendingIn</code>.</li><li>A hold has no fee.</li></ul>
+<h2 id="capture-in-full"><a href="#capture-in-full">Capture in full</a></h2>
+<figure class="code"><figcaption>The restaurant settles the full bill</figcaption><pre><code><span class="c">// The restaurant settles the full bill.</span>
+c, err := wallet.<span class="t">Confirm</span>(ctx, auth.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(c.<span class="t">EntryStatus</span>, c.<span class="t">Amount</span>.<span class="t">Display</span>)
+show(<span class="s">&quot;Ada&quot;</span>)
+payable()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>posted 18500.00
+Ada: 81500.00 available: 81500.00 pending out: 0.00
+@MerchantPayable: 18500.00 pending in: 0.00</pre></figure>
+<p>The money leaves Ada's <code>Balance</code> and is posted to <code>@MerchantPayable</code>, where it waits until Oja pays the card network.</p>
+<h2 id="capture-part-release-the-rest"><a href="#capture-part-release-the-rest">Capture part, release the rest</a></h2>
+<figure class="code"><figcaption>A fuel station captures twice, then releases the rest</figcaption><pre><code><span class="c">// A fuel station authorises ₦30,000, then pumps ₦12,000 and ₦6,250.50 on two captures.</span>
+fuel, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449305&quot;</span>,
+})
+check(err)
+first := ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;&quot;</span>) <span class="c">// currency taken from the hold</span>
+_, err = wallet.<span class="t">Confirm</span>(ctx, fuel.<span class="t">TransactionID</span>, &amp;first)
+check(err)
+second := ledger.<span class="t">Amount</span>(<span class="s">&quot;6250.50&quot;</span>, <span class="s">&quot;&quot;</span>)
+_, err = wallet.<span class="t">Confirm</span>(ctx, fuel.<span class="t">TransactionID</span>, &amp;second)
+check(err)
+show(<span class="s">&quot;after two captures&quot;</span>)
+
+rest, err := wallet.<span class="t">Cancel</span>(ctx, fuel.<span class="t">TransactionID</span>) <span class="c">// release what is still held</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;released:&quot;</span>, rest.<span class="t">Amount</span>.<span class="t">Display</span>, rest.<span class="t">EntryStatus</span>)
+show(<span class="s">&quot;after release&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>after two captures: 63249.50 available: 51500.00 pending out: 11749.50
+released: 11749.50 voided
+after release: 63249.50 available: 63249.50 pending out: 0.00</pre></figure>
+<ul><li><code>Confirm</code> with an amount captures only that much. Call it again for another part. The amount's currency can be left empty; it is taken from the hold.</li><li><code>Cancel</code> releases whatever is still held. Its receipt's <code>Amount</code> is the amount released.</li><li>You can't capture more than is still held: <code>ErrAmountExceeded</code>.</li></ul>
+<h2 id="paying-a-merchant-s-own-account"><a href="#paying-a-merchant-s-own-account">Paying a merchant's own account</a></h2>
+<figure class="code"><figcaption>Chidi Stores takes a deposit hold</figcaption><pre><code><span class="c">// Chidi Stores takes a ₦10,000 deposit hold for a delivery, paid to its own account on capture.</span>
+h, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>:   adaNGN,
+	<span class="t">Destination</span>: chidiNGN, <span class="c">// a customer account works too</span>
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>:   <span class="s">&quot;hold_order_10450&quot;</span>,
+})
+check(err)
+shopAcct, err := wallet.<span class="t">GetAccount</span>(ctx, chidiNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores pending in:&quot;</span>, shopAcct.<span class="t">PendingIn</span>.<span class="t">Display</span>, <span class="s">&quot;balance:&quot;</span>, shopAcct.<span class="t">Balance</span>.<span class="t">Display</span>)
+
+_, err = wallet.<span class="t">Confirm</span>(ctx, h.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+check(err)
+shopAcct, err = wallet.<span class="t">GetAccount</span>(ctx, chidiNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores pending in:&quot;</span>, shopAcct.<span class="t">PendingIn</span>.<span class="t">Display</span>, <span class="s">&quot;balance:&quot;</span>, shopAcct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Chidi Stores pending in: 10000.00 balance: 0.00
+Chidi Stores pending in: 0.00 balance: 10000.00</pre></figure>
+<p>When <code>Destination</code> is a customer account, the merchant sees the money as <code>PendingIn</code> until capture, and in its <code>Balance</code> after.</p>
+<h2 id="timers-expiresat-and-captureat"><a href="#timers-expiresat-and-captureat">Timers: ExpiresAt and CaptureAt</a></h2>
+<figure class="code"><figcaption>A hotel hold that lapses and a subscription that captures itself</figcaption><pre><code><span class="c">// A hotel holds ₦5,000; if it never captures, the hold lapses after 3 days.</span>
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449410&quot;</span>,
+	<span class="t">ExpiresAt</span>: now.<span class="t">Add</span>(<span class="n">72</span> * time.<span class="t">Hour</span>),
+})
+check(err)
+<span class="c">// A subscription authorised now and captured automatically tomorrow.</span>
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449411&quot;</span>,
+	<span class="t">CaptureAt</span>: now.<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>),
+	<span class="t">ExpiresAt</span>: now.<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>), <span class="c">// CaptureAt must come before ExpiresAt</span>
+})
+check(err)
+show(<span class="s">&quot;now&quot;</span>)
+
+core.<span class="t">Advance</span>(<span class="n">25</span> * time.<span class="t">Hour</span>)
+show(<span class="s">&quot;after 25h&quot;</span>)
+core.<span class="t">Advance</span>(<span class="n">48</span> * time.<span class="t">Hour</span>)
+show(<span class="s">&quot;after 73h&quot;</span>)
+events := core.<span class="t">Events</span>()
+fmt.<span class="t">Println</span>(<span class="s">&quot;last webhook:&quot;</span>, events[<span class="b">len</span>(events)-<span class="n">1</span>].<span class="t">Event</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>now: 53249.50 available: 45749.50 pending out: 7500.00
+after 25h: 50749.50 available: 45749.50 pending out: 5000.00
+after 73h: 50749.50 available: 50749.50 pending out: 0.00
+last webhook: transaction.void</pre></figure>
+<ul><li><code>ExpiresAt</code> releases the hold at that time if it hasn't been captured. Card networks drop an uncaptured authorisation after some days; match their window.</li><li><code>CaptureAt</code> captures whatever is still held at that time. It must be before <code>ExpiresAt</code>, or the hold would be released first.</li><li>Blnk runs both timers itself and sends a webhook: <code>transaction.applied</code> for the capture, <code>transaction.void</code> for the release. See <a href="webhooks.html">Webhooks</a>.</li><li>On real Blnk, <code>CaptureAt</code> needs Blnk's inflight commit queue to be running. The in-memory Blnk runs both timers when its clock moves (<code>core.Advance</code>).</li></ul>
+<h2 id="holds-and-limits"><a href="#holds-and-limits">Holds and limits</a></h2>
+<p>A hold is spending as far as <a href="limits.html">limits</a> are concerned: it counts as soon as it is placed, not when it is captured.</p>
+<figure class="code"><figcaption>₦150,000 a day, with a ₦40,000 hold</figcaption><pre><code><span class="c">// Holds count against limits as soon as they are placed (here ₦150,000 a day).</span>
+<span class="c">// The clock is now three days on, so today starts at zero.</span>
+u, err := wallet.<span class="t">LimitUsage</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;used today:&quot;</span>, u.<span class="t">DailyUsed</span>.<span class="t">Display</span>, <span class="s">&quot;left:&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)
+
+atm, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;40000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_449500&quot;</span>,
+})
+check(err)
+u, err = wallet.<span class="t">LimitUsage</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;with the hold:&quot;</span>, u.<span class="t">DailyUsed</span>.<span class="t">Display</span>, <span class="s">&quot;left:&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)
+
+_, err = wallet.<span class="t">Cancel</span>(ctx, atm.<span class="t">TransactionID</span>) <span class="c">// a released hold gives the room back</span>
+check(err)
+u, err = wallet.<span class="t">LimitUsage</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;after release:&quot;</span>, u.<span class="t">DailyUsed</span>.<span class="t">Display</span>, <span class="s">&quot;left:&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>used today: 0.00 left: 150000.00
+with the hold: 40000.00 left: 110000.00
+after release: 0.00 left: 150000.00</pre></figure>
+<ul><li><code>wallet.LimitUsage</code> shows <code>DailyUsed</code> and <code>DailyLeft</code> including open holds.</li><li>A released hold gives its room back. A captured one keeps counting.</li></ul>
+<h2 id="options"><a href="#options">Options</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it changes</th></tr></thead><tbody><tr><td><code>AccountID</code></td><td>the customer account the money is held on; never a house account</td></tr><tr><td><code>Destination</code></td><td>where captured money goes; required; a customer account or <code>ledger.AccountID(&quot;@Name&quot;)</code></td></tr><tr><td><code>Amount</code></td><td>how much to hold</td></tr><tr><td><code>Reference</code></td><td>required idempotency key</td></tr><tr><td><code>ExpiresAt</code></td><td>release automatically at this time</td></tr><tr><td><code>CaptureAt</code></td><td>capture automatically at this time; must be before <code>ExpiresAt</code></td></tr><tr><td><code>Description</code></td><td>shown on the statement; "Hold" if empty</td></tr><tr><td><code>MetaData</code></td><td>your own keys, e.g. the merchant's name and MCC</td></tr></tbody></table></div>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>A hold is one Blnk transaction from the customer to the destination, created <code>INFLIGHT</code> with <code>txn_type: hold</code>. <code>ExpiresAt</code> becomes <code>inflight_expiry_date</code> and <code>CaptureAt</code> becomes <code>inflight_commit_date</code>.</p>
+<div class="tablewrap"><table><thead><tr><th>Step</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Hold ₦18,500</td><td>Ada's NGN account</td><td>₦18,500 pending</td><td></td></tr><tr><td>Capture</td><td>Ada's NGN account</td><td>₦18,500</td><td></td></tr></tbody></table></div>
+<p>Each capture or release is recorded by Blnk as its own child transaction of the hold: <code>APPLIED</code> for a capture, <code>VOID</code> for a release. A release posts nothing.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>,
+	<span class="t">CaptureAt</span>: now.<span class="t">Add</span>(<span class="n">10</span> * <span class="n">24</span> * time.<span class="t">Hour</span>), <span class="t">ExpiresAt</span>: now.<span class="t">Add</span>(<span class="n">7</span> * <span class="n">24</span> * time.<span class="t">Hour</span>),
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;CaptureAt after ExpiresAt:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;no destination:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+small, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: ledger.<span class="t">MerchantPayableAccount</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>,
+})
+check(err)
+tooMuch := ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;&quot;</span>)
+_, err = wallet.<span class="t">Confirm</span>(ctx, small.<span class="t">TransactionID</span>, &amp;tooMuch)
+fmt.<span class="t">Println</span>(<span class="s">&quot;capture more than held:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAmountExceeded</span>))
+
+_, err = wallet.<span class="t">Cancel</span>(ctx, small.<span class="t">TransactionID</span>)
+check(err)
+_, err = wallet.<span class="t">Confirm</span>(ctx, small.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;capture after release:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))
+
+_, err = wallet.<span class="t">Confirm</span>(ctx, c.<span class="t">TransactionID</span>, <span class="b">nil</span>) <span class="c">// the capture record, not a hold</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;not a hold:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotPending</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
+CaptureAt after ExpiresAt: true
+no destination: true
+capture more than held: true
+capture after release: true
+not a hold: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td>the available balance is less than the hold</td><td>decline the authorisation</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the hold is over the account's limit</td><td>decline; see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Destination</code> or <code>Reference</code>; <code>CaptureAt</code> not before <code>ExpiresAt</code></td><td>fix the call</td></tr><tr><td><code>ErrAmountExceeded</code></td><td>capturing more than is still held</td><td>capture at most what is left</td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td>capturing or releasing a hold already released, expired or fully captured</td><td>treat as done</td></tr><tr><td><code>ErrNotPending</code></td><td>the id is not a pending transaction, e.g. a capture's own id</td><td>pass the hold's <code>TransactionID</code></td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code> / <code>ErrLedgerFrozen</code></td><td>the paying account, or its ledger, can't send money</td><td>decline</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="withdrawals.html">Withdrawals and payouts</a>: the same confirm and cancel calls, with <code>ConfirmMany</code> and <code>CancelMany</code> for batches.</li><li><a href="disputes.html">Disputes</a>: hold money that has already been paid.</li><li><a href="house-accounts.html">House accounts</a>: <code>@MerchantPayable</code> and the rest of the chart.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="withdrawals.html"><small>Previous</small>Withdrawals and payouts</a><a class="next" href="quotes.html"><small>Next</small>Quotes for confirm screens</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

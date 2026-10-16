@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Provider settlement · humanblnk</title>
+<meta name="description" content="Record what Paystack paid into your bank and what your bank paid Flutterwave, so each provider&#x27;s clearing account shows exactly what is still outstanding.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>Provider settlement</h1>
+<p class="lead">Record what Paystack paid into your bank and what your bank paid Flutterwave, so each provider's clearing account shows exactly what is still outstanding.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#why-settle">Why settle</a><a href="#collections-paystack-pays-you">Collections: Paystack pays you</a><a href="#payouts-you-fund-flutterwave">Payouts: you fund Flutterwave</a><a href="#without-a-fee">Without a fee</a><a href="#retrying-the-reference">Retrying: the Reference</a><a href="#other-accounts-clearingaccount-bankaccount-feeaccount">Other accounts: ClearingAccount, BankAccount, FeeAccount</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure><figure class="code"><pre><code><span class="c">// settlementHouse prints a house account&#x27;s balance as Blnk stores it and on its normal side.</span>
+<span class="k">func</span> settlementHouse(ops ledger.<span class="t">Ops</span>, indicator <span class="b">string</span>) {
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: indicator, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	check(err)
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;  %-22s balance %12s  natural %12s  (%s)\n&quot;</span>, h.<span class="t">Indicator</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>, h.<span class="t">Type</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="why-settle"><a href="#why-settle">Why settle</a></h2>
+<p>When Ada tops up ₦50,000 through Paystack, her wallet is credited at once, but the money is still with Paystack. humanblnk records that by debiting <code>@PaystackClearing</code>: Paystack owes Oja ₦50,000. A day later Paystack pays the day's collections into Oja's bank, less its fees. <code>ops.RecordSettlement</code> records that payment and brings the clearing account back down. Payouts work the other way: Flutterwave sends money to customers' banks, and Oja's bank pays Flutterwave for it, before or after.</p>
+<p>Done every day, each clearing account holds only what is still outstanding with that provider, and finance can match it line by line against the provider's settlement report. See <a href="reconciliation.html">Reconciliation</a>.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th><code>Direction</code></th><th>Clearing account</th><th>Bank</th></tr></thead><tbody><tr><td>Paystack pays you the money it collected</td><td><code>SettlementCollection</code> (the default)</td><td>credited</td><td>debited with the amount less the fee</td></tr><tr><td>Your bank funds Flutterwave for payouts, before or after they happen</td><td><code>SettlementPayout</code></td><td>debited</td><td>credited with the amount plus the fee</td></tr></tbody></table></div>
+<p>In both directions the provider's fee goes to <code>@ProviderFees</code>, an expense.</p>
+<h2 id="collections-paystack-pays-you"><a href="#collections-paystack-pays-you">Collections: Paystack pays you</a></h2>
+<figure class="code"><figcaption>Paystack settles the day's ₦100,000</figcaption><pre><code>fmt.<span class="t">Println</span>(<span class="s">&quot;before:&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@PaystackClearing&quot;</span>)
+
+<span class="c">// Paystack&#x27;s report: ₦100,000 collected, ₦1,500 fees kept, ₦98,500 paid to the bank.</span>
+st, err := ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
+	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>, <span class="c">// → @PaystackClearing</span>
+	<span class="t">Direction</span>: ledger.<span class="t">SettlementCollection</span>,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// the gross amount it clears</span>
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;paystack_stl_2026_09_01&quot;</span>,
+})
+check(err)
+<span class="k">for</span> _, e := <span class="k">range</span> st.<span class="t">Entries</span> {
+	fmt.<span class="t">Println</span>(e.<span class="t">Reference</span>, <span class="s">&quot;|&quot;</span>, e.<span class="t">Description</span>, <span class="s">&quot;|&quot;</span>, e.<span class="t">Amount</span>.<span class="t">Display</span>, e.<span class="t">Status</span>)
+}
+
+fmt.<span class="t">Println</span>(<span class="s">&quot;after:&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@PaystackClearing&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@BankOperating&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@ProviderFees&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>before:
+  @PaystackClearing      balance   -100000.00  natural    100000.00  (asset)
+paystack_stl_2026_09_01 | Settlement PaystackClearing | 98500.00 APPLIED
+paystack_stl_2026_09_01_fee | Settlement PaystackClearing fee | 1500.00 APPLIED
+after:
+  @PaystackClearing      balance         0.00  natural         0.00  (asset)
+  @BankOperating         balance    -98500.00  natural     98500.00  (asset)
+  @ProviderFees          balance     -1500.00  natural      1500.00  (expense)</pre></figure>
+<ul><li><code>Amount</code> is the <strong>gross</strong> amount the settlement clears, the total of the deposits it covers. <code>Fee</code> is what Paystack kept. The bank receives <code>Amount - Fee</code>.</li><li><code>Provider: &quot;paystack&quot;</code> names <code>@PaystackClearing</code>, the same account <code>wallet.Deposit</code> debits with <code>Provider: &quot;paystack&quot;</code>.</li><li><code>Balance</code> is as Blnk stores it: asset and expense accounts run negative. <code>Natural</code> is the same figure on the account's normal side, so it reads positive when Paystack owes you money or the bank holds money.</li><li>After the settlement <code>@PaystackClearing</code> is zero: Paystack owes nothing for these three top-ups.</li><li>The entries post atomically. Either both land or neither does.</li></ul>
+<h2 id="payouts-you-fund-flutterwave"><a href="#payouts-you-fund-flutterwave">Payouts: you fund Flutterwave</a></h2>
+<p>Oja keeps a balance with Flutterwave and tops it up from the bank. Record each top-up as a payout settlement.</p>
+<figure class="code"><figcaption>Oja prefunds Flutterwave, then customers cash out</figcaption><pre><code><span class="c">// Monday: Oja&#x27;s bank sends ₦60,000 to its Flutterwave balance. Flutterwave charges ₦250 for the transfer.</span>
+st, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
+	<span class="t">Provider</span>:  <span class="s">&quot;flutterwave&quot;</span>, <span class="c">// → @FlutterwaveClearing</span>
+	<span class="t">Direction</span>: ledger.<span class="t">SettlementPayout</span>,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;250&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;flw_topup_2026_09_01&quot;</span>,
+})
+check(err)
+<span class="k">for</span> _, e := <span class="k">range</span> st.<span class="t">Entries</span> {
+	fmt.<span class="t">Println</span>(e.<span class="t">Reference</span>, <span class="s">&quot;|&quot;</span>, e.<span class="t">Description</span>, <span class="s">&quot;|&quot;</span>, e.<span class="t">Amount</span>.<span class="t">Display</span>)
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;prefunded:&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@FlutterwaveClearing&quot;</span>)
+
+<span class="c">// During the week Flutterwave pays out ₦45,000 of withdrawals from that balance.</span>
+w, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;45000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;wd_ada_301&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">Confirm</span>(ctx, w.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;after payouts:&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@FlutterwaveClearing&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@BankOperating&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>flw_topup_2026_09_01 | Settlement FlutterwaveClearing | 60000.00
+flw_topup_2026_09_01_fee | Settlement FlutterwaveClearing fee | 250.00
+prefunded:
+  @FlutterwaveClearing   balance    -60000.00  natural     60000.00  (asset)
+after payouts:
+  @FlutterwaveClearing   balance    -15000.00  natural     15000.00  (asset)
+  @BankOperating         balance    -38250.00  natural     38250.00  (asset)</pre></figure>
+<ul><li>The bank is credited <code>Amount + Fee</code> (₦60,250): that is what left it. <code>@FlutterwaveClearing</code> is debited ₦60,000, the money now sitting at Flutterwave.</li><li>Each confirmed <code>wallet.Withdraw</code> with <code>Provider: &quot;flutterwave&quot;</code> credits <code>@FlutterwaveClearing</code>. After ₦45,000 of payouts, its natural balance is ₦15,000: what is left of the prefunded balance.</li><li>If Flutterwave pays out first and bills you later, make the same call when you pay the bill. The withdrawals put <code>@FlutterwaveClearing</code> in credit (Oja owes Flutterwave), and the payout settlement brings it back to zero.</li><li>For a payout settlement the fee can be any amount, including more than <code>Amount</code>. For a collection it must be less than <code>Amount</code>.</li></ul>
+<h2 id="without-a-fee"><a href="#without-a-fee">Without a fee</a></h2>
+<figure class="code"><figcaption>A fee-free settlement with its own description</figcaption><pre><code>fund(wallet, tundeNGN.<span class="t">ID</span>, <span class="s">&quot;12000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T1004&quot;</span>)
+st, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
+	<span class="t">Provider</span>:    <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// Direction defaults to SettlementCollection</span>
+	<span class="t">Reference</span>:   <span class="s">&quot;paystack_stl_2026_09_02&quot;</span>,
+	<span class="t">Description</span>: <span class="s">&quot;Paystack settlement 2 Sep&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;entries:&quot;</span>, <span class="b">len</span>(st.<span class="t">Entries</span>), <span class="s">&quot;-&quot;</span>, st.<span class="t">Entries</span>[<span class="n">0</span>].<span class="t">Description</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;metadata:&quot;</span>, st.<span class="t">Entries</span>[<span class="n">0</span>].<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>], st.<span class="t">Entries</span>[<span class="n">0</span>].<span class="t">MetaData</span>[<span class="s">&quot;settlement_reference&quot;</span>], st.<span class="t">Entries</span>[<span class="n">0</span>].<span class="t">MetaData</span>[<span class="s">&quot;provider&quot;</span>])
+settlementHouse(ops, <span class="s">&quot;@PaystackClearing&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>entries: 1 - Paystack settlement 2 Sep
+metadata: settlement paystack_stl_2026_09_02 paystack
+  @PaystackClearing      balance         0.00  natural         0.00  (asset)</pre></figure>
+<ul><li>Leave <code>Fee</code> out and only the main entry is made, so <code>Entries</code> has one item.</li><li><code>Direction</code> defaults to <code>SettlementCollection</code>.</li><li><code>Description</code> defaults to <code>Settlement &lt;account&gt;</code>, e.g. <code>Settlement PaystackClearing</code>. The fee entry gets the same text with <code> fee</code> added.</li><li>Every entry carries <code>txn_type: settlement</code>, <code>settlement_reference</code> and <code>provider</code> in its metadata.</li></ul>
+<h2 id="retrying-the-reference"><a href="#retrying-the-reference">Retrying: the Reference</a></h2>
+<p><code>Reference</code> is required. Use the provider's settlement id. The main entry uses it as is and the fee entry uses <code>Reference + &quot;_fee&quot;</code>.</p>
+<figure class="code"><figcaption>The settlement job runs twice</figcaption><pre><code><span class="c">// The settlement job crashed after posting and runs again with the same report.</span>
+settlementHouse(ops, <span class="s">&quot;@BankOperating&quot;</span>)
+again, err := ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
+	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;paystack_stl_2026_09_01&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;replayed:&quot;</span>, again.<span class="t">Replayed</span>, <span class="s">&quot;entries:&quot;</span>, <span class="b">len</span>(again.<span class="t">Entries</span>))
+settlementHouse(ops, <span class="s">&quot;@BankOperating&quot;</span>)
+
+<span class="c">// The same reference with a different amount is a conflict, not a replay.</span>
+_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
+	<span class="t">Provider</span>:  <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;110000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;paystack_stl_2026_09_01&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;different amount:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>  @BankOperating         balance    -50250.00  natural     50250.00  (asset)
+replayed: true entries: 2
+  @BankOperating         balance    -50250.00  natural     50250.00  (asset)
+different amount: true</pre></figure>
+<ul><li>The same <code>Reference</code> with the same amounts returns the original entries with <code>Replayed: true</code>. Nothing is posted twice and the bank balance doesn't change.</li><li>The same <code>Reference</code> with a different amount is refused with <code>ErrDuplicateReference</code>. A provider that corrects a settlement should send a new id; record the difference under it.</li></ul>
+<h2 id="other-accounts-clearingaccount-bankaccount-feeaccount"><a href="#other-accounts-clearingaccount-bankaccount-feeaccount">Other accounts: ClearingAccount, BankAccount, FeeAccount</a></h2>
+<p>The defaults fit most cases. Override them when you have more than one bank account, or money that arrived without a named provider.</p>
+<figure class="code"><figcaption>Providus sweeps virtual-account collections into Oja's Providus account</figcaption><pre><code><span class="c">// At start-up: tell the chart what the extra accounts are.</span>
+ledger.<span class="t">Chart</span>[<span class="s">&quot;@BankProvidus&quot;</span>] = ledger.<span class="t">GLDef</span>{<span class="t">Type</span>: ledger.<span class="t">GLAsset</span>, <span class="t">Normal</span>: ledger.<span class="t">DebitNormal</span>}
+ledger.<span class="t">Chart</span>[<span class="s">&quot;@BankCharges&quot;</span>] = ledger.<span class="t">GLDef</span>{<span class="t">Type</span>: ledger.<span class="t">GLExpense</span>, <span class="t">Normal</span>: ledger.<span class="t">DebitNormal</span>}
+
+<span class="c">// Providus sweeps the virtual-account collections into Oja&#x27;s Providus account, less ₦50 in charges.</span>
+st, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{
+	<span class="t">ClearingAccount</span>: ledger.<span class="t">DepositClearingAccount</span>, <span class="c">// &quot;@DepositClearing&quot;, instead of Provider</span>
+	<span class="t">BankAccount</span>:     <span class="s">&quot;@BankProvidus&quot;</span>,               <span class="c">// default &quot;@BankOperating&quot;</span>
+	<span class="t">FeeAccount</span>:      <span class="s">&quot;@BankCharges&quot;</span>,                <span class="c">// default &quot;@ProviderFees&quot;</span>
+	<span class="t">Amount</span>:          ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:             ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>:       <span class="s">&quot;providus_sweep_2026_09_01&quot;</span>,
+})
+check(err)
+<span class="k">for</span> _, e := <span class="k">range</span> st.<span class="t">Entries</span> {
+	fmt.<span class="t">Println</span>(e.<span class="t">Reference</span>, <span class="s">&quot;|&quot;</span>, e.<span class="t">Description</span>, <span class="s">&quot;|&quot;</span>, e.<span class="t">Amount</span>.<span class="t">Display</span>)
+}
+settlementHouse(ops, <span class="s">&quot;@DepositClearing&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@BankProvidus&quot;</span>)
+settlementHouse(ops, <span class="s">&quot;@BankCharges&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>providus_sweep_2026_09_01 | Settlement DepositClearing | 24950.00
+providus_sweep_2026_09_01_fee | Settlement DepositClearing fee | 50.00
+  @DepositClearing       balance         0.00  natural         0.00  (asset)
+  @BankProvidus          balance    -24950.00  natural     24950.00  (asset)
+  @BankCharges           balance       -50.00  natural        50.00  (expense)</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Default</th><th>What it changes</th></tr></thead><tbody><tr><td><code>Provider</code></td><td>none</td><td>names the clearing account: <code>&quot;paystack&quot;</code> → <code>@PaystackClearing</code></td></tr><tr><td><code>ClearingAccount</code></td><td>none</td><td>an exact clearing account instead of <code>Provider</code>, e.g. <code>@DepositClearing</code> for deposits made without a provider</td></tr><tr><td><code>BankAccount</code></td><td><code>@BankOperating</code></td><td>the bank account the money reaches or leaves</td></tr><tr><td><code>FeeAccount</code></td><td><code>@ProviderFees</code></td><td>where the provider's fee is booked</td></tr><tr><td><code>Description</code></td><td><code>Settlement &lt;account&gt;</code></td><td>the entries' description</td></tr></tbody></table></div>
+<ul><li>One of <code>Provider</code> or <code>ClearingAccount</code> is required. When both are set, <code>ClearingAccount</code> wins.</li><li>New house accounts need no setup: Blnk creates <code>@BankProvidus</code> the first time it is used. Add them to <code>ledger.Chart</code> at start-up so <code>ops.GetHouseAccount</code>, <code>TrialBalance</code> and statements know their type and normal side.</li></ul>
+<aside class="warn"><code>ClearingAccount</code>, <code>BankAccount</code> and <code>FeeAccount</code> are posted with overdraft allowed and are not checked for status. Pass house accounts (<code>@Name</code>) only, never a customer account id.</aside>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>Blnk debits the source and credits the destination of each transaction.</p>
+<p>Collection, ₦100,000 with a ₦1,500 fee:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>@BankOperating</code></td><td>98,500</td><td></td></tr><tr><td><code>@ProviderFees</code></td><td>1,500</td><td></td></tr><tr><td><code>@PaystackClearing</code></td><td></td><td>100,000</td></tr></tbody></table></div>
+<p>Payout, ₦60,000 with a ₦250 fee:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>@FlutterwaveClearing</code></td><td>60,000</td><td></td></tr><tr><td><code>@ProviderFees</code></td><td>250</td><td></td></tr><tr><td><code>@BankOperating</code></td><td></td><td>60,250</td></tr></tbody></table></div>
+<p>These are two Blnk transactions, the main one under <code>Reference</code> and the fee under <code>Reference_fee</code>, sent as one atomic bulk request. Settlements touch house accounts only, so they carry on while a customer account or ledger is frozen.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;stl_x1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;no provider:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>)})
+fmt.<span class="t">Println</span>(<span class="s">&quot;no reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;stl_x2&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;fee not below amount:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+fmt.<span class="t">Println</span>(err)
+
+_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10&quot;</span>, <span class="s">&quot;USD&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;stl_x3&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;fee in another currency:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = ops.<span class="t">RecordSettlement</span>(ctx, ledger.<span class="t">SettlementInput</span>{<span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;0&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;stl_x4&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;zero amount:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>no provider: true
+no reference: true
+fee not below amount: true
+ledger.Ops.RecordSettlement: ledger: invalid input: fee must be less than the settled amount
+fee in another currency: true
+zero amount: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>no <code>Provider</code> or <code>ClearingAccount</code>; no <code>Reference</code>; a zero or negative <code>Amount</code>; a <code>Fee</code> in another currency; a collection fee equal to or above <code>Amount</code></td><td>fix the call</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the <code>Reference</code> was used for a different settlement</td><td>use the provider's new settlement id</td></tr><tr><td><code>ErrUnavailable</code></td><td>Blnk can't be reached</td><td>retry with the same <code>Reference</code>; a settlement that did post comes back as a replay</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="deposits.html">Deposits</a> and <a href="withdrawals.html">Withdrawals</a>: the movements that fill the clearing accounts.</li><li><a href="house-accounts.html">House accounts</a>: read <code>@PaystackClearing</code>, <code>@BankOperating</code> and <code>@ProviderFees</code>.</li><li><a href="reconciliation.html">Reconciliation</a>: match the clearing accounts against the provider's report.</li><li><a href="suspense.html">Unidentified money</a>: a collection that can't be matched to a customer still counts in the settlement.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="close-account.html"><small>Previous</small>Close an account</a><a class="next" href="suspense.html"><small>Next</small>Unidentified money</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

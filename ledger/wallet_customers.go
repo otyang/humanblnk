@@ -179,7 +179,10 @@ func (s walletAPI) ListPots(ctx context.Context, parentID AccountID) ([]*Pot, er
 func (s *Service) toPot(a *Account) *Pot {
 	p := &Pot{Account: a, Name: str(a.MetaData["pot_name"]), Parent: AccountID(str(a.MetaData["parent_account"]))}
 	if g := str(a.MetaData["pot_goal"]); g != "" {
-		p.Goal, _ = ParseDecimal(g, a.Currency, a.Precision)
+		if goal, err := ParseDecimal(g, a.Currency, a.Precision); err == nil {
+			goal.Display = s.Display(goal)
+			p.Goal = goal
+		}
 	}
 	return p
 }

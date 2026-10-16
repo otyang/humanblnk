@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Testing your app · humanblnk</title>
+<meta name="description" content="Test the code that calls humanblnk against an in-memory Blnk Core: control the clock, expire holds, run scheduled transfers and assert the webhooks Blnk would send.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
+<h1>Testing your app</h1>
+<p class="lead">Test the code that calls humanblnk against an in-memory Blnk Core: control the clock, expire holds, run scheduled transfers and assert the webhooks Blnk would send.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#which-one-to-use">Which one to use</a><a href="#ledgertest-new">ledgertest.New</a><a href="#the-clock">The clock</a><a href="#a-card-hold-that-expires">A card hold that expires</a><a href="#a-withdrawal-the-provider-never-confirms">A withdrawal the provider never confirms</a><a href="#scheduled-transfers-and-standing-orders">Scheduled transfers and standing orders</a><a href="#asserting-webhooks">Asserting webhooks</a><a href="#ledgertest-newserver-your-own-wiring">ledgertest.NewServer: your own wiring</a><a href="#what-the-emulator-covers">What the emulator covers</a><a href="#live-tests-against-a-real-core">Live tests against a real Core</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Oja's engineers want tests that run in milliseconds on a laptop and in CI, with no Docker and no shared Core. They also want to test what happens over time: a card hold that expires, a withdrawal Flutterwave never answers, a standing order on the 2nd of each month. Package <code>ledgertest</code> is an in-memory Blnk Core for that.</p>
+<p>The real <code>ledger.Service</code> code runs unchanged against it, so your tests send the same requests production sends.</p>
+<h2 id="which-one-to-use"><a href="#which-one-to-use">Which one to use</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Most tests</td><td><code>ledgertest.New(t, cfg)</code>: a Core, a ledger and a <code>*ledger.Service</code>, closed when the test ends</td></tr><tr><td>Your own wiring: several services, an observer, your own <code>blnk.Client</code></td><td><code>ledgertest.NewServer()</code>, then <code>core.Client()</code> or <code>core.URL()</code></td></tr><tr><td>Checking the library against a real Core</td><td>live tests with <code>BLNK_LIVE_URL</code></td></tr></tbody></table></div>
+<h2 id="ledgertest-new"><a href="#ledgertest-new">ledgertest.New</a></h2>
+<figure class="code"><figcaption>Ada pays her rent</figcaption><pre><code><span class="c">// In a _test.go file: no Docker, no network, a fresh Core per test.</span>
+svc, core := ledgertest.<span class="t">New</span>(t, ledger.<span class="t">Config</span>{}) <span class="c">// closed when the test ends</span>
+wallet := svc.<span class="t">Wallet</span>()
+
+ada, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+landlord, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ada.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;300000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;seed&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+check(err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada.<span class="t">ID</span>, <span class="t">To</span>: landlord.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;250000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_sept&quot;</span>})
+check(err)
+
+got, err := wallet.<span class="t">GetAccount</span>(ctx, landlord.<span class="t">ID</span>)
+check(err)
+<span class="k">if</span> got.<span class="t">Balance</span>.<span class="t">Value</span> != <span class="s">&quot;250000&quot;</span> {
+	t.<span class="t">Fatalf</span>(<span class="s">&quot;landlord has %s, want 250000&quot;</span>, got.<span class="t">Balance</span>.<span class="t">Value</span>)
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;landlord:&quot;</span>, got.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;ledger:&quot;</span>, got.<span class="t">LedgerID</span>, <span class="s">&quot;events so far:&quot;</span>, <span class="b">len</span>(core.<span class="t">Events</span>()))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>landlord: 250000.00 ledger: ldg_000001 events so far: 2</pre></figure>
+<ul><li><code>New</code> creates a ledger for the test and puts its id in <code>cfg.LedgerID</code>, unless you set one.</li><li>It sets <code>cfg.Now</code> to the emulator's clock, unless you set one. Holds, limits and webhook time windows then follow that clock.</li><li>It registers <code>core.Close</code> with <code>t.Cleanup</code>.</li><li>Each call starts an empty Core, so tests don't share state and can run in parallel.</li></ul>
+<h2 id="the-clock"><a href="#the-clock">The clock</a></h2>
+<p>The emulator's clock starts at 1 January 2026, 09:00 UTC, and moves only when you move it.</p>
+<figure class="code"><pre><code>svc, core := ledgertest.<span class="t">New</span>(t, ledger.<span class="t">Config</span>{})
+fmt.<span class="t">Println</span>(<span class="s">&quot;starts at:&quot;</span>, core.<span class="t">Now</span>()) <span class="c">// always the same</span>
+
+core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">9</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>))
+acct, err := svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+r, err := svc.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: acct.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;seed&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;posted at:&quot;</span>, r.<span class="t">CreatedAt</span>)
+
+core.<span class="t">Advance</span>(<span class="n">36</span> * time.<span class="t">Hour</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;now:&quot;</span>, core.<span class="t">Now</span>())</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>starts at: 2026-01-01 09:00:00 +0000 UTC
+posted at: 2026-09-01 09:00:00 +0000 UTC
+now: 2026-09-02 21:00:00 +0000 UTC</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody><tr><td><code>core.Now()</code></td><td>the emulator's time</td></tr><tr><td><code>core.SetNow(t)</code></td><td>moves the clock to <code>t</code>, then runs whatever became due</td></tr><tr><td><code>core.Advance(d)</code></td><td>moves the clock forward by <code>d</code>, then runs whatever became due</td></tr></tbody></table></div>
+<p>"Whatever became due" means: scheduled transactions post, pending transactions past their expiry are cancelled, and those past their capture time are captured.</p>
+<h2 id="a-card-hold-that-expires"><a href="#a-card-hold-that-expires">A card hold that expires</a></h2>
+<figure class="code"><figcaption>Chidi Stores never captures Ada's ₦20,000</figcaption><pre><code>hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
+	<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: shop, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;card_auth_4410&quot;</span>, <span class="t">ExpiresAt</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">2</span> * time.<span class="t">Hour</span>),
+})
+check(err)
+a, err := wallet.<span class="t">GetAccount</span>(ctx, ada)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;held:&quot;</span>, a.<span class="t">Balances</span>.<span class="t">PendingOut</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>)
+
+core.<span class="t">Advance</span>(<span class="n">3</span> * time.<span class="t">Hour</span>) <span class="c">// Chidi Stores never captured it</span>
+
+a, err = wallet.<span class="t">GetAccount</span>(ctx, ada)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;after 3h available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>)
+
+evs := core.<span class="t">Events</span>()
+body, err := json.<span class="t">Marshal</span>(evs[<span class="b">len</span>(evs)-<span class="n">1</span>]) <span class="c">// the newest webhook</span>
+check(err)
+void, err := svc.<span class="t">DecodeEvent</span>(body)
+check(err)
+fmt.<span class="t">Println</span>(void.<span class="t">Name</span>, <span class="s">&quot;for the hold:&quot;</span>, void.<span class="t">Receipt</span>.<span class="t">ParentTransaction</span> == hold.<span class="t">TransactionID</span>)
+
+_, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, <span class="b">nil</span>) <span class="c">// too late to capture</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;capture now:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>held: 20000.00 available: 30000.00
+after 3h available: 50000.00
+transaction.void for the hold: true
+capture now: true</pre></figure>
+<ul><li>Check the outcome through the balance and the <code>transaction.void</code> event. The void is a new record whose <code>ParentTransaction</code> is the hold.</li><li><code>wallet.GetTransaction</code> on the hold's own id still shows it as <code>INFLIGHT</code> after it expires or is cancelled, as Blnk keeps the original record. Don't assert on that status.</li><li>More in <a href="card-holds.html">Card holds</a>.</li></ul>
+<h2 id="a-withdrawal-the-provider-never-confirms"><a href="#a-withdrawal-the-provider-never-confirms">A withdrawal the provider never confirms</a></h2>
+<p>Withdrawals are pending by default and cancel themselves after <code>Config.WithdrawalHoldTTL</code> (24 hours).</p>
+<figure class="code"><figcaption>Flutterwave goes quiet on Ada's ₦10,000</figcaption><pre><code>wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: ada, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;wd_9001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>, <span class="c">// pending until Flutterwave answers</span>
+})
+check(err)
+a, err = wallet.<span class="t">GetAccount</span>(ctx, ada)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;withdrawal:&quot;</span>, wd.<span class="t">EntryStatus</span>, <span class="s">&quot;available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>)
+
+core.<span class="t">Advance</span>(<span class="n">23</span> * time.<span class="t">Hour</span>)
+a, err = wallet.<span class="t">GetAccount</span>(ctx, ada)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;after 23h available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>)
+
+core.<span class="t">Advance</span>(<span class="n">2</span> * time.<span class="t">Hour</span>) <span class="c">// past Config.WithdrawalHoldTTL (24h)</span>
+a, err = wallet.<span class="t">GetAccount</span>(ctx, ada)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;after 25h available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>)
+
+_, err = wallet.<span class="t">Confirm</span>(ctx, wd.<span class="t">TransactionID</span>, <span class="b">nil</span>) <span class="c">// Flutterwave&#x27;s late success webhook</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;confirm now:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>withdrawal: pending available: 40000.00
+after 23h available: 40000.00
+after 25h available: 50000.00
+confirm now: true</pre></figure>
+<p>More in <a href="withdrawals.html">Withdrawals</a>.</p>
+<h2 id="scheduled-transfers-and-standing-orders"><a href="#scheduled-transfers-and-standing-orders">Scheduled transfers and standing orders</a></h2>
+<figure class="code"><figcaption>₦10,000 to Ada's rent pot on the 2nd of each month</figcaption><pre><code>plan, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
+	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: pot.<span class="t">ID</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;rent_plan_ada&quot;</span>},
+	<span class="t">First</span>: core.<span class="t">Now</span>().<span class="t">Add</span>(<span class="n">24</span> * time.<span class="t">Hour</span>), <span class="t">Every</span>: ledger.<span class="t">Monthly</span>, <span class="t">Count</span>: <span class="n">3</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;scheduled:&quot;</span>, <span class="b">len</span>(plan), plan[<span class="n">0</span>].<span class="t">EntryStatus</span>)
+
+<span class="k">for</span> _, day := <span class="k">range</span> []time.<span class="t">Time</span>{
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">2</span>, <span class="n">10</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>),  <span class="c">// first payment due 2 Sep, 09:00</span>
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">10</span>, <span class="n">2</span>, <span class="n">10</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>), <span class="c">// then the 2nd of each month</span>
+	time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">11</span>, <span class="n">2</span>, <span class="n">10</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>),
+} {
+	core.<span class="t">SetNow</span>(day)
+	p, err := wallet.<span class="t">GetAccount</span>(ctx, pot.<span class="t">ID</span>)
+	check(err)
+	fmt.<span class="t">Println</span>(day.<span class="t">Format</span>(<span class="s">&quot;2 Jan&quot;</span>), <span class="s">&quot;pot:&quot;</span>, p.<span class="t">Balance</span>.<span class="t">Display</span>)
+}
+
+last, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;rent_plan_ada_3&quot;</span>)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;third payment:&quot;</span>, last.<span class="t">EntryStatus</span>) <span class="c">// Ada had ₦5,000 left</span></code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>scheduled: 3 scheduled
+2 Sep pot: 10000.00
+2 Oct pot: 20000.00
+2 Nov pot: 20000.00
+third payment: rejected</pre></figure>
+<ul><li>A scheduled transfer posts when the clock passes its time.</li><li>The emulator rejects a scheduled transfer the account can't pay for when it runs. It becomes <code>rejected</code> and sends <code>transaction.rejected</code>.</li><li>More in <a href="savings-pots.html">Savings pots and standing orders</a>.</li></ul>
+<h2 id="asserting-webhooks"><a href="#asserting-webhooks">Asserting webhooks</a></h2>
+<p>The emulator records every webhook Blnk would send.</p>
+<figure class="code"><figcaption>A deposit, then a card hold that is cancelled</figcaption><pre><code><span class="k">var</span> names []<span class="b">string</span>
+core.<span class="t">OnEvent</span>(<span class="k">func</span>(e ledgertest.<span class="t">Event</span>) { names = <span class="b">append</span>(names, e.<span class="t">Event</span>) }) <span class="c">// as each is sent</span>
+
+fund(wallet, ada, <span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T9201&quot;</span>)
+hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_9201&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">Cancel</span>(ctx, hold.<span class="t">TransactionID</span>)
+check(err)
+
+fmt.<span class="t">Println</span>(names)
+<span class="k">for</span> _, e := <span class="k">range</span> core.<span class="t">Events</span>() { <span class="c">// everything sent so far, oldest first</span>
+	fmt.<span class="t">Println</span>(e.<span class="t">Event</span>, <span class="b">len</span>(e.<span class="t">Data</span>) &gt; <span class="n">0</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>[transaction.applied transaction.inflight transaction.void]
+transaction.applied true
+transaction.inflight true
+transaction.void true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody><tr><td><code>core.Events()</code></td><td>every webhook sent so far, oldest first, as <code>ledgertest.Event{Event, Data}</code></td></tr><tr><td><code>core.OnEvent(fn)</code></td><td>calls <code>fn</code> for each webhook as it is sent. It runs under the server's lock: don't call the emulator from <code>fn</code></td></tr><tr><td><code>core.WebhookRequest(e, secret)</code></td><td>the <code>*http.Request</code> Blnk would POST for <code>e</code>, signed with <code>secret</code> and the emulator's clock (empty secret: unsigned)</td></tr></tbody></table></div>
+<p>The emulator sends the <code>transaction.*</code>, <code>bulk_transaction.applied</code> and <code>balance.monitor</code> events. It doesn't send <code>balance.created</code>, <code>identity.created</code> or <code>ledger.created</code>.</p>
+<h3 id="your-webhook-handler">Your webhook handler</h3>
+<figure class="code"><pre><code><span class="c">// Test your own webhook handler with the request Blnk would send.</span>
+<span class="k">var</span> cancelled <span class="b">string</span>
+handler := svc.<span class="t">WebhookHandler</span>(ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: <span class="s">&quot;test-secret&quot;</span>},
+	<span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> {
+		<span class="k">if</span> e.<span class="t">Name</span> == ledger.<span class="t">EventTransactionVoid</span> {
+			cancelled = e.<span class="t">Receipt</span>.<span class="t">ParentTransaction</span> <span class="c">// the hold that was cancelled</span>
+		}
+		<span class="k">return</span> <span class="b">nil</span>
+	})
+
+evs := core.<span class="t">Events</span>()
+rec := httptest.<span class="t">NewRecorder</span>()
+handler.<span class="t">ServeHTTP</span>(rec, core.<span class="t">WebhookRequest</span>(evs[<span class="b">len</span>(evs)-<span class="n">1</span>], <span class="s">&quot;test-secret&quot;</span>))
+<span class="k">if</span> rec.<span class="t">Code</span> != <span class="n">200</span> || cancelled != hold.<span class="t">TransactionID</span> {
+	t.<span class="t">Fatalf</span>(<span class="s">&quot;handler answered %d for %q&quot;</span>, rec.<span class="t">Code</span>, cancelled)
+}
+fmt.<span class="t">Println</span>(rec.<span class="t">Code</span>, cancelled == hold.<span class="t">TransactionID</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>200 true</pre></figure>
+<p>More in <a href="webhooks.html">Webhooks</a>.</p>
+<h2 id="ledgertest-newserver-your-own-wiring"><a href="#ledgertest-newserver-your-own-wiring">ledgertest.NewServer: your own wiring</a></h2>
+<p>Use the server directly when a test needs more than one service, an observer, or a client you build yourself.</p>
+<figure class="code"><figcaption>The API and the back office share one Core</figcaption><pre><code>core := ledgertest.<span class="t">NewServer</span>()
+<span class="k">defer</span> core.<span class="t">Close</span>()
+
+ng := ledger.<span class="t">LedgerID</span>(core.<span class="t">CreateLedger</span>(<span class="s">&quot;Oja Nigeria&quot;</span>))
+gh := ledger.<span class="t">LedgerID</span>(core.<span class="t">CreateLedger</span>(<span class="s">&quot;Oja Ghana&quot;</span>))
+
+<span class="c">// Two services on one Core, as two processes would be in production.</span>
+<span class="k">var</span> calls []<span class="b">string</span>
+spy := ledger.<span class="t">ObserverFunc</span>(<span class="k">func</span>(ctx context.<span class="t">Context</span>, op <span class="b">string</span>) (context.<span class="t">Context</span>, <span class="k">func</span>(<span class="b">error</span>)) {
+	calls = <span class="b">append</span>(calls, op)
+	<span class="k">return</span> ctx, <span class="k">func</span>(<span class="b">error</span>) {}
+})
+api := ledger.<span class="t">Instrument</span>(ledger.<span class="t">New</span>(core.<span class="t">Client</span>(), ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ng, <span class="t">Now</span>: core.<span class="t">Now</span>}), spy)
+backOffice := ledger.<span class="t">New</span>(core.<span class="t">Client</span>(), ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: gh, <span class="t">Now</span>: core.<span class="t">Now</span>})
+
+acct, err := api.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+check(backOffice.<span class="t">Ops</span>().<span class="t">FreezeAccount</span>(ctx, acct.<span class="t">ID</span>, <span class="s">&quot;test&quot;</span>))
+a, err := api.<span class="t">Wallet</span>().<span class="t">GetAccount</span>(ctx, acct.<span class="t">ID</span>)
+check(err)
+
+fmt.<span class="t">Println</span>(a.<span class="t">LedgerID</span> == ng, a.<span class="t">Status</span>, calls)
+fmt.<span class="t">Println</span>(<span class="s">&quot;URL for blnk.New:&quot;</span>, core.<span class="t">URL</span>() != <span class="s">&quot;&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true frozen [Wallet.OpenAccount Wallet.GetAccount]
+URL for blnk.New: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Method</th><th>What it does</th></tr></thead><tbody><tr><td><code>ledgertest.NewServer()</code></td><td>starts an emulator. Close it with <code>core.Close()</code></td></tr><tr><td><code>core.Client(opts...)</code></td><td>a <code>*blnk.Client</code> for the emulator, with retries off; your options are added</td></tr><tr><td><code>core.URL()</code></td><td>the base URL, for <code>blnk.New</code> or <code>humanblnk.New</code></td></tr><tr><td><code>core.CreateLedger(name)</code></td><td>adds a ledger and returns its id</td></tr></tbody></table></div>
+<p>Set <code>Config.Now: core.Now</code> yourself when you build the service this way. <code>ledgertest.New</code> does it for you.</p>
+<p>An <code>ObserverFunc</code> like <code>spy</code> lets a test assert which operations ran. See <a href="observability.html">Logging, metrics and tracing</a>.</p>
+<h2 id="what-the-emulator-covers"><a href="#what-the-emulator-covers">What the emulator covers</a></h2>
+<p>It implements what this library uses: health, ledgers, balances, identities, inflight transactions, splits, refunds, bulk, filters, metadata, balance monitors, historical balances, dry runs, instant reconciliation and signed webhooks. It behaves like Blnk Core 0.15 where that matters:</p>
+<ul><li>A transaction with a fee or several recipients is stored only as its legs (<code>&lt;ref&gt;-1</code>, <code>&lt;ref&gt;-2</code>, …).</li><li>House (<code>@</code>) accounts are stored by balance id.</li><li>Blank descriptions are rejected.</li><li>Filter results leave <code>parent_transaction</code> empty.</li></ul>
+<p>It is not a complete Blnk. For anything else in Blnk's API, test against a real Core.</p>
+<h2 id="live-tests-against-a-real-core"><a href="#live-tests-against-a-real-core">Live tests against a real Core</a></h2>
+<p>The library's own live test runs every kind of movement against a real Core, retries each one, and checks nothing posted twice. It writes test data, so point it at a Core you can throw away.</p>
+<figure class="code"><pre><code>make live BLNK_LIVE_URL=http://localhost:5001
+# the same as:
+BLNK_LIVE_URL=http://localhost:5001 go test ./ledger -run TestLiveCore -count=1 -v</code></pre></figure>
+<p>Set <code>BLNK_LIVE_API_KEY</code> too when the Core runs in secure mode. Without <code>BLNK_LIVE_URL</code> the test is skipped, so <code>go test ./...</code> stays offline.</p>
+<p>Your own live tests can follow the same pattern:</p>
+<figure class="code"><pre><code><span class="k">func</span> <span class="t">TestLiveTopUp</span>(t *testing.<span class="t">T</span>) {
+	url := os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_LIVE_URL&quot;</span>)
+	<span class="k">if</span> url == <span class="s">&quot;&quot;</span> {
+		t.<span class="t">Skip</span>(<span class="s">&quot;set BLNK_LIVE_URL to run against a real Blnk Core&quot;</span>)
+	}
+	client := blnk.<span class="t">New</span>(url, blnk.<span class="t">WithAPIKey</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_LIVE_API_KEY&quot;</span>)))
+	l, err := client.<span class="t">CreateLedger</span>(ctx, blnk.<span class="t">CreateLedgerRequest</span>{<span class="t">Name</span>: <span class="s">&quot;oja live test&quot;</span>})
+	<span class="k">if</span> err != <span class="b">nil</span> {
+		t.<span class="t">Fatal</span>(err)
+	}
+	svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ledger.<span class="t">LedgerID</span>(l.<span class="t">LedgerID</span>)})
+	run := fmt.<span class="t">Sprint</span>(time.<span class="t">Now</span>().<span class="t">UnixNano</span>()) <span class="c">// unique references per run</span>
+	<span class="c">// ... the same calls as your emulator tests, with references ending in run</span>
+}</code></pre></figure>
+<aside class="note">A real Core doesn't let you move its clock. Test expiry and scheduled transfers with the emulator, and keep live tests to what doesn't depend on time.</aside>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<p>The emulator returns Blnk's error codes, so the library maps them to the same sentinels as in production. Assert with <code>errors.Is</code>, as in <a href="errors.html">Errors</a>.</p>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrAlreadyFinalized</code></td><td>confirming or cancelling a hold or withdrawal after the clock expired it</td><td>assert it in tests of late provider callbacks</td></tr><tr><td><code>ErrNotFound</code></td><td>an id from another emulator: each <code>New</code> starts empty</td><td>create what the test needs in the same test</td></tr><tr><td><code>ErrUnavailable</code></td><td>the emulator was closed, e.g. a call after the test ended</td><td>keep calls inside the test</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="webhooks.html">Webhooks</a>: the handler you test with <code>core.WebhookRequest</code>.</li><li><a href="card-holds.html">Card holds</a>, <a href="withdrawals.html">Withdrawals</a>, <a href="savings-pots.html">Savings pots and standing orders</a>: the timed flows.</li><li><a href="setup.html">Install and connect</a>: connecting to a real Core.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="observability.html"><small>Previous</small>Logging, metrics and tracing</a><a class="next" href="customer-accounts.html"><small>Next</small>Create customer accounts</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

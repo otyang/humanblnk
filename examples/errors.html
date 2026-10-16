@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Errors · humanblnk</title>
+<meta name="description" content="Every error the library returns, how to check for it with errors.Is, what to tell the customer, and which ones are worth retrying.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
+<h1>Errors</h1>
+<p class="lead">Every error the library returns, how to check for it with errors.Is, what to tell the customer, and which ones are worth retrying.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#check-with-errors-is">Check with errors.Is</a><a href="#what-an-error-carries-operror">What an error carries: OpError</a><a href="#business-refusals">Business refusals</a><a href="#mistakes-in-the-call">Mistakes in the call</a><a href="#the-wrong-state-for-this-step">The wrong state for this step</a><a href="#retrying-replays-and-transient-errors">Retrying: replays and transient errors</a><a href="#what-to-tell-the-customer">What to tell the customer</a><a href="#every-error">Every error</a><a href="#logging-errors">Logging errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code>userMessage := <span class="k">func</span>(err <span class="b">error</span>) <span class="b">string</span> {
+	<span class="k">switch</span> {
+	<span class="k">case</span> err == <span class="b">nil</span>:
+		<span class="k">return</span> <span class="s">&quot;Done&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>):
+		<span class="k">return</span> <span class="s">&quot;You don&#x27;t have enough money for this&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>):
+		<span class="k">return</span> <span class="s">&quot;This is over your limit. Upgrade your account to send more&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>):
+		<span class="k">return</span> <span class="s">&quot;This account is on hold. Contact support&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>):
+		<span class="k">return</span> <span class="s">&quot;This account is closed&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrConflict</span>):
+		<span class="k">return</span> <span class="s">&quot;Something went wrong on our side. Try again in a moment&quot;</span>
+	<span class="k">default</span>:
+		<span class="k">return</span> <span class="s">&quot;We couldn&#x27;t complete this&quot;</span> <span class="c">// and log err: it is a bug or a bad request</span>
+	}
+}</code></pre></figure><figure class="code"><pre><code>retryLater := <span class="k">func</span>(err <span class="b">error</span>) <span class="b">bool</span> {
+	<span class="k">return</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>) || errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrConflict</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada tries to send Tunde more than she has. Oja's app must show her a clear message, not a stack trace. Support needs the detail in the logs. And the payments worker must know whether to try again. Every error from <code>wallet</code> and <code>ops</code> carries all three.</p>
+<h2 id="check-with-errors-is"><a href="#check-with-errors-is">Check with errors.Is</a></h2>
+<p>Each error matches one sentinel from package <code>ledger</code>. Branch on the sentinel, never on the message text.</p>
+<figure class="code"><figcaption>Ada sends more than she has</figcaption><pre><code>_, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0001&quot;</span>,
+})
+check(err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;75000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0002&quot;</span>,
+})
+<span class="k">if</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>) {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;Ada doesn&#x27;t have enough&quot;</span>)
+}
+fmt.<span class="t">Println</span>(err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Ada doesn&#x27;t have enough
+ledger.Wallet.Transfer: ledger: insufficient funds: blnk: 400 TXN_INSUFFICIENT_FUNDS: insufficient funds in source balance bln_000003</pre></figure>
+<p>The message reads from the outside in: the operation, the sentinel, then the cause. Here the cause is Blnk's own answer.</p>
+<h2 id="what-an-error-carries-operror"><a href="#what-an-error-carries-operror">What an error carries: OpError</a></h2>
+<p>Errors from the library are a <code>*ledger.OpError</code>.</p>
+<figure class="code"><pre><code><span class="k">var</span> oe *ledger.<span class="t">OpError</span>
+<span class="k">if</span> errors.<span class="t">As</span>(err, &amp;oe) {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;Op:   &quot;</span>, oe.<span class="t">Op</span>)
+	fmt.<span class="t">Println</span>(<span class="s">&quot;Kind: &quot;</span>, oe.<span class="t">Kind</span>)
+	fmt.<span class="t">Println</span>(<span class="s">&quot;Cause:&quot;</span>, oe.<span class="t">Cause</span>)
+}
+
+<span class="k">var</span> ae *blnk.<span class="t">APIError</span> <span class="c">// what Blnk answered, for your logs</span>
+<span class="k">if</span> errors.<span class="t">As</span>(err, &amp;ae) {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;Blnk:&quot;</span>, ae.<span class="t">Status</span>, ae.<span class="t">Code</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Op:    ledger.Wallet.Transfer
+Kind:  ledger: insufficient funds
+Cause: blnk: 400 TXN_INSUFFICIENT_FUNDS: insufficient funds in source balance bln_000003
+Blnk: 400 TXN_INSUFFICIENT_FUNDS</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>Op</code></td><td>the operation, e.g. <code>ledger.Wallet.Transfer</code> or <code>ledger.Ops.CloseAccount</code></td></tr><tr><td><code>Kind</code></td><td>the sentinel, e.g. <code>ErrInsufficientFunds</code>. <code>errors.Is</code> matches it</td></tr><tr><td><code>Cause</code></td><td>what went wrong underneath: a <code>*blnk.APIError</code>, a network error, or the library's own reason</td></tr></tbody></table></div>
+<ul><li><code>errors.As(err, &amp;ae)</code> reaches the <code>*blnk.APIError</code> when Blnk answered. It has <code>Status</code> (HTTP), <code>Code</code> (Blnk's <code>error_detail.code</code>, such as <code>TXN_INSUFFICIENT_FUNDS</code>), <code>Message</code>, <code>Details</code> and the raw <code>Body</code>. Log them; don't show them to customers.</li><li>Refusals the library makes itself, such as a frozen account or a missing reference, have no <code>*blnk.APIError</code>. Nothing was sent to Blnk.</li><li>A cancelled or timed-out <code>context</code> comes back as <code>context.Canceled</code> or <code>context.DeadlineExceeded</code>, not wrapped.</li></ul>
+<h2 id="business-refusals"><a href="#business-refusals">Business refusals</a></h2>
+<p>These are normal outcomes. The customer's request was understood and refused.</p>
+<figure class="code"><figcaption>Over a limit, to a frozen account, into a closed account</figcaption><pre><code><span class="c">// Over Ada&#x27;s tier2 limit of ₦100,000 per transaction:</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tunde, <span class="t">To</span>: ada,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000.01&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0003&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;limit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
+
+check(ops.<span class="t">FreezeAccount</span>(ctx, tunde, <span class="s">&quot;fraud review&quot;</span>))
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0004&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+check(ops.<span class="t">UnfreezeAccount</span>(ctx, tunde))
+
+old, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+_, err = ops.<span class="t">CloseAccount</span>(ctx, old.<span class="t">ID</span>, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;duplicate account&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;support_amaka&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead_femi&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: old.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;closed:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>limit: true
+frozen: true
+closed: true</pre></figure>
+<h2 id="mistakes-in-the-call"><a href="#mistakes-in-the-call">Mistakes in the call</a></h2>
+<p>These mean the request was wrong. Fix the code or the input.</p>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>}) <span class="c">// no Reference</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;invalid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;p2p_0005&quot;</span>}) <span class="c">// no Fee and no Config.Fees</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;invalid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>),
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5003&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;wrong kind:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>), <span class="s">&quot;also invalid:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="c">// p2p_0001 was ₦90,000</span>
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0001&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;duplicate reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))
+
+_, err = wallet.<span class="t">GetAccount</span>(ctx, <span class="s">&quot;bln_999999&quot;</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;not found:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
+
+_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: <span class="s">&quot;ldg_999999&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;ledger not found:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>), <span class="s">&quot;also not found:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>invalid: true ledger.Wallet.Transfer: ledger: invalid input: reference (idempotency key) is required
+invalid: true ledger.Wallet.Transfer: ledger: invalid input: fee is required; pass ledger.NoFee for a free transaction, or set Config.Fees
+wrong kind: true also invalid: true
+duplicate reference: true
+not found: true
+ledger not found: true also not found: true</pre></figure>
+<ul><li><code>ErrWrongKind</code> also matches <code>ErrInvalidInput</code>. <code>ErrLedgerNotFound</code> also matches <code>ErrNotFound</code>.</li><li>A duplicate reference is only an error when the payload differs. The same reference with the same payload is a replay (see below).</li></ul>
+<h2 id="the-wrong-state-for-this-step"><a href="#the-wrong-state-for-this-step">The wrong state for this step</a></h2>
+<figure class="code"><figcaption>A card hold on Ada's account</figcaption><pre><code>hold, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: ada, <span class="t">Destination</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;card_auth_7781&quot;</span>})
+check(err)
+
+more := ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>)
+_, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, &amp;more)
+fmt.<span class="t">Println</span>(<span class="s">&quot;amount exceeded:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAmountExceeded</span>))
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, ada, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>,
+	<span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead_femi&quot;</span>, <span class="t">SweepTo</span>: tunde, <span class="t">Reference</span>: <span class="s">&quot;close_ada&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;pending activity:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))
+
+_, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+check(err)
+_, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;already finalized:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))
+
+paid, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;p2p_0001&quot;</span>) <span class="c">// posted, never pending</span>
+check(err)
+_, err = wallet.<span class="t">Cancel</span>(ctx, paid.<span class="t">TransactionID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;not pending:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotPending</span>))
+
+_, err = ops.<span class="t">CloseAccount</span>(ctx, tunde, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;support_amaka&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;support_amaka&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;approval required:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrApprovalRequired</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>amount exceeded: true
+pending activity: true
+already finalized: true
+not pending: true
+approval required: true</pre></figure>
+<h2 id="retrying-replays-and-transient-errors"><a href="#retrying-replays-and-transient-errors">Retrying: replays and transient errors</a></h2>
+<p>Every movement takes a <code>Reference</code>. Send the same call again with the same reference and the same payload, and you get the original back with <code>Replayed: true</code>. Nothing posts twice. So when you don't know whether a call worked, retry it unchanged.</p>
+<figure class="code"><pre><code><span class="c">// The app timed out waiting for Blnk and sends the same payment again.</span>
+in := ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0006&quot;</span>}
+first, err := wallet.<span class="t">Transfer</span>(ctx, in)
+check(err)
+second, err := wallet.<span class="t">Transfer</span>(ctx, in)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;same transaction:&quot;</span>, second.<span class="t">TransactionID</span> == first.<span class="t">TransactionID</span>, <span class="s">&quot;replayed:&quot;</span>, second.<span class="t">Replayed</span>)
+
+retryLater := <span class="k">func</span>(err <span class="b">error</span>) <span class="b">bool</span> {
+	<span class="k">return</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>) || errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrConflict</span>)
+}
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;99000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0007&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds, retry later?&quot;</span>, retryLater(err))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>same transaction: true replayed: true
+insufficient funds, retry later? false</pre></figure>
+<ul><li>The client already retries lock contention (423), rate limits (429), 502, 503, 504 and network errors before it returns. See <a href="setup.html">Install and connect</a> for <code>WithRetries</code>.</li><li>What reaches you as <code>ErrUnavailable</code> or <code>ErrConflict</code> is worth retrying later, with the same reference.</li><li>Business refusals and mistakes give the same answer every time. Don't retry them.</li><li><code>wallet.Confirm</code> and <code>wallet.Cancel</code> carry no reference. After a network error or a gateway timeout, read the transaction with <code>wallet.GetTransaction</code> before you try again.</li><li><code>blnk.IsRetryable(err)</code> reports whether Blnk's last answer had a retryable status.</li></ul>
+<h2 id="what-to-tell-the-customer"><a href="#what-to-tell-the-customer">What to tell the customer</a></h2>
+<p>Map sentinels to your own words in one place.</p>
+<figure class="code"><pre><code>userMessage := <span class="k">func</span>(err <span class="b">error</span>) <span class="b">string</span> {
+	<span class="k">switch</span> {
+	<span class="k">case</span> err == <span class="b">nil</span>:
+		<span class="k">return</span> <span class="s">&quot;Done&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>):
+		<span class="k">return</span> <span class="s">&quot;You don&#x27;t have enough money for this&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>):
+		<span class="k">return</span> <span class="s">&quot;This is over your limit. Upgrade your account to send more&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>):
+		<span class="k">return</span> <span class="s">&quot;This account is on hold. Contact support&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>):
+		<span class="k">return</span> <span class="s">&quot;This account is closed&quot;</span>
+	<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrUnavailable</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrConflict</span>):
+		<span class="k">return</span> <span class="s">&quot;Something went wrong on our side. Try again in a moment&quot;</span>
+	<span class="k">default</span>:
+		<span class="k">return</span> <span class="s">&quot;We couldn&#x27;t complete this&quot;</span> <span class="c">// and log err: it is a bug or a bad request</span>
+	}
+}
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: tunde,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;99000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0008&quot;</span>})
+fmt.<span class="t">Println</span>(userMessage(err))
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ada, <span class="t">To</span>: old.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_0009&quot;</span>})
+fmt.<span class="t">Println</span>(userMessage(err))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>You don&#x27;t have enough money for this
+This account is closed</pre></figure>
+<h2 id="every-error"><a href="#every-error">Every error</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td>the account's available balance doesn't cover the amount and fee</td><td>tell the customer; offer a smaller amount</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the movement is over the tier's per-transaction, daily or monthly limit in <code>Config.Limits</code></td><td>tell the customer; show what's left with <code>wallet.LimitUsage</code></td></tr><tr><td><code>ErrAccountFrozen</code></td><td>an account the money leaves or enters is frozen or blocked</td><td>tell the customer to contact support; <code>ops.UnfreezeAccount</code> when cleared</td></tr><tr><td><code>ErrAccountClosed</code></td><td>an account the money leaves or enters is closed; freezing or unfreezing a closed account</td><td>use another account; for late money see <a href="suspense.html">Suspense</a></td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>money would leave an account whose ledger is frozen</td><td>wait for <code>ops.UnfreezeLedger</code></td></tr><tr><td><code>ErrInvalidInput</code></td><td>a missing reference, account or amount; a missing fee with no <code>Config.Fees</code>; too many decimals; other malformed input; a 4xx from Blnk with no closer match</td><td>fix the call; don't retry</td></tr><tr><td><code>ErrWrongKind</code></td><td>an id of another kind, e.g. a house account where a customer account is needed. Also matches <code>ErrInvalidInput</code></td><td>pass the right kind of id</td></tr><tr><td><code>ErrNotFound</code></td><td>the account, transaction, identity or other object doesn't exist</td><td>check the id</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td>the ledger doesn't exist. Also matches <code>ErrNotFound</code></td><td>fix <code>Config.LedgerID</code> or the <code>LedgerID</code> you passed</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference was already used for a different transaction, or a ledger <code>Key</code> with a different name</td><td>use a new reference for a new payment; retry with the original payload otherwise</td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td>the transaction is already confirmed, cancelled or refunded; a full refund after partial refunds</td><td>read its status; nothing to do</td></tr><tr><td><code>ErrNotPending</code></td><td>confirming or cancelling a transaction that isn't pending</td><td>read its status</td></tr><tr><td><code>ErrAmountExceeded</code></td><td>confirming or refunding more than is left</td><td>use the remaining amount</td></tr><tr><td><code>ErrPendingActivity</code></td><td>closing an account with pending or scheduled transactions, an open pot or a funded escrow</td><td>finish those first, then close</td></tr><tr><td><code>ErrApprovalRequired</code></td><td>closing an account or adjusting a balance with no <code>ApprovedBy</code>, or approved by the requester</td><td>get a second person to approve</td></tr><tr><td><code>ErrFeePricing</code></td><td>your <code>Config.Fees</code> returned an error, no fee, or a fee in another currency</td><td>fix the pricing function or its data</td></tr><tr><td><code>ErrSignature</code></td><td>a webhook with a bad or missing signature, or outside the time window</td><td>answer 401; see <a href="webhooks.html">Webhooks</a></td></tr><tr><td><code>ErrUnauthorized</code></td><td>Blnk answered 401 or 403: a missing or wrong API key, or too few permissions</td><td>fix <code>WithAPIKey</code></td></tr><tr><td><code>ErrConflict</code></td><td>Blnk reported a conflict or a locked resource after the client's retries; a statement that doesn't match Blnk's balance</td><td>retry later with the same reference</td></tr><tr><td><code>ErrUnavailable</code></td><td>Blnk couldn't be reached or failed after the client's retries; a client configuration mistake</td><td>retry later; if it persists, check <code>svc.Check</code></td></tr></tbody></table></div>
+<aside class="note">Quotes don't fail on business refusals. <code>wallet.QuoteTransfer</code> and the other quotes return <code>Allowed: false</code> with the sentinel in <code>Reason</code>, so the confirm screen can say why. See <a href="quotes.html">Quotes</a>.</aside>
+<h2 id="logging-errors"><a href="#logging-errors">Logging errors</a></h2>
+<p><code>Instrument</code> with <code>LogObserver</code> logs every call with its error: business refusals (<code>ErrInsufficientFunds</code>, <code>ErrLimitExceeded</code>, <code>ErrAccountFrozen</code>, <code>ErrAccountClosed</code>, <code>ErrLedgerFrozen</code>) at Warn, everything else at Error. See <a href="observability.html">Logging, metrics and tracing</a>.</p>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="setup.html">Install and connect</a>: client retries and <code>svc.Check</code>.</li><li><a href="limits.html">Limits</a>, <a href="freeze.html">Freeze an account</a>, <a href="close-account.html">Close an account</a>: where the refusals come from.</li><li><a href="card-holds.html">Card holds</a>: confirm and cancel.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="money.html"><small>Previous</small>Money and amounts</a><a class="next" href="webhooks.html"><small>Next</small>Webhooks</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

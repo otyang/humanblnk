@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Logging, metrics and tracing · humanblnk</title>
+<meta name="description" content="Wrap the service once with ledger.Instrument and every wallet and ops call is logged, counted or traced, with its name and its error.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
+<h1>Logging, metrics and tracing</h1>
+<p class="lead">Wrap the service once with ledger.Instrument and every wallet and ops call is logged, counted or traced, with its name and its error.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#how-it-works">How it works</a><a href="#which-one-to-use">Which one to use</a><a href="#instrument-and-observerfunc">Instrument and ObserverFunc</a><a href="#logs-logobserver">Logs: LogObserver</a><a href="#metrics">Metrics</a><a href="#tracing-and-the-context">Tracing and the context</a><a href="#what-is-and-isn-t-observed">What is and isn't observed</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Oja's on-call engineer wants to see every ledger call in the logs, a dashboard of transfers that worked, were refused or failed, and a trace span per call inside each HTTP request. None of that should touch the code that calls <code>wallet.Transfer</code>.</p>
+<h2 id="how-it-works"><a href="#how-it-works">How it works</a></h2>
+<p><code>ledger.Instrument(l, o)</code> returns a <code>ledger.Ledger</code> whose <code>Wallet()</code> and <code>Ops()</code> report every call to the observer <code>o</code>. The calls behave exactly as before.</p>
+<div class="tablewrap"><table><thead><tr><th>Piece</th><th>What it is</th></tr></thead><tbody><tr><td><code>ledger.Observer</code></td><td>an interface with one method: <code>Start(ctx, op) (context.Context, func(err error))</code></td></tr><tr><td><code>ledger.ObserverFunc</code></td><td>a function used as an <code>Observer</code></td></tr><tr><td><code>ledger.LogObserver(logger)</code></td><td>a ready-made <code>Observer</code> that logs to a <code>*slog.Logger</code></td></tr><tr><td><code>ledger.Instrument(l, o)</code></td><td>wraps any <code>Ledger</code>, such as <code>*ledger.Service</code>, with <code>o</code></td></tr></tbody></table></div>
+<p><code>Start</code> runs before the call. The context it returns is the one the call uses. The function it returns runs after the call, with the call's error (nil on success).</p>
+<h2 id="which-one-to-use"><a href="#which-one-to-use">Which one to use</a></h2>
+<div class="tablewrap"><table><thead><tr><th>You want</th><th>Use</th></tr></thead><tbody><tr><td>A log line per call</td><td><code>ledger.LogObserver(logger)</code></td></tr><tr><td>Counters or latency histograms</td><td>your own <code>ObserverFunc</code></td></tr><tr><td>A trace span per call</td><td>your own <code>ObserverFunc</code> that starts a span and returns its context</td></tr><tr><td>Several of these</td><td>wrap more than once: <code>Instrument</code> takes and returns a <code>Ledger</code></td></tr></tbody></table></div>
+<h2 id="instrument-and-observerfunc"><a href="#instrument-and-observerfunc">Instrument and ObserverFunc</a></h2>
+<figure class="code"><pre><code>record := ledger.<span class="t">ObserverFunc</span>(<span class="k">func</span>(ctx context.<span class="t">Context</span>, op <span class="b">string</span>) (context.<span class="t">Context</span>, <span class="k">func</span>(<span class="b">error</span>)) {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;start&quot;</span>, op)
+	<span class="k">return</span> ctx, <span class="k">func</span>(err <span class="b">error</span>) {
+		fmt.<span class="t">Println</span>(<span class="s">&quot;done &quot;</span>, op, <span class="s">&quot;err:&quot;</span>, err != <span class="b">nil</span>)
+	}
+})
+
+<span class="k">var</span> l ledger.<span class="t">Ledger</span> = ledger.<span class="t">Instrument</span>(svc, record)
+wallet := l.<span class="t">Wallet</span>() <span class="c">// hand this to the rest of the app, as before</span>
+
+ada, err := wallet.<span class="t">OpenCustomer</span>(ctx, ledger.<span class="t">CustomerInput</span>{
+	<span class="t">FirstName</span>: <span class="s">&quot;Ada&quot;</span>, <span class="t">LastName</span>: <span class="s">&quot;Obi&quot;</span>, <span class="t">Currencies</span>: []<span class="b">string</span>{<span class="s">&quot;NGN&quot;</span>}, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>,
+	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;tier&quot;</span>: <span class="s">&quot;tier2&quot;</span>},
+})
+check(err)
+_, err = wallet.<span class="t">GetAccount</span>(ctx, <span class="s">&quot;bln_999999&quot;</span>)
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>start Wallet.OpenCustomer
+done  Wallet.OpenCustomer err: false
+start Wallet.GetAccount
+done  Wallet.GetAccount err: true
+true</pre></figure>
+<ul><li>Operation names are <code>&quot;Wallet.&lt;Method&gt;&quot;</code> and <code>&quot;Ops.&lt;Method&gt;&quot;</code>, such as <code>&quot;Wallet.Transfer&quot;</code> or <code>&quot;Ops.CloseAccount&quot;</code>. Use them as metric labels or span names.</li><li>The error's own <code>Op</code> field is longer (<code>ledger.Wallet.Transfer</code>). The observer gets the short name.</li><li>Hand <code>l.Wallet()</code> and <code>l.Ops()</code> to the rest of the app as before. Code that depends on the <code>ledger.Wallet</code> and <code>ledger.Ops</code> interfaces doesn't change.</li></ul>
+<h2 id="logs-logobserver"><a href="#logs-logobserver">Logs: LogObserver</a></h2>
+<figure class="code"><figcaption>Oja logs with log/slog</figcaption><pre><code><span class="c">// A text logger without time and duration, so this output is the same on every run.</span>
+logger := slog.<span class="t">New</span>(slog.<span class="t">NewTextHandler</span>(os.<span class="t">Stdout</span>, &amp;slog.<span class="t">HandlerOptions</span>{
+	<span class="t">ReplaceAttr</span>: <span class="k">func</span>(groups []<span class="b">string</span>, a slog.<span class="t">Attr</span>) slog.<span class="t">Attr</span> {
+		<span class="k">if</span> a.<span class="t">Key</span> == slog.<span class="t">TimeKey</span> || a.<span class="t">Key</span> == <span class="s">&quot;duration&quot;</span> {
+			<span class="k">return</span> slog.<span class="t">Attr</span>{}
+		}
+		<span class="k">return</span> a
+	},
+}))
+logged := ledger.<span class="t">Instrument</span>(svc, ledger.<span class="t">LogObserver</span>(logger))
+
+_, err = logged.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T8001&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+check(err)
+_, _ = logged.<span class="t">Wallet</span>().<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>, <span class="c">// more than she has</span>
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_8001&quot;</span>})
+_, _ = logged.<span class="t">Wallet</span>().<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>, <span class="c">// no reference: a bug</span>
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>})
+check(logged.<span class="t">Ops</span>().<span class="t">FreezeAccount</span>(ctx, tunde.<span class="t">ID</span>, <span class="s">&quot;chargeback&quot;</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>level=INFO msg=&quot;ledger call&quot; op=Wallet.Deposit
+level=WARN msg=&quot;ledger call refused&quot; op=Wallet.Transfer error=&quot;ledger.Wallet.Transfer: ledger: insufficient funds: blnk: 400 TXN_INSUFFICIENT_FUNDS: insufficient funds in source balance bln_000003&quot;
+level=ERROR msg=&quot;ledger call failed&quot; op=Wallet.Transfer error=&quot;ledger.Wallet.Transfer: ledger: invalid input: reference (idempotency key) is required&quot;
+level=INFO msg=&quot;ledger call&quot; op=Ops.FreezeAccount</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Level</th><th>Message</th><th>When</th></tr></thead><tbody><tr><td>Info</td><td><code>ledger call</code></td><td>the call succeeded</td></tr><tr><td>Warn</td><td><code>ledger call refused</code></td><td>a business refusal: <code>ErrInsufficientFunds</code>, <code>ErrLimitExceeded</code>, <code>ErrAccountFrozen</code>, <code>ErrAccountClosed</code> or <code>ErrLedgerFrozen</code></td></tr><tr><td>Error</td><td><code>ledger call failed</code></td><td>every other error: bad input, Blnk unreachable, a bug</td></tr></tbody></table></div>
+<ul><li>Every line has <code>op</code> and <code>duration</code>; failed calls add <code>error</code>. The sample drops <code>time</code> and <code>duration</code> only so its output stays the same on every run.</li><li>Logs go through <code>InfoContext</code>, <code>WarnContext</code> and <code>ErrorContext</code>, so a handler that reads trace ids from the context sees them.</li><li>Refusals are normal business. Alert on the Error level, not on Warn.</li></ul>
+<p>In production:</p>
+<figure class="code"><pre><code>logger := slog.<span class="t">New</span>(slog.<span class="t">NewJSONHandler</span>(os.<span class="t">Stdout</span>, <span class="b">nil</span>))
+<span class="k">var</span> l ledger.<span class="t">Ledger</span> = ledger.<span class="t">Instrument</span>(svc, ledger.<span class="t">LogObserver</span>(logger))
+wallet, ops := l.<span class="t">Wallet</span>(), l.<span class="t">Ops</span>()</code></pre></figure>
+<h2 id="metrics"><a href="#metrics">Metrics</a></h2>
+<p>Count each call by operation and outcome. Classify the error with <code>errors.Is</code>, the same way <code>LogObserver</code> does.</p>
+<figure class="code"><figcaption>Transfers that worked, were refused, or failed</figcaption><pre><code>counts := <span class="k">map</span>[<span class="b">string</span>]<span class="b">int</span>{} <span class="c">// a Prometheus counter vec in production</span>
+metrics := ledger.<span class="t">ObserverFunc</span>(<span class="k">func</span>(ctx context.<span class="t">Context</span>, op <span class="b">string</span>) (context.<span class="t">Context</span>, <span class="k">func</span>(<span class="b">error</span>)) {
+	<span class="k">return</span> ctx, <span class="k">func</span>(err <span class="b">error</span>) {
+		outcome := <span class="s">&quot;ok&quot;</span>
+		<span class="k">switch</span> {
+		<span class="k">case</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>),
+			errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountClosed</span>):
+			outcome = <span class="s">&quot;refused&quot;</span>
+		<span class="k">case</span> err != <span class="b">nil</span>:
+			outcome = <span class="s">&quot;failed&quot;</span>
+		}
+		counts[op+<span class="s">&quot; &quot;</span>+outcome]++
+	}
+})
+m := ledger.<span class="t">Instrument</span>(svc, metrics).<span class="t">Wallet</span>()
+
+<span class="k">for</span> i, amount := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;500&quot;</span>, <span class="s">&quot;700&quot;</span>, <span class="s">&quot;90000&quot;</span>} {
+	_, _ = m.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>,
+		<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: fmt.<span class="t">Sprint</span>(<span class="s">&quot;p2p_820&quot;</span>, i)})
+}
+_, _ = m.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: tunde.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>}) <span class="c">// no reference</span>
+_, _ = m.<span class="t">GetAccount</span>(ctx, adaNGN)
+
+keys := <span class="b">make</span>([]<span class="b">string</span>, <span class="n">0</span>, <span class="b">len</span>(counts))
+<span class="k">for</span> k := <span class="k">range</span> counts {
+	keys = <span class="b">append</span>(keys, k)
+}
+sort.<span class="t">Strings</span>(keys)
+<span class="k">for</span> _, k := <span class="k">range</span> keys {
+	fmt.<span class="t">Println</span>(k, counts[k])
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Wallet.GetAccount ok 1
+Wallet.Transfer failed 1
+Wallet.Transfer ok 2
+Wallet.Transfer refused 1</pre></figure>
+<p>With Prometheus, the function body becomes <code>calls.WithLabelValues(op, outcome).Inc()</code>. Measure latency with <code>time.Now()</code> in <code>Start</code> and <code>time.Since</code> in the returned function.</p>
+<h2 id="tracing-and-the-context"><a href="#tracing-and-the-context">Tracing and the context</a></h2>
+<p>The observer sees the caller's context and can return a new one. Values you put on the request context, such as a request id, reach the observer.</p>
+<figure class="code"><pre><code><span class="k">type</span> requestID <span class="k">struct</span>{}
+trace := ledger.<span class="t">ObserverFunc</span>(<span class="k">func</span>(ctx context.<span class="t">Context</span>, op <span class="b">string</span>) (context.<span class="t">Context</span>, <span class="k">func</span>(<span class="b">error</span>)) {
+	id, _ := ctx.<span class="t">Value</span>(requestID{}).(<span class="b">string</span>)
+	<span class="c">// To trace, start a span here and return the context that carries it.</span>
+	<span class="k">return</span> ctx, <span class="k">func</span>(err <span class="b">error</span>) {
+		fmt.<span class="t">Println</span>(<span class="s">&quot;request&quot;</span>, id, <span class="s">&quot;op&quot;</span>, op, <span class="s">&quot;failed:&quot;</span>, err != <span class="b">nil</span>)
+	}
+})
+traced := ledger.<span class="t">Instrument</span>(svc, trace).<span class="t">Wallet</span>()
+
+reqCtx := context.<span class="t">WithValue</span>(ctx, requestID{}, <span class="s">&quot;req_5521&quot;</span>) <span class="c">// from your HTTP middleware</span>
+_, err = traced.<span class="t">GetAccount</span>(reqCtx, adaNGN)
+check(err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>request req_5521 op Wallet.GetAccount failed: false</pre></figure>
+<p>With OpenTelemetry, start a span in <code>Start</code> and end it in the returned function. The library then makes its Blnk requests with the span's context, so an instrumented HTTP client nests them under it.</p>
+<figure class="code"><pre><code>tracer := otel.<span class="t">Tracer</span>(<span class="s">&quot;oja/ledger&quot;</span>)
+tracing := ledger.<span class="t">ObserverFunc</span>(<span class="k">func</span>(ctx context.<span class="t">Context</span>, op <span class="b">string</span>) (context.<span class="t">Context</span>, <span class="k">func</span>(<span class="b">error</span>)) {
+	ctx, span := tracer.<span class="t">Start</span>(ctx, op)
+	<span class="k">return</span> ctx, <span class="k">func</span>(err <span class="b">error</span>) {
+		<span class="k">if</span> err != <span class="b">nil</span> {
+			span.<span class="t">RecordError</span>(err)
+			span.<span class="t">SetStatus</span>(codes.<span class="t">Error</span>, err.<span class="t">Error</span>())
+		}
+		span.<span class="t">End</span>()
+	}
+})
+
+client := blnk.<span class="t">New</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_URL&quot;</span>), blnk.<span class="t">WithAPIKey</span>(os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_API_KEY&quot;</span>)),
+	blnk.<span class="t">WithHTTPClient</span>(&amp;http.<span class="t">Client</span>{<span class="t">Transport</span>: otelhttp.<span class="t">NewTransport</span>(http.<span class="t">DefaultTransport</span>)}))
+svc := ledger.<span class="t">New</span>(client, cfg)
+<span class="k">var</span> l ledger.<span class="t">Ledger</span> = ledger.<span class="t">Instrument</span>(ledger.<span class="t">Instrument</span>(svc, tracing), ledger.<span class="t">LogObserver</span>(logger))</code></pre></figure>
+<h2 id="what-is-and-isn-t-observed"><a href="#what-is-and-isn-t-observed">What is and isn't observed</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Observed</th><th>Not observed</th></tr></thead><tbody><tr><td>every method on <code>Wallet()</code> and <code>Ops()</code> of the instrumented <code>Ledger</code></td><td>calls on the unwrapped <code>svc</code>, or on handles taken from it</td></tr></tbody></table></div>
+<aside class="tip">Take <code>Wallet()</code> and <code>Ops()</code> only from the instrumented <code>Ledger</code>. A handle taken from <code>svc</code> directly bypasses the observer.</aside>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<p>The observer never changes a call's result. It gets the same error the caller gets, and the same sentinels apply: see <a href="errors.html">Errors</a>.</p>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td>any sentinel, at Warn</td><td>a business refusal</td><td>nothing; count it</td></tr><tr><td>any sentinel, at Error</td><td>bad input, Blnk unreachable, a configuration mistake</td><td>investigate; <code>ErrUnavailable</code> for long means Blnk is down</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="errors.html">Errors</a>: what each sentinel means.</li><li><a href="setup.html">Install and connect</a>: handing out the handles.</li><li><a href="testing.html">Testing your app</a>: assert calls in tests with an <code>ObserverFunc</code>.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="webhooks.html"><small>Previous</small>Webhooks</a><a class="next" href="testing.html"><small>Next</small>Testing your app</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Escrow · humanblnk</title>
+<meta name="description" content="Take a buyer&#x27;s money now and pay the seller only on delivery, in full or in parts, with refunds to the buyer from the same pot.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Escrow</h1>
+<p class="lead">Take a buyer's money now and pay the seller only on delivery, in full or in parts, with refunds to the buyer from the same pot.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#opening-an-escrow-wallet-openescrow">Opening an escrow: wallet.OpenEscrow</a><a href="#paying-the-seller-wallet-releaseescrow">Paying the seller: wallet.ReleaseEscrow</a><a href="#giving-it-back-wallet-refundescrow">Giving it back: wallet.RefundEscrow</a><a href="#part-release-part-refund">Part release, part refund</a><a href="#paying-out-more-than-is-held">Paying out more than is held</a><a href="#oja-as-the-beneficiary">Oja as the beneficiary</a><a href="#escrow-fields">Escrow fields</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// escrowBalance reads an account&#x27;s balance for display.</span>
+<span class="k">func</span> escrowBalance(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>) <span class="b">string</span> {
+	a, err := w.<span class="t">GetAccount</span>(ctx, id)
+	check(err)
+	<span class="k">return</span> a.<span class="t">Balance</span>.<span class="t">Display</span>
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada buys an ₦80,000 phone from Chidi Stores, a seller she has never used. She wants her money back if the phone never comes. Chidi Stores wants to know the money is there before it ships. With an escrow, the money leaves Ada's account at once but only reaches Chidi Stores when Oja releases it.</p>
+<p>Each escrow is its own Blnk balance, opened for that one deal. What is still held is simply that balance, so Blnk itself refuses to pay out more than is left.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Take the buyer's money and hold it</td><td><code>wallet.OpenEscrow</code></td></tr><tr><td>Delivery confirmed: pay the seller</td><td><code>wallet.ReleaseEscrow</code></td></tr><tr><td>Order cancelled: give it back to the buyer</td><td><code>wallet.RefundEscrow</code></td></tr><tr><td>Part delivered, part returned</td><td><code>RefundEscrow</code> and <code>ReleaseEscrow</code>, each with an <code>Amount</code></td></tr><tr><td>Check what is still held</td><td><code>wallet.GetEscrow</code></td></tr></tbody></table></div>
+<h2 id="opening-an-escrow-wallet-openescrow"><a href="#opening-an-escrow-wallet-openescrow">Opening an escrow: wallet.OpenEscrow</a></h2>
+<figure class="code"><figcaption>Ada pays ₦80,000 into escrow for an order from Chidi Stores</figcaption><pre><code><span class="c">// Ada buys an ₦80,000 phone from Chidi Stores with buyer protection.</span>
+esc, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{
+	<span class="t">Payer</span>:       adaNGN,
+	<span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>:   <span class="s">&quot;escrow_10450&quot;</span>, <span class="c">// required; a retry returns the same escrow</span>
+	<span class="t">Description</span>: <span class="s">&quot;Order 10450&quot;</span>,
+	<span class="t">MetaData</span>:    <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;order_id&quot;</span>: <span class="s">&quot;10450&quot;</span>},
+})
+check(err)
+fmt.<span class="t">Println</span>(esc.<span class="t">ID</span>, esc.<span class="t">Status</span>, <span class="s">&quot;still held:&quot;</span>, esc.<span class="t">Held</span>.<span class="t">Display</span>, <span class="s">&quot;of&quot;</span>, esc.<span class="t">Amount</span>.<span class="t">Display</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;kind:&quot;</span>, esc.<span class="t">Account</span>.<span class="t">Kind</span>, <span class="s">&quot;Ada&#x27;s identity:&quot;</span>, esc.<span class="t">Account</span>.<span class="t">IdentityID</span> == ada.<span class="t">ID</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada:&quot;</span>, escrowBalance(wallet, adaNGN), <span class="s">&quot;Chidi Stores:&quot;</span>, escrowBalance(wallet, chidi))
+
+retry, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;80000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10450&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;retry returns it:&quot;</span>, retry.<span class="t">ID</span> == esc.<span class="t">ID</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>bln_000008 held still held: 80000.00 of 80000.00
+kind: escrow Ada&#x27;s identity: true
+Ada: 220000.00 Chidi Stores: 0.00
+retry returns it: true</pre></figure>
+<ul><li>The escrow account is a new account in Ada's ledger, currency and identity, with <code>Kind</code> set to <code>escrow</code>.</li><li>The money moves from Ada into it straight away. Chidi Stores' balance doesn't change yet.</li><li><code>Reference</code> is required. A retry with the same reference returns the same escrow, so a timed-out request is safe to repeat.</li><li><code>Description</code> defaults to "Escrow". <code>MetaData</code> goes on the funding transaction.</li></ul>
+<h3 id="escrowinput-fields">EscrowInput fields</h3>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>Payer</code></td><td>the customer account the money comes from. A house account is refused</td></tr><tr><td><code>Beneficiary</code></td><td>where the money goes on release: a customer account, or a house account as <code>ledger.AccountID(&quot;@Name&quot;)</code>. Must differ from <code>Payer</code></td></tr><tr><td><code>Amount</code></td><td>the amount taken from the payer, in the payer's currency</td></tr><tr><td><code>Reference</code></td><td>required; the idempotency key of the funding transaction</td></tr><tr><td><code>Description</code></td><td>text on the funding transaction</td></tr><tr><td><code>MetaData</code></td><td>your own keys on the funding transaction, e.g. an order id</td></tr></tbody></table></div>
+<h2 id="paying-the-seller-wallet-releaseescrow"><a href="#paying-the-seller-wallet-releaseescrow">Paying the seller: wallet.ReleaseEscrow</a></h2>
+<p>Leave <code>Amount</code> empty to release everything still held.</p>
+<figure class="code"><figcaption>Ada confirms delivery</figcaption><pre><code><span class="c">// Ada confirms delivery. A zero Amount releases everything still held.</span>
+paid, err := wallet.<span class="t">ReleaseEscrow</span>(ctx, esc.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{
+	<span class="t">Reference</span>:   <span class="s">&quot;escrow_10450_release&quot;</span>,
+	<span class="t">Description</span>: <span class="s">&quot;Order 10450 delivered&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(paid.<span class="t">Status</span>, paid.<span class="t">Amount</span>.<span class="t">Display</span>, paid.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>])
+
+after, err := wallet.<span class="t">GetEscrow</span>(ctx, esc.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(after.<span class="t">Status</span>, <span class="s">&quot;still held:&quot;</span>, after.<span class="t">Held</span>.<span class="t">Display</span>, <span class="s">&quot;Chidi Stores:&quot;</span>, escrowBalance(wallet, chidi))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED 80000.00 escrow_release
+settled still held: 0.00 Chidi Stores: 80000.00</pre></figure>
+<p>Once nothing is held, <code>Status</code> changes from <code>held</code> to <code>settled</code>.</p>
+<h2 id="giving-it-back-wallet-refundescrow"><a href="#giving-it-back-wallet-refundescrow">Giving it back: wallet.RefundEscrow</a></h2>
+<p><code>RefundEscrow</code> works the same way, but pays the payer.</p>
+<figure class="code"><figcaption>The order is cancelled before it ships</figcaption><pre><code><span class="c">// The order is cancelled before it ships: everything goes back to Ada.</span>
+esc2, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10451&quot;</span>})
+check(err)
+back, err := wallet.<span class="t">RefundEscrow</span>(ctx, esc2.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_10451_refund&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(back.<span class="t">Amount</span>.<span class="t">Display</span>, back.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>], <span class="s">&quot;to Ada:&quot;</span>, back.<span class="t">Destination</span> == <span class="b">string</span>(adaNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>30000.00 escrow_refund to Ada: true</pre></figure>
+<h2 id="part-release-part-refund"><a href="#part-release-part-refund">Part release, part refund</a></h2>
+<p>Set <code>Amount</code> to settle part of an escrow. Release and refund can be mixed in any order until nothing is left.</p>
+<figure class="code"><figcaption>Two items, one arrives broken</figcaption><pre><code><span class="c">// A ₦50,000 order of two items. One arrives broken.</span>
+esc3, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10452&quot;</span>})
+check(err)
+
+_, err = wallet.<span class="t">RefundEscrow</span>(ctx, esc3.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10452_refund_1&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Broken item&quot;</span>,
+})
+check(err)
+e, err := wallet.<span class="t">GetEscrow</span>(ctx, esc3.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(e.<span class="t">Status</span>, <span class="s">&quot;still held:&quot;</span>, e.<span class="t">Held</span>.<span class="t">Display</span>)
+
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, esc3.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10452_release_1&quot;</span>,
+})
+check(err)
+e, err = wallet.<span class="t">GetEscrow</span>(ctx, esc3.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(e.<span class="t">Status</span>, <span class="s">&quot;still held:&quot;</span>, e.<span class="t">Held</span>.<span class="t">Display</span>)
+
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, esc3.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_10452_release_2&quot;</span>}) <span class="c">// the rest</span>
+check(err)
+e, err = wallet.<span class="t">GetEscrow</span>(ctx, esc3.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(e.<span class="t">Status</span>, <span class="s">&quot;still held:&quot;</span>, e.<span class="t">Held</span>.<span class="t">Display</span>, <span class="s">&quot;original:&quot;</span>, e.<span class="t">Amount</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>held still held: 38000.00
+held still held: 18000.00
+settled still held: 0.00 original: 50000.00</pre></figure>
+<ul><li><code>Held</code> is what is still in escrow. <code>Amount</code> stays the amount first put in.</li><li>Each release or refund needs its own <code>Reference</code>.</li></ul>
+<h3 id="escrowsettleinput-fields">EscrowSettleInput fields</h3>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>Amount</code></td><td>how much to release or refund. Empty means everything still held</td></tr><tr><td><code>Reference</code></td><td>required; one per release or refund</td></tr><tr><td><code>Description</code></td><td>text on the transaction. Defaults to "Escrow release" or "Escrow refund"</td></tr><tr><td><code>MetaData</code></td><td>your own keys. <code>escrow_id</code> is added</td></tr></tbody></table></div>
+<h2 id="paying-out-more-than-is-held"><a href="#paying-out-more-than-is-held">Paying out more than is held</a></h2>
+<p>The escrow account can't go negative, so Blnk refuses to release or refund more than it holds. After everything is paid out, a call without <code>Amount</code> is refused because there is nothing left.</p>
+<figure class="code"><pre><code>esc4, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10453&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, esc4.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10453_release&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;more than held:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">RefundEscrow</span>(ctx, esc4.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_10453_refund&quot;</span>})
+check(err)
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, esc4.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_10453_release_2&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;nothing left:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>more than held: true
+nothing left: true ledger.Wallet.ReleaseEscrow: ledger: invalid input: escrow bln_000019 has nothing left</pre></figure>
+<h2 id="oja-as-the-beneficiary"><a href="#oja-as-the-beneficiary">Oja as the beneficiary</a></h2>
+<p>The beneficiary can be a house account. Here Oja itself is paid when the job is done.</p>
+<figure class="code"><figcaption>A ₦2,500 booking paid to <code>@FeeIncome</code> on completion</figcaption><pre><code><span class="c">// Ada books an Oja delivery slot. Oja itself is paid on completion.</span>
+booking, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{
+	<span class="t">Payer</span>:       adaNGN,
+	<span class="t">Beneficiary</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;2500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>:   <span class="s">&quot;booking_771&quot;</span>,
+})
+check(err)
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, booking.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;booking_771_done&quot;</span>})
+check(err)
+income, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;@FeeIncome:&quot;</span>, income.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@FeeIncome: 2500.00</pre></figure>
+<h2 id="escrow-fields"><a href="#escrow-fields">Escrow fields</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it is</th></tr></thead><tbody><tr><td><code>ID</code></td><td>the escrow account's id. Pass it to <code>ReleaseEscrow</code>, <code>RefundEscrow</code> and <code>GetEscrow</code></td></tr><tr><td><code>Payer</code>, <code>Beneficiary</code></td><td>as opened</td></tr><tr><td><code>Amount</code></td><td>the amount first put in</td></tr><tr><td><code>Held</code></td><td>what is still in escrow: the escrow account's balance</td></tr><tr><td><code>Status</code></td><td><code>held</code> while anything remains, then <code>settled</code></td></tr><tr><td><code>Reference</code></td><td>the funding transaction's reference</td></tr><tr><td><code>Account</code></td><td>the escrow account itself, with all its balances</td></tr></tbody></table></div>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>Opening makes a balance with <code>account_kind: escrow</code> and the payer, beneficiary, reference and amount in its metadata. Then each step is one transfer:</p>
+<div class="tablewrap"><table><thead><tr><th>Step</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Open (<code>escrow_fund</code>)</td><td>Ada</td><td>₦80,000.00</td><td></td></tr><tr><td>Release (<code>escrow_release</code>)</td><td>Escrow account</td><td>₦80,000.00</td><td></td></tr><tr><td>Refund (<code>escrow_refund</code>)</td><td>Escrow account</td><td>the amount</td><td></td></tr></tbody></table></div>
+<p>The name in brackets is the transaction's <code>txn_type</code>. A part release or refund makes the same entries for its <code>Amount</code>. Opening an escrow counts against Ada's <a href="limits.html">limits</a>; releases and refunds don't, because escrow accounts aren't limited.</p>
+<aside class="note">An account with an escrow still holding money can't be closed. Release or refund it first. See <a href="close-account.html">Close an account</a>.</aside>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: adaNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_bad_1&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;same payer and beneficiary:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: ledger.<span class="t">AccountID</span>(<span class="s">&quot;@PaystackClearing&quot;</span>), <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_bad_2&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;house payer:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+
+_, err = wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;seed_ada&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;reference of another transaction:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))
+
+_, err = wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;9000000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_bad_3&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;not enough money:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, adaNGN, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_bad_4&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;not an escrow:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+esc5, err := wallet.<span class="t">OpenEscrow</span>(ctx, ledger.<span class="t">EscrowInput</span>{<span class="t">Payer</span>: adaNGN, <span class="t">Beneficiary</span>: chidi,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;escrow_10454&quot;</span>})
+check(err)
+check(ops.<span class="t">FreezeAccount</span>(ctx, chidi, <span class="s">&quot;KYC review&quot;</span>))
+_, err = wallet.<span class="t">ReleaseEscrow</span>(ctx, esc5.<span class="t">ID</span>, ledger.<span class="t">EscrowSettleInput</span>{<span class="t">Reference</span>: <span class="s">&quot;escrow_10454_release&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen beneficiary:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>same payer and beneficiary: true
+house payer: true
+reference of another transaction: true
+not enough money: true
+not an escrow: true
+frozen beneficiary: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>no beneficiary, or the same as the payer; no <code>Reference</code>; the id isn't an escrow account; nothing left to release or refund</td><td>fix the call; read <code>GetEscrow</code> before settling</td></tr><tr><td><code>ErrWrongKind</code></td><td>the payer is a house account</td><td>pay in from a customer account</td></tr><tr><td><code>ErrInsufficientFunds</code></td><td>the payer can't cover the escrow; a release or refund over what is held</td><td>top up, or settle at most <code>Held</code></td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference belongs to a transaction that isn't this escrow's funding</td><td>use a new reference</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td>the payer, or the account being paid, is frozen or closed</td><td>see <a href="freeze.html">Freeze accounts</a></td></tr><tr><td><code>ErrLimitExceeded</code></td><td>opening the escrow is over the payer's limit</td><td>see <a href="limits.html">Limits</a></td></tr></tbody></table></div>
+<aside class="warn">The escrow account is created before the money moves. If funding fails, for example for lack of money, an empty escrow account is left behind, and a retry with the same reference opens another. Check the payer's available balance with <code>GetAccount</code> before opening an escrow.</aside>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="split-payments.html">Split payments</a>: pay the seller and Oja's commission from one payment.</li><li><a href="disputes.html">Disputes</a>: when the seller was already paid.</li><li><a href="refunds.html">Refunds</a>: sending back money from a posted payment.</li><li><a href="customer-accounts.html">Create customer accounts</a>: escrow accounts next to pots and main accounts.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="refunds.html"><small>Previous</small>Refunds</a><a class="next" href="disputes.html"><small>Next</small>Disputes</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

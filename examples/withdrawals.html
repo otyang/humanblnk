@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Withdrawals and payouts · humanblnk</title>
+<meta name="description" content="Send money out to a bank or wallet through a provider: reserved while the provider works, confirmed or cancelled from its webhook, and cancelled by itself if the provider never answers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Withdrawals and payouts</h1>
+<p class="lead">Send money out to a bank or wallet through a provider: reserved while the provider works, confirmed or cancelled from its webhook, and cancelled by itself if the provider never answers.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#withdraw-then-confirm">Withdraw, then confirm</a><a href="#when-the-provider-fails">When the provider fails</a><a href="#paid-already-immediate">Paid already: Immediate</a><a href="#a-provider-that-never-answers">A provider that never answers</a><a href="#many-outcomes-at-once">Many outcomes at once</a><a href="#options">Options</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code>show := <span class="k">func</span>(id ledger.<span class="t">AccountID</span>, who <span class="b">string</span>) {
+	a, err := wallet.<span class="t">GetAccount</span>(ctx, id)
+	check(err)
+	fmt.<span class="t">Println</span>(who+<span class="s">&quot;:&quot;</span>, a.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>, <span class="s">&quot;pending out:&quot;</span>, a.<span class="t">PendingOut</span>.<span class="t">Display</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada withdraws ₦20,000 to her GTBank account. Oja asks Flutterwave to make the bank transfer, and Flutterwave answers minutes later with a webhook: success or failure. Until then the money must be out of Ada's reach but not yet gone. <code>wallet.Withdraw</code> does this by default: it reserves the money, and you confirm or cancel when the provider answers.</p>
+<p>Pick the call by situation:</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>A payout through a provider that answers later</td><td><code>wallet.Withdraw</code>, then <code>wallet.Confirm</code> or <code>wallet.Cancel</code></td></tr><tr><td>A payout that has already happened, such as cash over an agent's counter</td><td><code>wallet.Withdraw</code> with <code>Immediate: true</code></td></tr><tr><td>A provider that may never answer</td><td>nothing: the hold cancels itself after <code>Config.WithdrawalHoldTTL</code></td></tr><tr><td>A shorter or longer window for one payout</td><td><code>ExpiresIn</code></td></tr><tr><td>A provider report with many outcomes</td><td><code>wallet.ConfirmMany</code> and <code>wallet.CancelMany</code></td></tr><tr><td>Salaries or payouts to many people at once</td><td><code>wallet.Bulk</code>, see <a href="bulk-payouts.html">Bulk payouts</a></td></tr></tbody></table></div>
+<h2 id="withdraw-then-confirm"><a href="#withdraw-then-confirm">Withdraw, then confirm</a></h2>
+<figure class="code"><figcaption>Ada withdraws ₦20,000 through Flutterwave</figcaption><pre><code><span class="c">// Ada withdraws ₦20,000 to her GTBank account through Flutterwave.</span>
+wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>:   adaNGN,
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// what reaches her bank</span>
+	<span class="t">Reference</span>:   <span class="s">&quot;wd_01J8ZM7R2X&quot;</span>,               <span class="c">// generate once, when she taps &quot;Withdraw&quot;</span>
+	<span class="t">Provider</span>:    <span class="s">&quot;flutterwave&quot;</span>,                 <span class="c">// credits @FlutterwaveClearing</span>
+	<span class="t">Description</span>: <span class="s">&quot;Withdrawal to GTBank ****4410&quot;</span>,
+	<span class="c">// Fee left out: Config.Fees charges ₦50 on top</span>
+})
+check(err)
+fmt.<span class="t">Println</span>(wd.<span class="t">EntryStatus</span>, <span class="s">&quot;total:&quot;</span>, wd.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;fee:&quot;</span>, wd.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>])
+show(adaNGN, <span class="s">&quot;Ada&quot;</span>)
+
+<span class="c">// Call Flutterwave&#x27;s transfer API with wd.TransactionID as your reference.</span>
+<span class="c">// Its webhook later says SUCCESSFUL:</span>
+done, err := wallet.<span class="t">Confirm</span>(ctx, wd.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+check(err)
+fmt.<span class="t">Println</span>(done.<span class="t">EntryStatus</span>)
+show(adaNGN, <span class="s">&quot;Ada&quot;</span>)
+<span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;@FlutterwaveClearing&quot;</span>, ledger.<span class="t">FeeIncomeAccount</span>} {
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	check(err)
+	fmt.<span class="t">Println</span>(name, h.<span class="t">Balance</span>.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>pending total: 20050.00 fee: 50
+Ada: 200000.00 available: 179950.00 pending out: 20050.00
+posted
+Ada: 179950.00 available: 179950.00 pending out: 0.00
+@FlutterwaveClearing 20000.00
+@FeeIncome 50.00</pre></figure>
+<ul><li><code>Amount</code> is what reaches the bank. The fee is charged on top, so ₦20,050 is reserved.</li><li>The withdrawal starts <code>pending</code>. <code>Balance</code> is unchanged, <code>Available</code> drops at once, and <code>PendingOut</code> shows the reserved money.</li><li>Send <code>wd.TransactionID</code> (or your <code>Reference</code>) to the provider, so its webhook can be matched back.</li><li><code>wallet.Confirm(ctx, id, nil)</code> posts it when the provider reports success. The money leaves <code>Balance</code> and reaches <code>@FlutterwaveClearing</code> and <code>@FeeIncome</code>.</li><li><code>Provider: &quot;flutterwave&quot;</code> credits <code>@FlutterwaveClearing</code>. With no provider, <code>Config.PayoutClearingAccount</code> is used (<code>@PayoutClearing</code> by default). <code>ClearingAccount</code> overrides both.</li></ul>
+<h2 id="when-the-provider-fails"><a href="#when-the-provider-fails">When the provider fails</a></h2>
+<figure class="code"><figcaption>Flutterwave rejects Tunde's payout</figcaption><pre><code>wd, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: tundeNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZM9K4T&quot;</span>,
+	<span class="t">Provider</span>:  <span class="s">&quot;flutterwave&quot;</span>,
+})
+check(err)
+show(tundeNGN, <span class="s">&quot;Tunde&quot;</span>)
+
+<span class="c">// Flutterwave says FAILED (wrong account number): give the money back.</span>
+back, err := wallet.<span class="t">Cancel</span>(ctx, wd.<span class="t">TransactionID</span>)
+check(err)
+fmt.<span class="t">Println</span>(back.<span class="t">EntryStatus</span>)
+show(tundeNGN, <span class="s">&quot;Tunde&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Tunde: 30000.00 available: 19950.00 pending out: 10050.00
+voided
+Tunde: 30000.00 available: 30000.00 pending out: 0.00</pre></figure>
+<p><code>wallet.Cancel</code> releases everything reserved, the fee included. Nothing is posted, so nothing needs reversing.</p>
+<h2 id="paid-already-immediate"><a href="#paid-already-immediate">Paid already: Immediate</a></h2>
+<figure class="code"><figcaption>An agent pays Ada ₦5,000 in cash</figcaption><pre><code><span class="c">// An agent paid Ada ₦5,000 cash over the counter: there is nothing to wait for.</span>
+wd, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>:       adaNGN,
+	<span class="t">Amount</span>:          ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:             ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>:       <span class="s">&quot;cashout_agent17_5521&quot;</span>,
+	<span class="t">ClearingAccount</span>: <span class="s">&quot;@AgentCashPayable&quot;</span>, <span class="c">// exact account, overrides Provider</span>
+	<span class="t">Immediate</span>:       <span class="b">true</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(wd.<span class="t">EntryStatus</span>)
+show(adaNGN, <span class="s">&quot;Ada&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>posted
+Ada: 174950.00 available: 174950.00 pending out: 0.00</pre></figure>
+<p><code>Immediate: true</code> posts the withdrawal at once, with no hold and no expiry. Use it only when the money has already gone out. For a provider call that can still fail, keep the default.</p>
+<h2 id="a-provider-that-never-answers"><a href="#a-provider-that-never-answers">A provider that never answers</a></h2>
+<p>A pending withdrawal carries an expiry. If neither <code>Confirm</code> nor <code>Cancel</code> arrives in time, Blnk cancels it and the money returns to the customer.</p>
+<figure class="code"><figcaption>Two payouts that never get an answer</figcaption><pre><code><span class="c">// Default: a withdrawal the provider never answers is cancelled after</span>
+<span class="c">// Config.WithdrawalHoldTTL (24h).</span>
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZMB1C2&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+})
+check(err)
+<span class="c">// ExpiresIn sets a shorter window for this one.</span>
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;wd_01J8ZMB3D4&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+	<span class="t">ExpiresIn</span>: <span class="n">2</span> * time.<span class="t">Hour</span>,
+})
+check(err)
+show(tundeNGN, <span class="s">&quot;Tunde&quot;</span>)
+
+core.<span class="t">Advance</span>(<span class="n">3</span> * time.<span class="t">Hour</span>)
+show(tundeNGN, <span class="s">&quot;after 3h&quot;</span>)
+core.<span class="t">Advance</span>(<span class="n">22</span> * time.<span class="t">Hour</span>)
+show(tundeNGN, <span class="s">&quot;after 25h&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Tunde: 30000.00 available: 25000.00 pending out: 5000.00
+after 3h: 30000.00 available: 27000.00 pending out: 3000.00
+after 25h: 30000.00 available: 30000.00 pending out: 0.00</pre></figure>
+<ul><li>The default window is <code>Config.WithdrawalHoldTTL</code>, 24 hours. A negative value turns expiry off.</li><li><code>ExpiresIn</code> overrides it for one withdrawal.</li><li>Blnk does the cancelling and sends a <code>transaction.void</code> webhook. See <a href="webhooks.html">Webhooks</a>.</li><li>The in-memory Blnk expires holds when its clock moves (<code>core.Advance</code>).</li></ul>
+<aside class="warn">If the provider pays after the hold has expired, the customer has the money back and the bank account has it too. Set the window longer than your provider's longest delay, and reconcile its report against the ledger. See <a href="reconciliation.html">Reconciliation</a>.</aside>
+<h2 id="many-outcomes-at-once"><a href="#many-outcomes-at-once">Many outcomes at once</a></h2>
+<p>A provider's settlement file reports many payouts. <code>ConfirmMany</code> and <code>CancelMany</code> take up to 100 transactions each.</p>
+<figure class="code"><figcaption>Two payouts succeeded, one failed</figcaption><pre><code><span class="c">// Flutterwave&#x27;s settlement file reports three payouts: two paid, one failed.</span>
+<span class="k">var</span> ids []<span class="b">string</span>
+<span class="k">for</span> i, amount := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;2000&quot;</span>, <span class="s">&quot;3000&quot;</span>} {
+	wd, err := wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+		<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, <span class="s">&quot;NGN&quot;</span>),
+		<span class="t">Reference</span>: fmt.<span class="t">Sprintf</span>(<span class="s">&quot;wd_batch_%d&quot;</span>, i+<span class="n">1</span>), <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+	})
+	check(err)
+	ids = <span class="b">append</span>(ids, wd.<span class="t">TransactionID</span>)
+}
+
+confirmed, err := wallet.<span class="t">ConfirmMany</span>(ctx, []ledger.<span class="t">ConfirmItem</span>{
+	{<span class="t">TransactionID</span>: ids[<span class="n">0</span>]},
+	{<span class="t">TransactionID</span>: ids[<span class="n">1</span>]},
+})
+check(err)
+cancelled, err := wallet.<span class="t">CancelMany</span>(ctx, []<span class="b">string</span>{ids[<span class="n">2</span>], ids[<span class="n">0</span>]}) <span class="c">// ids[0] is already paid</span>
+check(err)
+labels := []<span class="b">string</span>{<span class="s">&quot;confirm #1&quot;</span>, <span class="s">&quot;confirm #2&quot;</span>, <span class="s">&quot;cancel #3&quot;</span>, <span class="s">&quot;cancel #1&quot;</span>}
+<span class="k">for</span> i, r := <span class="k">range</span> <span class="b">append</span>(confirmed, cancelled...) {
+	fmt.<span class="t">Println</span>(labels[i], <span class="s">&quot;ok:&quot;</span>, r.<span class="t">OK</span>, <span class="s">&quot;already finalized:&quot;</span>, errors.<span class="t">Is</span>(r.<span class="t">Err</span>, ledger.<span class="t">ErrAlreadyFinalized</span>))
+}
+show(adaNGN, <span class="s">&quot;Ada&quot;</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>confirm #1 ok: true already finalized: false
+confirm #2 ok: true already finalized: false
+cancel #3 ok: true already finalized: false
+cancel #1 ok: false already finalized: true
+Ada: 171850.00 available: 171850.00 pending out: 0.00</pre></figure>
+<ul><li>Each item succeeds or fails on its own. Check every <code>BatchResult</code>: <code>OK</code>, <code>Queued</code>, and <code>Err</code>, which is a ledger error you can test with <code>errors.Is</code>.</li><li>The call itself only fails for an empty list, more than 100 items, or when Blnk can't be reached.</li><li><code>ConfirmItem.Partial</code> confirms part of a single-leg transaction. A withdrawal with a fee has two legs and is confirmed in full.</li></ul>
+<h2 id="options"><a href="#options">Options</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it changes</th></tr></thead><tbody><tr><td><code>AccountID</code></td><td>the customer account debited; required, and never a house account</td></tr><tr><td><code>Amount</code></td><td>what reaches the bank</td></tr><tr><td><code>Fee</code></td><td>charged on top; required unless <code>Config.Fees</code> is set; <code>ledger.NoFee</code> for free</td></tr><tr><td><code>Reference</code></td><td>required idempotency key; a retry with the same input returns the original with <code>Replayed</code></td></tr><tr><td><code>Provider</code></td><td>clearing account credited, e.g. <code>&quot;flutterwave&quot;</code> for <code>@FlutterwaveClearing</code></td></tr><tr><td><code>ClearingAccount</code></td><td>an exact clearing account, overriding <code>Provider</code></td></tr><tr><td><code>Immediate</code></td><td>post at once instead of pending</td></tr><tr><td><code>ExpiresIn</code></td><td>the pending window for this withdrawal, overriding <code>Config.WithdrawalHoldTTL</code></td></tr><tr><td><code>Description</code></td><td>shown on the statement; "Withdrawal" if empty</td></tr><tr><td><code>MetaData</code></td><td>your own keys, stored on the transaction</td></tr></tbody></table></div>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>A withdrawal is one Blnk transaction from the customer to the clearing account, <code>INFLIGHT</code> with <code>inflight_expiry_date</code> set unless <code>Immediate</code>. Its metadata has <code>txn_type: withdrawal</code>. Once confirmed:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's NGN account</td><td>₦20,050</td><td></td></tr><tr><td><code>@FlutterwaveClearing</code></td><td></td><td>₦20,000</td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦50</td></tr></tbody></table></div>
+<p>A cancel or an expiry posts nothing: the reservation is released. <code>@FlutterwaveClearing</code> now holds what Oja owes Flutterwave for the payout, cleared when you fund it from your bank. See <a href="settlement.html">Settlement</a>.</p>
+<aside class="note"><code>ledger.Chart</code> treats any <code>@…Clearing</code> account it doesn't list as an asset. For a provider you only pay out through, add it as a liability at start-up, e.g. <code>ledger.Chart[&quot;@FlutterwaveClearing&quot;] = ledger.GLDef{Type: ledger.GLLiability, Normal: ledger.CreditNormal}</code>, so reports read it the right way round.</aside>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;limit (100,000 + 50 fee):&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
+
+_, err = wallet.<span class="t">Confirm</span>(ctx, ids[<span class="n">0</span>], <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;confirmed twice:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))
+
+wd, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;4000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+})
+check(err)
+part := ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;&quot;</span>)
+_, err = wallet.<span class="t">Confirm</span>(ctx, wd.<span class="t">TransactionID</span>, &amp;part)
+fmt.<span class="t">Println</span>(<span class="s">&quot;partial with a fee:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+check(ops.<span class="t">FreezeLedger</span>(ctx, ada.<span class="t">Accounts</span>[<span class="s">&quot;NGN&quot;</span>].<span class="t">LedgerID</span>, <span class="s">&quot;incident 42&quot;</span>))
+_, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;ledger frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
+limit (100,000 + 50 fee): true
+confirmed twice: true
+partial with a fee: true
+ledger frozen: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td>available balance less than amount plus fee</td><td>show the balance</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>amount plus fee is over a per-transaction, daily or monthly limit</td><td>show <code>wallet.LimitUsage</code>; see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td>confirming or cancelling a withdrawal already confirmed, cancelled or expired</td><td>treat as done; read it with <code>wallet.GetTransaction</code></td></tr><tr><td><code>ErrNotPending</code></td><td>the id is not a pending transaction</td><td>check you passed the withdrawal's id</td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Reference</code>; no fee and no <code>Config.Fees</code>; a partial confirm of a withdrawal with a fee</td><td>fix the call</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td>the account is frozen or closed</td><td>stop the payout</td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>the account's ledger is frozen</td><td>wait until operations unfreezes it</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference was used for a different withdrawal</td><td>investigate; don't pay out twice</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="quotes.html">Quotes for confirm screens</a>: "you receive ₦20,000, fee ₦50" before Ada confirms.</li><li><a href="deposits.html">Deposits and top-ups</a>: money coming in.</li><li><a href="card-holds.html">Card holds and capture</a>: the same confirm and cancel calls on holds.</li><li><a href="settlement.html">Settlement</a> and <a href="reconciliation.html">Reconciliation</a>.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="transfers.html"><small>Previous</small>Transfers between customers</a><a class="next" href="card-holds.html"><small>Next</small>Card holds and capture</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

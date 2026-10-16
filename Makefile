@@ -13,7 +13,7 @@ lint: ## gofmt, go vet and staticcheck
 fmt: ## Format the code
 	gofmt -w .
 
-docs: ## Regenerate docs.html and CONTRACT.md from the source
+docs: ## Regenerate docs.html, CONTRACT.md and examples/ from the source
 	./scripts/gendocs.sh
 
 live: ## Tests against a real Blnk Core (writes test data): make live BLNK_LIVE_URL=http://localhost:5001

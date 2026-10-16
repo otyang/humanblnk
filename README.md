@@ -11,6 +11,8 @@
 
 **Guide:** [otyang.github.io/humanblnk](https://otyang.github.io/humanblnk/), a walkthrough built around a real wallet business. Every sample in it is a tested program.
 
+**Examples:** [otyang.github.io/humanblnk/examples](https://otyang.github.io/humanblnk/examples/), a detailed page for every use case (creating accounts, deposits, card holds, escrow, settlement, reconciliation and the rest) with full code, the real output, the Blnk entries each one makes, and the errors to expect.
+
 ## What humanblnk is
 
 A wallet business has two jobs. It moves its customers' money: sign-ups, top-ups, transfers, card payments, withdrawals, refunds. And it runs its own books: fees earned, money held by payment providers, settlements, unmatched payments, corrections, month-end close.

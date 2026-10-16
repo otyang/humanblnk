@@ -1,0 +1,88 @@
+/* humanblnk examples: one reading column, code and its output stacked beside the prose. Matches the guide's palette. */
+:root {
+  --bg: #fbfaf7; --panel: #f2efe8; --ink: #1d2226; --muted: #5f676e; --rule: #e1ddd3;
+  --accent: #0a6b52; --accent-soft: #e2f0eb; --warn: #8a5a00; --warn-soft: #fbf0d9;
+  --code-bg: #1f2428; --code-ink: #e6e6e3; --out-bg: #f6f4ee; --out-ink: #2b3136;
+  --c-com: #8b949e; --c-str: #a5d6a7; --c-kw: #ff9e7a; --c-type: #8ec7ff; --c-num: #f2cc60; --c-bi: #d7a8ff;
+  --display: "Schibsted Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #14181b; --panel: #1b2024; --ink: #e8eae6; --muted: #a2aaa6; --rule: #2b3236;
+  --accent: #5fd0a8; --accent-soft: #163329; --warn: #f0c060; --warn-soft: #33290f;
+  --code-bg: #0f1214; --out-bg: #191e22; --out-ink: #d6dad6; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #14181b; --panel: #1b2024; --ink: #e8eae6; --muted: #a2aaa6; --rule: #2b3236;
+  --accent: #5fd0a8; --accent-soft: #163329; --warn: #f0c060; --warn-soft: #33290f;
+  --code-bg: #0f1214; --out-bg: #191e22; --out-ink: #d6dad6; color-scheme: dark }
+* { box-sizing: border-box }
+html { scroll-padding-top: 16px }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body) }
+a { color: var(--accent) }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.wrap { max-width: 920px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)) }
+header.top { border-bottom: 1px solid var(--rule); background: var(--panel) }
+header.top .wrap { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; padding-block: 14px }
+.brand { font: 700 19px var(--display); color: var(--ink); text-decoration: none; letter-spacing: -.01em }
+.brand span { color: var(--muted); font-weight: 500 }
+header.top nav { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 15px }
+header.top nav a { text-decoration: none }
+main { padding-block: 36px 72px }
+h1 { font: 700 clamp(30px, 4.4vw, 42px)/1.1 var(--display); letter-spacing: -.02em; margin: 0 0 10px; text-wrap: balance }
+h2 { font: 700 25px/1.25 var(--display); letter-spacing: -.01em; margin: 44px 0 8px; padding-top: 28px; border-top: 1px solid var(--rule); text-wrap: balance }
+h2 a { color: inherit; text-decoration: none }
+h2 a:hover::after { content: " #"; color: var(--muted) }
+h3 { font: 700 19px/1.3 var(--display); margin: 28px 0 6px; text-wrap: balance }
+.crumb { margin: 0 0 6px; font-size: 14px; color: var(--muted) }
+.crumb a { color: var(--muted) }
+.lead { margin: 0 0 14px; color: var(--muted); font-size: 19px; max-width: 64ch }
+.lead.small { font-size: 16.5px }
+p, ul, ol { max-width: 70ch }
+li { margin: 5px 0 }
+code { font: 500 .86em var(--mono); background: var(--panel); border: 1px solid var(--rule); padding: 1px 5px; border-radius: 4px }
+nav.toc { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 18px 0 8px; padding: 12px 16px; border: 1px solid var(--rule); border-radius: 8px; font-size: 15px; background: var(--panel) }
+nav.toc span { width: 100%; font: 600 11.5px var(--body); text-transform: uppercase; letter-spacing: .08em; color: var(--muted) }
+nav.toc a { text-decoration: none }
+figure { margin: 16px 0 }
+figure.code { border-radius: 8px; overflow: hidden; background: var(--code-bg) }
+figure.code + figure.output { margin-top: -10px }
+figure figcaption { font: 500 12px var(--mono); color: var(--c-com); padding: 10px 16px 0 }
+figure.code pre { margin: 0; padding: 14px 16px 16px; overflow-x: auto }
+figure.code code { background: none; border: 0; padding: 0; color: var(--code-ink); font: 13.5px/1.6 var(--mono); white-space: pre; tab-size: 4 }
+figure.output { background: var(--out-bg); border: 1px solid var(--rule); border-top: 0; border-radius: 0 0 8px 8px }
+figure.output figcaption { color: var(--muted); text-transform: uppercase; letter-spacing: .08em; font-family: var(--body); font-weight: 600 }
+figure.output pre { margin: 0; padding: 6px 16px 14px; overflow-x: auto; font: 13px/1.55 var(--mono); color: var(--out-ink) }
+.c { color: var(--c-com); font-style: italic } .s { color: var(--c-str) } .k { color: var(--c-kw) }
+.t { color: var(--c-type) } .n { color: var(--c-num) } .b { color: var(--c-bi) }
+.tablewrap { overflow-x: auto; margin: 16px 0 }
+table { border-collapse: collapse; width: 100%; font-size: 15px }
+th { text-align: left; font: 600 12px var(--body); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); padding: 8px 10px; border-bottom: 2px solid var(--ink) }
+td { padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top }
+td code { white-space: nowrap }
+aside { border-radius: 8px; padding: 12px 16px; margin: 16px 0; font-size: 15.5px; max-width: 70ch }
+aside.note, aside.tip { background: var(--accent-soft) }
+aside.warn { background: var(--warn-soft) }
+aside.tip::before, aside.warn::before { font: 600 12px var(--body); text-transform: uppercase; letter-spacing: .06em; margin-right: 8px }
+aside.tip::before { content: "Tip"; color: var(--accent) }
+aside.warn::before { content: "Watch out"; color: var(--warn) }
+details.helpers { margin: 14px 0 4px; border: 1px solid var(--rule); border-radius: 8px; padding: 10px 16px; background: var(--panel) }
+details.helpers summary { cursor: pointer; font-weight: 600; color: var(--accent) }
+details.helpers p { font-size: 15px; color: var(--muted); margin: 8px 0 }
+nav.prevnext { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-top: 56px }
+nav.prevnext a { display: grid; gap: 2px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 8px; text-decoration: none; color: var(--ink); font-weight: 600 }
+nav.prevnext a:hover { border-color: var(--accent) }
+nav.prevnext a.next { text-align: right }
+nav.prevnext small { font-weight: 400; color: var(--muted); font-size: 13px }
+section.group h2 { margin-top: 40px }
+.blurb { color: var(--muted); margin: 0 0 14px }
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px }
+.card { display: grid; gap: 4px; align-content: start; padding: 14px 16px; border: 1px solid var(--rule); border-radius: 8px; background: var(--panel); text-decoration: none; color: var(--ink); min-width: 0 }
+.card:hover { border-color: var(--accent) }
+.card b { font: 700 16.5px var(--display) }
+.card span { font-size: 14.5px; color: var(--muted) }
+footer.foot { border-top: 1px solid var(--rule); color: var(--muted); font-size: 14.5px }
+footer.foot .wrap { padding-block: 24px 40px }
+footer.foot p { margin: 4px 0 }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth } }

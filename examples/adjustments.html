@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Manual adjustments · humanblnk</title>
+<meta name="description" content="Correct a customer balance by hand, for cashback, goodwill or a posting mistake, with a reason, a requester and a second person who approves it.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>Manual adjustments</h1>
+<p class="lead">Correct a customer balance by hand, for cashback, goodwill or a posting mistake, with a reason, a requester and a second person who approves it.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#when-to-adjust">When to adjust</a><a href="#credit-a-customer-cashback">Credit a customer: cashback</a><a href="#take-money-back-an-error-correction">Take money back: an error correction</a><a href="#safe-to-retry">Safe to retry</a><a href="#choosing-the-other-side-counterparty">Choosing the other side: Counterparty</a><a href="#going-below-zero-allowoverdraft">Going below zero: AllowOverdraft</a><a href="#the-adjustments-account">The @Adjustments account</a><a href="#the-fields">The fields</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related-pages">Related pages</a></nav>
+
+<article>
+<h2 id="when-to-adjust"><a href="#when-to-adjust">When to adjust</a></h2>
+<p>Most money moves because something happened outside: a deposit, a payout, a card payment. Sometimes Oja has to change a balance by hand. Paystack sent a webhook twice and Tunde was credited twice. Marketing promised Ada ₦500 cashback. Support wants to pay Tunde ₦1,000 for a failed transfer.</p>
+<p><code>ops.Adjust</code> posts that correction as an ordinary Blnk transaction between the customer account and a house account. It refuses to run without a reason and an approver who isn't the requester, and it writes all three into the transaction's metadata, so every hand-made change can be traced later.</p>
+<p>Pick the call by situation:</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Give a customer money the business pays for (cashback, goodwill, a fee you forgive)</td><td><code>ops.Adjust</code> with <code>AdjustCredit</code></td></tr><tr><td>Take back money posted by mistake</td><td><code>ops.Adjust</code> with <code>AdjustDebit</code></td></tr><tr><td>Undo one specific transaction in full</td><td><code>wallet.Refund</code>; see <a href="refunds.html">Refunds</a></td></tr><tr><td>Money arrived and you don't know whose it is</td><td><code>ops.HoldInSuspense</code>; see <a href="suspense.html">Suspense</a></td></tr><tr><td>A provider's report differs from the ledger</td><td>find the gap first with <a href="reconciliation.html">Reconciliation</a>, then adjust</td></tr></tbody></table></div>
+<p><code>Adjust</code> is on <code>Ops</code> only. Customer-facing code holds a <code>Wallet</code> and can't call it.</p>
+<h2 id="credit-a-customer-cashback"><a href="#credit-a-customer-cashback">Credit a customer: cashback</a></h2>
+<p>Kemi from operations asks for Ada's cashback. Femi, her lead, approves it.</p>
+<figure class="code"><figcaption>₦500 cashback for Ada</figcaption><pre><code>rc, err := ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
+	<span class="t">AccountID</span>:   adaNGN,
+	<span class="t">Type</span>:        ledger.<span class="t">AdjustCredit</span>, <span class="c">// money in</span>
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reason</span>:      <span class="s">&quot;Cashback: September promo&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>, <span class="c">// must not be the requester</span>
+	<span class="t">Reference</span>:   <span class="s">&quot;adj_cashback_ada_09&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(rc.<span class="t">Status</span>, rc.<span class="t">Amount</span>.<span class="t">Display</span>, rc.<span class="t">Amount</span>.<span class="t">Currency</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;description:&quot;</span>, rc.<span class="t">Description</span>)
+
+keys := <span class="b">make</span>([]<span class="b">string</span>, <span class="n">0</span>, <span class="b">len</span>(rc.<span class="t">MetaData</span>))
+<span class="k">for</span> k := <span class="k">range</span> rc.<span class="t">MetaData</span> {
+	keys = <span class="b">append</span>(keys, k)
+}
+sort.<span class="t">Strings</span>(keys)
+<span class="k">for</span> _, k := <span class="k">range</span> keys {
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;  %s = %v\n&quot;</span>, k, rc.<span class="t">MetaData</span>[k])
+}
+
+acct, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED 500.00 NGN
+description: Adjustment: Cashback: September promo
+  adjust_reason = Cashback: September promo
+  approved_by = lead.femi
+  requested_by = ops.kemi
+  txn_type = adjustment
+Ada&#x27;s balance: 20500.00</pre></figure>
+<ul><li><code>Type: ledger.AdjustCredit</code> moves money from the house account into the customer's account.</li><li>The description is <code>Adjustment: </code> followed by your <code>Reason</code>.</li><li><code>MetaData</code> holds <code>adjust_reason</code>, <code>requested_by</code> and <code>approved_by</code>, plus <code>txn_type: adjustment</code>, which humanblnk sets on every adjustment. Filter on it when you audit corrections.</li><li>No fee is charged and no <a href="limits.html">limits</a> are checked: an adjustment isn't a customer payment.</li></ul>
+<h2 id="take-money-back-an-error-correction"><a href="#take-money-back-an-error-correction">Take money back: an error correction</a></h2>
+<figure class="code"><figcaption>A duplicated deposit is reversed</figcaption><pre><code><span class="c">// Tunde&#x27;s ₦3,000 deposit was posted twice. Take the extra one back.</span>
+rc, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
+	<span class="t">AccountID</span>:   tundeNGN,
+	<span class="t">Type</span>:        ledger.<span class="t">AdjustDebit</span>, <span class="c">// money out</span>
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reason</span>:      <span class="s">&quot;Duplicate deposit paystack_T300_dup&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>:  <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">Reference</span>:   <span class="s">&quot;adj_dup_paystack_T300&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(rc.<span class="t">Status</span>, rc.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>], rc.<span class="t">Amount</span>.<span class="t">Display</span>)
+
+acct, err = wallet.<span class="t">GetAccount</span>(ctx, tundeNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Tunde&#x27;s balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>APPLIED adjustment 3000.00
+Tunde&#x27;s balance: 8000.00</pre></figure>
+<ul><li><code>Type: ledger.AdjustDebit</code> moves money from the customer's account to the house account.</li><li>Put the reference of the bad entry in <code>Reason</code>, so the audit trail points at it.</li><li>If the duplicate is one transaction you can name, <code>wallet.Refund</code> also works. Use <code>Adjust</code> when the fix doesn't map to one transaction, or when it is part of one.</li></ul>
+<h2 id="safe-to-retry"><a href="#safe-to-retry">Safe to retry</a></h2>
+<p><code>Reference</code> is the idempotency key, as for every movement. The same reference with the same input returns the original with <code>Replayed: true</code> and moves nothing.</p>
+<figure class="code"><pre><code><span class="c">// The ops tool timed out and sent the same correction again.</span>
+again, err := ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reason</span>:      <span class="s">&quot;Duplicate deposit paystack_T300_dup&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;adj_dup_paystack_T300&quot;</span>, <span class="c">// same reference</span>
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;replayed:&quot;</span>, again.<span class="t">Replayed</span>, <span class="s">&quot;same transaction:&quot;</span>, again.<span class="t">TransactionID</span> == rc.<span class="t">TransactionID</span>)
+
+acct, err = wallet.<span class="t">GetAccount</span>(ctx, tundeNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Tunde&#x27;s balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>) <span class="c">// taken once only</span></code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>replayed: true same transaction: true
+Tunde&#x27;s balance: 8000.00</pre></figure>
+<p>Build the reference from what the correction is about (<code>adj_dup_paystack_T300</code>), not from a timestamp, so a second click in your ops tool can't post the correction twice.</p>
+<h2 id="choosing-the-other-side-counterparty"><a href="#choosing-the-other-side-counterparty">Choosing the other side: Counterparty</a></h2>
+<p>By default the other side of every adjustment is <code>@Adjustments</code>. Set <code>Counterparty</code> to post against another house account, for example to charge goodwill to a marketing budget.</p>
+<figure class="code"><figcaption>Goodwill paid from @Marketing</figcaption><pre><code><span class="c">// A goodwill payment after a failed transfer, paid from the marketing budget.</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{
+	<span class="t">AccountID</span>:    tundeNGN,
+	<span class="t">Type</span>:         ledger.<span class="t">AdjustCredit</span>,
+	<span class="t">Amount</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reason</span>:       <span class="s">&quot;Goodwill: failed transfer on 30 Aug&quot;</span>,
+	<span class="t">RequestedBy</span>:  <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>:   <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">Reference</span>:    <span class="s">&quot;adj_goodwill_tunde_0830&quot;</span>,
+	<span class="t">Counterparty</span>: <span class="s">&quot;@Marketing&quot;</span>, <span class="c">// any house account; default @Adjustments</span>
+})
+check(err)
+
+mkt, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Marketing&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(mkt.<span class="t">Indicator</span>, <span class="s">&quot;balance:&quot;</span>, mkt.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@Marketing balance: -1000.00</pre></figure>
+<ul><li><code>Counterparty</code> must be a house account name starting with <code>@</code>. A customer account id is refused.</li><li>A house account is created on first use, so <code>@Marketing</code> exists once this runs.</li><li><code>@Marketing</code> isn't in <code>ledger.Chart</code>, so its type is unknown and its balance shows as Blnk stores it: negative, because it was debited. Add it to <code>Chart</code> at start-up as an expense (<code>ledger.GLDef{Type: ledger.GLExpense, Normal: ledger.DebitNormal}</code>) and its <code>Natural</code> balance reads positive. See <a href="house-accounts.html">House accounts</a>.</li></ul>
+<h2 id="going-below-zero-allowoverdraft"><a href="#going-below-zero-allowoverdraft">Going below zero: AllowOverdraft</a></h2>
+<p>A debit adjustment can't take the account below zero unless you say so. The usual case is a claw-back where the customer has already spent the money.</p>
+<figure class="code"><figcaption>Claw back ₦25,000 from a ₦20,500 balance</figcaption><pre><code><span class="c">// Ada spent a ₦25,000 reversal before it was clawed back. Her balance is ₦20,500.</span>
+in := ledger.<span class="t">AdjustInput</span>{
+	<span class="t">AccountID</span>: adaNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reason</span>:      <span class="s">&quot;Claw back reversed card payment&quot;</span>,
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;adj_clawback_ada_01&quot;</span>,
+}
+_, err = ops.<span class="t">Adjust</span>(ctx, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;without AllowOverdraft:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+in.<span class="t">AllowOverdraft</span> = <span class="b">true</span> <span class="c">// take her below zero; she owes the difference</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, in)
+check(err)
+acct, err = wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>without AllowOverdraft: true
+Ada&#x27;s balance: -4500.00</pre></figure>
+<ul><li>Without <code>AllowOverdraft</code>, Blnk refuses the debit with <code>ErrInsufficientFunds</code> and nothing moves.</li><li>With it, the account goes negative. Ada now owes Oja ₦4,500. Her next deposit brings the balance back up from there.</li><li><code>AllowOverdraft</code> only matters for <code>AdjustDebit</code>. A credit always posts, because the house account is the source and may go negative.</li></ul>
+<h2 id="the-adjustments-account"><a href="#the-adjustments-account">The @Adjustments account</a></h2>
+<p><code>@Adjustments</code> is in the chart as equity, credit-normal. Its lifetime credits and debits show how much was taken back from and given to customers by hand.</p>
+<figure class="code"><pre><code>adj, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">AdjustmentsAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(adj.<span class="t">Indicator</span>, adj.<span class="t">Type</span>, adj.<span class="t">Normal</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;credits:&quot;</span>, adj.<span class="t">Credits</span>.<span class="t">Display</span>, <span class="s">&quot;debits:&quot;</span>, adj.<span class="t">Debits</span>.<span class="t">Display</span>, <span class="s">&quot;balance:&quot;</span>, adj.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@Adjustments equity credit
+credits: 28000.00 debits: 500.00 balance: 27500.00</pre></figure>
+<p>Here ₦28,000 came in from the two debits and ₦500 went out as cashback. The goodwill went to <code>@Marketing</code>, so it isn't counted here. Read the full list of entries with <code>ops.HouseStatement</code>; see <a href="reports.html">Trial balance and reports</a>.</p>
+<h2 id="the-fields"><a href="#the-fields">The fields</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>Required</th><th>What it does</th></tr></thead><tbody><tr><td><code>AccountID</code></td><td>yes</td><td>the customer account corrected. A house account is refused with <code>ErrWrongKind</code></td></tr><tr><td><code>Type</code></td><td>yes</td><td><code>ledger.AdjustCredit</code> (money in) or <code>ledger.AdjustDebit</code> (money out)</td></tr><tr><td><code>Amount</code></td><td>yes</td><td>a positive amount in the account's currency</td></tr><tr><td><code>Reason</code></td><td>yes</td><td>why. Stored as <code>adjust_reason</code> and in the description</td></tr><tr><td><code>ApprovedBy</code></td><td>yes</td><td>who approved it. Stored as <code>approved_by</code></td></tr><tr><td><code>RequestedBy</code></td><td>no</td><td>who asked for it. Stored as <code>requested_by</code>. When set, it must differ from <code>ApprovedBy</code>, ignoring case</td></tr><tr><td><code>Reference</code></td><td>yes</td><td>idempotency key</td></tr><tr><td><code>Counterparty</code></td><td>no</td><td>the house account on the other side; default <code>@Adjustments</code></td></tr><tr><td><code>AllowOverdraft</code></td><td>no</td><td>lets an <code>AdjustDebit</code> take the account below zero</td></tr></tbody></table></div>
+<aside class="warn">humanblnk checks that the two names differ. It doesn't know who your staff are. Take <code>RequestedBy</code> from the logged-in user and <code>ApprovedBy</code> from a real approval step in your own tool, never from the same form field.</aside>
+<aside class="tip">When <code>RequestedBy</code> is empty only <code>ApprovedBy</code> is checked. Always set both so the record shows two people.</aside>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>One transaction, with <code>txn_type: adjustment</code> in its metadata.</p>
+<div class="tablewrap"><table><thead><tr><th>Adjustment</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td><code>AdjustCredit</code> ₦500</td><td><code>@Adjustments</code> (or <code>Counterparty</code>)</td><td>500</td><td></td></tr><tr><td><code>AdjustDebit</code> ₦3,000</td><td>Tunde's account</td><td>3,000</td><td></td></tr></tbody></table></div>
+<p>A credit is sent with <code>allow_overdraft</code>, since the house account is the source. A debit is sent with <code>allow_overdraft</code> only when you set <code>AllowOverdraft</code>. Blnk stores house accounts by balance id, so the receipt's <code>Source</code> or <code>Destination</code> shows the id of <code>@Adjustments</code>, not its name.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>base := ledger.<span class="t">AdjustInput</span>{
+	<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustCredit</span>, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reason</span>: <span class="s">&quot;Test&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;adj_err_1&quot;</span>,
+}
+
+self := base
+self.<span class="t">ApprovedBy</span> = <span class="s">&quot;OPS.KEMI&quot;</span> <span class="c">// the same person, in capitals</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, self)
+fmt.<span class="t">Println</span>(<span class="s">&quot;self-approval:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrApprovalRequired</span>))
+
+noApprover := base
+noApprover.<span class="t">ApprovedBy</span> = <span class="s">&quot;&quot;</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, noApprover)
+fmt.<span class="t">Println</span>(<span class="s">&quot;no approver:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrApprovalRequired</span>))
+
+noReason := base
+noReason.<span class="t">Reason</span> = <span class="s">&quot;&quot;</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, noReason)
+fmt.<span class="t">Println</span>(<span class="s">&quot;no reason:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+badOther := base
+badOther.<span class="t">Counterparty</span> = <span class="b">string</span>(adaNGN) <span class="c">// a customer account, not &quot;@…&quot;</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, badOther)
+fmt.<span class="t">Println</span>(<span class="s">&quot;customer counterparty:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+house := base
+house.<span class="t">AccountID</span> = ledger.<span class="t">AccountID</span>(ledger.<span class="t">FeeIncomeAccount</span>)
+_, err = ops.<span class="t">Adjust</span>(ctx, house)
+fmt.<span class="t">Println</span>(<span class="s">&quot;house account corrected:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+
+noType := base
+noType.<span class="t">Type</span> = <span class="n">0</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, noType)
+fmt.<span class="t">Println</span>(<span class="s">&quot;no type:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+check(ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN, <span class="s">&quot;fraud review&quot;</span>))
+_, err = ops.<span class="t">Adjust</span>(ctx, base)
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
+changed := base
+changed.<span class="t">Reference</span> = <span class="s">&quot;adj_cashback_ada_09&quot;</span> <span class="c">// used above for a different correction</span>
+check(ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN))
+_, err = ops.<span class="t">Adjust</span>(ctx, changed)
+fmt.<span class="t">Println</span>(<span class="s">&quot;reused reference:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>self-approval: true
+no approver: true
+no reason: true
+customer counterparty: true
+house account corrected: true
+no type: true
+frozen: true
+reused reference: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrApprovalRequired</code></td><td>no <code>ApprovedBy</code>, or <code>ApprovedBy</code> is the same person as <code>RequestedBy</code></td><td>get a second person to approve</td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Reason</code>, no <code>Reference</code>, no or bad <code>Type</code>, a non-positive <code>Amount</code>, or a <code>Counterparty</code> that doesn't start with <code>@</code></td><td>fix the call</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>AccountID</code> is a house account or a ledger id</td><td>pass a customer account</td></tr><tr><td><code>ErrInsufficientFunds</code></td><td>an <code>AdjustDebit</code> would take the account below zero</td><td>set <code>AllowOverdraft</code> if that is intended</td></tr><tr><td><code>ErrAccountFrozen</code>, <code>ErrAccountClosed</code></td><td>the account is frozen or closed</td><td>unfreeze it first; a closed account can't be corrected. See <a href="freeze.html">Freeze accounts</a></td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>an <code>AdjustDebit</code> on an account whose ledger is frozen</td><td>unfreeze the ledger</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference was already used for a different movement</td><td>use a new reference</td></tr></tbody></table></div>
+<h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
+<ul><li><a href="refunds.html">Refunds</a> to reverse one transaction.</li><li><a href="suspense.html">Suspense</a> for money you can't match to a customer yet.</li><li><a href="reconciliation.html">Reconciliation</a> to find the gaps that need adjusting.</li><li><a href="reports.html">Trial balance and reports</a> to check the books after corrections.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="suspense.html"><small>Previous</small>Unidentified money</a><a class="next" href="reports.html"><small>Next</small>Trial balance and reports</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

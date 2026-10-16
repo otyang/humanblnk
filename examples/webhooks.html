@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Webhooks · humanblnk</title>
+<meta name="description" content="Receive Blnk&#x27;s events: verify the signature, decode the payload into receipts and alerts, and handle each delivery once.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
+<h1>Webhooks</h1>
+<p class="lead">Receive Blnk's events: verify the signature, decode the payload into receipts and alerts, and handle each delivery once.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#which-one-to-use">Which one to use</a><a href="#svc-webhookhandler">svc.WebhookHandler</a><a href="#svc-parsewebhook">svc.ParseWebhook</a><a href="#signatures-and-the-time-window">Signatures and the time window</a><a href="#events-and-their-payloads">Events and their payloads</a><a href="#handle-each-event-once">Handle each event once</a><a href="#a-production-handler">A production handler</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure><figure class="code"><pre><code>send := <span class="k">func</span>(h http.<span class="t">Handler</span>, r *http.<span class="t">Request</span>) <span class="b">int</span> {
+	rec := httptest.<span class="t">NewRecorder</span>()
+	h.<span class="t">ServeHTTP</span>(rec, r)
+	<span class="k">return</span> rec.<span class="t">Code</span>
+}</code></pre></figure><figure class="code"><pre><code><span class="c">// webhooksLast returns the newest transaction.applied event the emulator emitted.</span>
+<span class="k">func</span> webhooksLast(core *ledgertest.<span class="t">Server</span>) ledgertest.<span class="t">Event</span> {
+	ev := core.<span class="t">Events</span>()
+	<span class="k">for</span> i := <span class="b">len</span>(ev) - <span class="n">1</span>; i &gt;= <span class="n">0</span>; i-- {
+		<span class="k">if</span> ev[i].<span class="t">Event</span> == ledger.<span class="t">EventTransactionApplied</span> {
+			<span class="k">return</span> ev[i]
+		}
+	}
+	panic(<span class="s">&quot;no transaction.applied event&quot;</span>)
+}</code></pre></figure><figure class="code"><pre><code>mine := <span class="k">func</span>(w http.<span class="t">ResponseWriter</span>, r *http.<span class="t">Request</span>) {
+	e, err := svc.<span class="t">ParseWebhook</span>(r, ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret})
+	<span class="k">if</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrSignature</span>) {
+		http.<span class="t">Error</span>(w, <span class="s">&quot;invalid signature&quot;</span>, http.<span class="t">StatusUnauthorized</span>)
+		<span class="k">return</span>
+	}
+	<span class="k">if</span> err != <span class="b">nil</span> {
+		http.<span class="t">Error</span>(w, err.<span class="t">Error</span>(), http.<span class="t">StatusBadRequest</span>)
+		<span class="k">return</span>
+	}
+	fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, e.<span class="t">Receipt</span>.<span class="t">TransactionID</span>, e.<span class="t">Receipt</span>.<span class="t">EntryStatus</span>, e.<span class="t">Receipt</span>.<span class="t">Destination</span> == <span class="b">string</span>(ada))
+	w.<span class="t">WriteHeader</span>(http.<span class="t">StatusOK</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Blnk tells Oja when things happen: a transaction posted, a hold expired, a balance crossed a threshold, a bulk payout finished. It sends each event to one URL, Blnk's global webhook. Oja must check that the request really came from its Blnk, turn the JSON into something useful, and cope with Blnk sending the same event more than once.</p>
+<p>Set the URL in Blnk's configuration (<code>notification.webhook.url</code> in <code>blnk.json</code>). Set <code>server.secret_key</code> too, so Blnk signs every delivery.</p>
+<h2 id="which-one-to-use"><a href="#which-one-to-use">Which one to use</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>A plain <code>net/http</code> endpoint</td><td><code>svc.WebhookHandler(cfg, fn)</code>: verifies, decodes, calls <code>fn</code> and answers</td></tr><tr><td>Your own router or framework</td><td><code>svc.ParseWebhook(r, cfg)</code>: verifies and decodes; you write the response</td></tr><tr><td>A body you already verified, e.g. from your own queue</td><td><code>svc.DecodeEvent(body)</code>: decodes only</td></tr></tbody></table></div>
+<h2 id="svc-webhookhandler"><a href="#svc-webhookhandler">svc.WebhookHandler</a></h2>
+<figure class="code"><figcaption>Ada's Paystack top-up posts, and Blnk tells Oja</figcaption><pre><code>handler := svc.<span class="t">WebhookHandler</span>(ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret},
+	<span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> {
+		<span class="k">switch</span> e.<span class="t">Name</span> {
+		<span class="k">case</span> ledger.<span class="t">EventTransactionApplied</span>:
+			fmt.<span class="t">Println</span>(<span class="s">&quot;posted:&quot;</span>, e.<span class="t">Receipt</span>.<span class="t">Reference</span>, e.<span class="t">Receipt</span>.<span class="t">Amount</span>.<span class="t">Display</span>, e.<span class="t">Receipt</span>.<span class="t">Amount</span>.<span class="t">Currency</span>)
+		<span class="k">case</span> ledger.<span class="t">EventTransactionVoid</span>:
+			fmt.<span class="t">Println</span>(<span class="s">&quot;cancelled or expired:&quot;</span>, e.<span class="t">Receipt</span>.<span class="t">ParentTransaction</span>) <span class="c">// the pending transaction</span>
+		<span class="k">default</span>:
+			fmt.<span class="t">Println</span>(<span class="s">&quot;ignored:&quot;</span>, e.<span class="t">Name</span>)
+		}
+		<span class="k">return</span> <span class="b">nil</span> <span class="c">// 200: Blnk won&#x27;t send it again</span>
+	})
+<span class="c">// In main: http.Handle(&quot;/webhooks/blnk&quot;, handler)</span>
+
+<span class="c">// Paystack confirms Ada&#x27;s top-up, and Oja records it.</span>
+fund(wallet, ada, <span class="s">&quot;50000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T7001&quot;</span>)
+
+<span class="c">// Blnk then POSTs the event to the handler. The emulator builds that request.</span>
+rec := httptest.<span class="t">NewRecorder</span>()
+handler.<span class="t">ServeHTTP</span>(rec, core.<span class="t">WebhookRequest</span>(webhooksLast(core), secret))
+fmt.<span class="t">Println</span>(<span class="s">&quot;answered:&quot;</span>, rec.<span class="t">Code</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>posted: paystack_T7001 50000.00 NGN
+answered: 200</pre></figure>
+<ul><li><code>fn</code> gets the decoded <code>*ledger.Event</code>. Return nil and the handler answers 200.</li><li>The emulator stands in for Blnk here: <code>core.WebhookRequest</code> builds the signed request Blnk would send. See <a href="testing.html">Testing your app</a>.</li></ul>
+<h3 id="what-the-handler-answers">What the handler answers</h3>
+<figure class="code"><pre><code>send := <span class="k">func</span>(h http.<span class="t">Handler</span>, r *http.<span class="t">Request</span>) <span class="b">int</span> {
+	rec := httptest.<span class="t">NewRecorder</span>()
+	h.<span class="t">ServeHTTP</span>(rec, r)
+	<span class="k">return</span> rec.<span class="t">Code</span>
+}
+e := webhooksLast(core)
+
+fmt.<span class="t">Println</span>(<span class="s">&quot;wrong secret:&quot;</span>, send(handler, core.<span class="t">WebhookRequest</span>(e, <span class="s">&quot;guessed&quot;</span>)))
+fmt.<span class="t">Println</span>(<span class="s">&quot;unsigned:    &quot;</span>, send(handler, core.<span class="t">WebhookRequest</span>(e, <span class="s">&quot;&quot;</span>)))
+
+get := httptest.<span class="t">NewRequest</span>(http.<span class="t">MethodGet</span>, <span class="s">&quot;/webhooks/blnk&quot;</span>, <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;GET:         &quot;</span>, send(handler, get))
+
+busy := svc.<span class="t">WebhookHandler</span>(ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret},
+	<span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> { <span class="k">return</span> errors.<span class="t">New</span>(<span class="s">&quot;database down&quot;</span>) })
+fmt.<span class="t">Println</span>(<span class="s">&quot;handler err: &quot;</span>, send(busy, core.<span class="t">WebhookRequest</span>(e, secret)))
+
+<span class="c">// Without a Secret nothing is verified: a forged request gets through.</span>
+open := svc.<span class="t">WebhookHandler</span>(ledger.<span class="t">WebhookConfig</span>{},
+	<span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> { <span class="k">return</span> <span class="b">nil</span> })
+fmt.<span class="t">Println</span>(<span class="s">&quot;no Secret:   &quot;</span>, send(open, core.<span class="t">WebhookRequest</span>(e, <span class="s">&quot;&quot;</span>)))
+bad := httptest.<span class="t">NewRequest</span>(http.<span class="t">MethodPost</span>, <span class="s">&quot;/webhooks/blnk&quot;</span>, strings.<span class="t">NewReader</span>(<span class="s">`{&quot;hello&quot;:&quot;world&quot;}`</span>))
+fmt.<span class="t">Println</span>(<span class="s">&quot;not Blnk:    &quot;</span>, send(open, bad))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>wrong secret: 401
+unsigned:     401
+GET:          405
+handler err:  500
+no Secret:    200
+not Blnk:     400</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Answer</th><th>When</th><th>Blnk retries?</th></tr></thead><tbody><tr><td>200</td><td><code>fn</code> returned nil</td><td>no</td></tr><tr><td>401</td><td>a missing or wrong signature, or a timestamp outside the window</td><td>yes, but it won't help: check the secret</td></tr><tr><td>400</td><td>the body isn't a Blnk webhook, or is over 5 MB</td><td>yes, but it won't help</td></tr><tr><td>405</td><td>not a POST</td><td></td></tr><tr><td>500</td><td><code>fn</code> returned an error</td><td>yes: that is how to ask for the event again</td></tr></tbody></table></div>
+<aside class="warn">Without a <code>Secret</code>, nothing is verified and anyone who finds the URL can post events to it. Leave <code>Secret</code> empty only if your Blnk doesn't sign webhooks.</aside>
+<h2 id="svc-parsewebhook"><a href="#svc-parsewebhook">svc.ParseWebhook</a></h2>
+<p>Use it when you write the HTTP response yourself.</p>
+<figure class="code"><pre><code><span class="c">// Your own handler, e.g. inside a router you already use.</span>
+mine := <span class="k">func</span>(w http.<span class="t">ResponseWriter</span>, r *http.<span class="t">Request</span>) {
+	e, err := svc.<span class="t">ParseWebhook</span>(r, ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret})
+	<span class="k">if</span> errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrSignature</span>) {
+		http.<span class="t">Error</span>(w, <span class="s">&quot;invalid signature&quot;</span>, http.<span class="t">StatusUnauthorized</span>)
+		<span class="k">return</span>
+	}
+	<span class="k">if</span> err != <span class="b">nil</span> {
+		http.<span class="t">Error</span>(w, err.<span class="t">Error</span>(), http.<span class="t">StatusBadRequest</span>)
+		<span class="k">return</span>
+	}
+	fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, e.<span class="t">Receipt</span>.<span class="t">TransactionID</span>, e.<span class="t">Receipt</span>.<span class="t">EntryStatus</span>, e.<span class="t">Receipt</span>.<span class="t">Destination</span> == <span class="b">string</span>(ada))
+	w.<span class="t">WriteHeader</span>(http.<span class="t">StatusOK</span>)
+}
+rec = httptest.<span class="t">NewRecorder</span>()
+mine(rec, core.<span class="t">WebhookRequest</span>(webhooksLast(core), secret))
+fmt.<span class="t">Println</span>(<span class="s">&quot;answered:&quot;</span>, rec.<span class="t">Code</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>transaction.applied txn_000005 posted true
+answered: 200</pre></figure>
+<p><code>ParseWebhook</code> returns <code>ErrSignature</code> for a bad signature and <code>ErrInvalidInput</code> for a body it can't decode. For a balance alert, it also reads the account to fill in the threshold's currency, so it can return the errors of that read.</p>
+<h2 id="signatures-and-the-time-window"><a href="#signatures-and-the-time-window">Signatures and the time window</a></h2>
+<p>Blnk sends two headers:</p>
+<div class="tablewrap"><table><thead><tr><th>Header</th><th>Value</th></tr></thead><tbody><tr><td><code>X-Blnk-Timestamp</code></td><td>the Unix time in seconds</td></tr><tr><td><code>X-Blnk-Signature</code></td><td>lowercase hex HMAC-SHA256 of timestamp + <code>.</code> + raw body, keyed with <code>server.secret_key</code></td></tr></tbody></table></div>
+<p>With <code>Secret</code> set, the signature must match and the timestamp must be within <code>Tolerance</code> of <code>Config.Now</code>. That rejects an old delivery someone captured and sends again.</p>
+<figure class="code"><pre><code>old := core.<span class="t">WebhookRequest</span>(webhooksLast(core), secret) <span class="c">// signed now</span>
+core.<span class="t">Advance</span>(<span class="n">6</span> * time.<span class="t">Minute</span>)                          <span class="c">// replayed 6 minutes later</span>
+
+_, err := svc.<span class="t">ParseWebhook</span>(old, ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret})
+fmt.<span class="t">Println</span>(<span class="s">&quot;ErrSignature:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrSignature</span>), <span class="s">&quot;stale:&quot;</span>, errors.<span class="t">Is</span>(err, blnk.<span class="t">ErrStale</span>))
+
+old = core.<span class="t">WebhookRequest</span>(webhooksLast(core), secret)
+core.<span class="t">Advance</span>(<span class="n">20</span> * time.<span class="t">Minute</span>)
+_, err = svc.<span class="t">ParseWebhook</span>(old, ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret, <span class="t">Tolerance</span>: <span class="n">30</span> * time.<span class="t">Minute</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;with a 30 minute window:&quot;</span>, err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ErrSignature: true stale: true
+with a 30 minute window: &lt;nil&gt;</pre></figure>
+<div class="tablewrap"><table><thead><tr><th><code>WebhookConfig</code> field</th><th>What it changes</th><th>Default</th></tr></thead><tbody><tr><td><code>Secret</code></td><td>Blnk's <code>server.secret_key</code>. Set: unsigned and mis-signed deliveries fail with <code>ErrSignature</code>. Empty: nothing is verified</td><td>empty</td></tr><tr><td><code>Tolerance</code></td><td>how far the timestamp may be from now, either way; negative turns the check off</td><td>5 minutes</td></tr></tbody></table></div>
+<p><code>blnk.Sign</code> and <code>blnk.VerifySignature</code> do the same check outside the library. <code>VerifySignature</code> refuses an empty secret, because anyone can sign with an empty key.</p>
+<h2 id="events-and-their-payloads"><a href="#events-and-their-payloads">Events and their payloads</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Event</th><th>Constant</th><th>Typed field</th></tr></thead><tbody><tr><td><code>transaction.applied</code></td><td><code>EventTransactionApplied</code></td><td><code>Receipt</code></td></tr><tr><td><code>transaction.inflight</code></td><td><code>EventTransactionInflight</code></td><td><code>Receipt</code></td></tr><tr><td><code>transaction.void</code></td><td><code>EventTransactionVoid</code> (also when a hold expires)</td><td><code>Receipt</code></td></tr><tr><td><code>transaction.queued</code></td><td><code>EventTransactionQueued</code></td><td><code>Receipt</code></td></tr><tr><td><code>transaction.scheduled</code></td><td><code>EventTransactionScheduled</code></td><td><code>Receipt</code></td></tr><tr><td><code>transaction.rejected</code></td><td><code>EventTransactionRejected</code></td><td><code>Receipt</code></td></tr><tr><td><code>bulk_transaction.applied</code></td><td><code>EventBulkApplied</code></td><td><code>Bulk</code></td></tr><tr><td><code>bulk_transaction.inflight</code></td><td><code>EventBulkInflight</code></td><td><code>Bulk</code></td></tr><tr><td><code>bulk_transaction.failed</code></td><td><code>EventBulkFailed</code></td><td><code>Bulk</code></td></tr><tr><td><code>balance.monitor</code></td><td><code>EventBalanceAlert</code></td><td><code>Alert</code></td></tr><tr><td><code>balance.created</code></td><td><code>EventBalanceCreated</code></td><td><code>Account</code>, or <code>House</code> for an <code>@</code> account</td></tr><tr><td><code>identity.created</code></td><td><code>EventIdentityCreated</code></td><td>none: read <code>Data</code></td></tr><tr><td><code>ledger.created</code></td><td><code>EventLedgerCreated</code></td><td>none: read <code>Data</code></td></tr><tr><td><code>system.error</code></td><td><code>EventSystemError</code></td><td>none: read <code>Data</code></td></tr></tbody></table></div>
+<p><code>Data</code> always holds the raw JSON payload, for any event.</p>
+<div class="tablewrap"><table><thead><tr><th>Typed field</th><th>Fields</th></tr></thead><tbody><tr><td><code>Receipt</code></td><td><code>TransactionID</code>, <code>Reference</code>, <code>Status</code> (Blnk's: <code>APPLIED</code>, <code>INFLIGHT</code>, …), <code>EntryStatus</code> (<code>posted</code>, <code>pending</code>, …), <code>Amount</code>, <code>Source</code>, <code>Destination</code>, <code>Legs</code>, <code>Description</code>, <code>MetaData</code>, <code>CreatedAt</code></td></tr><tr><td><code>Bulk</code> (<code>*BulkEvent</code>)</td><td><code>BatchID</code>, <code>Status</code>, <code>Count</code> (transactions that didn't fail), <code>Error</code></td></tr><tr><td><code>Alert</code> (<code>*Watch</code>)</td><td><code>ID</code>, <code>AccountID</code> (the Blnk balance id), <code>Field</code>, <code>Operator</code>, <code>Threshold</code></td></tr><tr><td><code>Account</code> / <code>House</code></td><td>the new account, as <code>wallet.GetAccount</code> or <code>ops.GetHouseAccount</code> return it</td></tr></tbody></table></div>
+<h3 id="a-balance-alert">A balance alert</h3>
+<figure class="code"><figcaption>Oja watches for Ada's balance going over ₦100,000</figcaption><pre><code>_, err = ops.<span class="t">WatchBalance</span>(ctx, ledger.<span class="t">WatchInput</span>{
+	<span class="t">AccountID</span>: ada, <span class="t">Operator</span>: <span class="s">&quot;&gt;&quot;</span>, <span class="t">Threshold</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+})
+check(err)
+fund(wallet, ada, <span class="s">&quot;60000&quot;</span>, <span class="s">&quot;NGN&quot;</span>, <span class="s">&quot;paystack_T7002&quot;</span>) <span class="c">// Ada now has ₦110,000</span>
+
+<span class="k">for</span> _, ev := <span class="k">range</span> core.<span class="t">Events</span>() {
+	<span class="k">if</span> ev.<span class="t">Event</span> != ledger.<span class="t">EventBalanceAlert</span> {
+		<span class="k">continue</span>
+	}
+	e, err := svc.<span class="t">ParseWebhook</span>(core.<span class="t">WebhookRequest</span>(ev, secret), ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret})
+	check(err)
+	fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, e.<span class="t">Alert</span>.<span class="t">AccountID</span>, e.<span class="t">Alert</span>.<span class="t">Field</span>, e.<span class="t">Alert</span>.<span class="t">Operator</span>, e.<span class="t">Alert</span>.<span class="t">Threshold</span>.<span class="t">Display</span>, e.<span class="t">Alert</span>.<span class="t">Threshold</span>.<span class="t">Currency</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>balance.monitor bln_000003 balance &gt; 100000.00 NGN</pre></figure>
+<p>Blnk's monitor payload has no currency. <code>ParseWebhook</code> and <code>WebhookHandler</code> read the account and fill in the threshold's currency and display. Blnk sends the alert after every update while the condition holds, so debounce it. More in <a href="balance-alerts.html">Balance alerts</a>.</p>
+<h3 id="decoding-a-body-you-trust">Decoding a body you trust</h3>
+<figure class="code"><pre><code><span class="c">// A body you already verified, e.g. replayed from your own queue.</span>
+<span class="k">for</span> _, ev := <span class="k">range</span> core.<span class="t">Events</span>() {
+	body, err := json.<span class="t">Marshal</span>(ev)
+	check(err)
+	e, err := svc.<span class="t">DecodeEvent</span>(body)
+	check(err)
+	<span class="k">switch</span> {
+	<span class="k">case</span> e.<span class="t">Receipt</span> != <span class="b">nil</span>:
+		fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, <span class="s">&quot;Receipt&quot;</span>, e.<span class="t">Receipt</span>.<span class="t">Reference</span>)
+	<span class="k">case</span> e.<span class="t">Alert</span> != <span class="b">nil</span>:
+		fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, <span class="s">&quot;Alert&quot;</span>, e.<span class="t">Alert</span>.<span class="t">ID</span>, <span class="s">&quot;threshold in kobo:&quot;</span>, e.<span class="t">Alert</span>.<span class="t">Threshold</span>.<span class="t">PreciseAmount</span>)
+	}
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>transaction.applied Receipt paystack_T7001
+balance.monitor Alert mon_000006 threshold in kobo: 10000000
+transaction.applied Receipt paystack_T7002</pre></figure>
+<p><code>DecodeEvent</code> doesn't verify anything and doesn't call Blnk. An alert's threshold has only <code>PreciseAmount</code>, in the smallest unit. Use it only on bodies you verified before.</p>
+<h2 id="handle-each-event-once"><a href="#handle-each-event-once">Handle each event once</a></h2>
+<p>Blnk delivers at least once, and retries on any answer that isn't 2xx. Key your handling on the event name and the transaction id, and skip what you have done.</p>
+<figure class="code"><pre><code>seen := <span class="k">map</span>[<span class="b">string</span>]<span class="b">bool</span>{} <span class="c">// your database in production, with a unique key</span>
+credited := <span class="n">0</span>
+notify := svc.<span class="t">WebhookHandler</span>(ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: secret},
+	<span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> {
+		<span class="k">if</span> e.<span class="t">Name</span> != ledger.<span class="t">EventTransactionApplied</span> {
+			<span class="k">return</span> <span class="b">nil</span>
+		}
+		key := e.<span class="t">Name</span> + <span class="s">&quot;/&quot;</span> + e.<span class="t">Receipt</span>.<span class="t">TransactionID</span>
+		<span class="k">if</span> seen[key] {
+			<span class="k">return</span> <span class="b">nil</span> <span class="c">// a repeat delivery: already handled</span>
+		}
+		seen[key] = <span class="b">true</span>
+		credited++ <span class="c">// e.g. send Ada a push notification</span>
+		<span class="k">return</span> <span class="b">nil</span>
+	})
+
+tx := webhooksLast(core) <span class="c">// Blnk delivers it, then delivers it again</span>
+<span class="k">for</span> <span class="k">range</span> <span class="n">3</span> {
+	rec := httptest.<span class="t">NewRecorder</span>()
+	notify.<span class="t">ServeHTTP</span>(rec, core.<span class="t">WebhookRequest</span>(tx, secret))
+	fmt.<span class="t">Println</span>(<span class="s">&quot;answered:&quot;</span>, rec.<span class="t">Code</span>)
+}
+fmt.<span class="t">Println</span>(<span class="s">&quot;notifications sent:&quot;</span>, credited)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>answered: 200
+answered: 200
+answered: 200
+notifications sent: 1</pre></figure>
+<ul><li>Store the key in your database with a unique constraint, in the same database transaction as the work it guards.</li><li>Answer 200 for a repeat. An error makes Blnk send it again.</li><li>A pending transaction produces several events: <code>transaction.inflight</code>, then <code>transaction.applied</code> or <code>transaction.void</code> when it is confirmed, cancelled or expires. The later event's <code>Receipt</code> is a new record: its <code>ParentTransaction</code> is the pending transaction's id and its <code>Reference</code> is generated. Look the payment up by <code>ParentTransaction</code>, not by <code>Reference</code>.</li></ul>
+<h2 id="a-production-handler"><a href="#a-production-handler">A production handler</a></h2>
+<figure class="code"><pre><code>http.<span class="t">Handle</span>(<span class="s">&quot;/webhooks/blnk&quot;</span>, svc.<span class="t">WebhookHandler</span>(
+	ledger.<span class="t">WebhookConfig</span>{<span class="t">Secret</span>: os.<span class="t">Getenv</span>(<span class="s">&quot;BLNK_SECRET_KEY&quot;</span>)},
+	<span class="k">func</span>(ctx context.<span class="t">Context</span>, e *ledger.<span class="t">Event</span>) <span class="b">error</span> {
+		<span class="k">switch</span> e.<span class="t">Name</span> {
+		<span class="k">case</span> ledger.<span class="t">EventTransactionApplied</span>:
+			<span class="k">return</span> notifyReceived(ctx, e.<span class="t">Receipt</span>) <span class="c">// idempotent on e.Name + e.Receipt.TransactionID</span>
+		<span class="k">case</span> ledger.<span class="t">EventTransactionVoid</span>:
+			<span class="k">return</span> notifyCancelled(ctx, e.<span class="t">Receipt</span>) <span class="c">// a hold or pending withdrawal was cancelled or expired</span>
+		<span class="k">case</span> ledger.<span class="t">EventBalanceAlert</span>:
+			<span class="k">return</span> pageFinance(ctx, e.<span class="t">Alert</span>)
+		<span class="k">case</span> ledger.<span class="t">EventBulkFailed</span>:
+			<span class="k">return</span> reportBatch(ctx, e.<span class="t">Bulk</span>.<span class="t">BatchID</span>, e.<span class="t">Bulk</span>.<span class="t">Error</span>)
+		}
+		<span class="k">return</span> <span class="b">nil</span>
+	}))</code></pre></figure>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrSignature</code></td><td><code>Secret</code> is set and the signature is missing or wrong, or the timestamp is outside <code>Tolerance</code>. The cause is <code>blnk.ErrBadSignature</code> or <code>blnk.ErrStale</code></td><td>answer 401; check <code>Secret</code> matches <code>server.secret_key</code>, and the server clock</td></tr><tr><td><code>ErrInvalidInput</code></td><td>the body isn't JSON with an <code>event</code> name, a known event's payload doesn't decode, or the body is over 5 MB</td><td>answer 400</td></tr><tr><td>errors from reading the account</td><td>a balance alert for an account <code>ParseWebhook</code> can't read</td><td>answer 500 so Blnk retries</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="testing.html">Testing your app</a>: produce real signed deliveries in tests.</li><li><a href="balance-alerts.html">Balance alerts</a>: set up <code>ops.WatchBalance</code>.</li><li><a href="card-holds.html">Card holds</a> and <a href="withdrawals.html">Withdrawals</a>: where <code>transaction.void</code> comes from.</li><li><a href="bulk-payouts.html">Bulk payouts</a>: the <code>bulk_transaction.*</code> events.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="errors.html"><small>Previous</small>Errors</a><a class="next" href="observability.html"><small>Next</small>Logging, metrics and tracing</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

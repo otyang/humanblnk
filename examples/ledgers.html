@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Provision ledgers · humanblnk</title>
+<meta name="description" content="Create the Blnk ledgers your customer accounts live in, safely and once, and check at start-up that the app points at the right one.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>Provision ledgers</h1>
+<p class="lead">Create the Blnk ledgers your customer accounts live in, safely and once, and check at start-up that the app points at the right one.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#create-a-ledger-ops-createledger">Create a ledger: ops.CreateLedger</a><a href="#one-ledger-per-market">One ledger per market</a><a href="#read-ledgers-getledger-and-listledgers">Read ledgers: GetLedger and ListLedgers</a><a href="#check-the-configuration-at-start-up-svc-check">Check the configuration at start-up: svc.Check</a><a href="#two-provisioning-jobs-at-once">Two provisioning jobs at once</a><a href="#freezing-a-ledger">Freezing a ledger</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related-pages">Related pages</a></nav>
+
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>A Blnk ledger is a group of accounts. Oja keeps one ledger per market: Nigeria first, then Ghana and Kenya. Each market's customer accounts live in its own ledger, so they can be reported on, and frozen, separately.</p>
+<p>Ledgers are created when you provision, by a deploy job or a setup script, not while serving customers. The app then gets the ledger id from configuration (<code>Config.LedgerID</code>) and checks it at start-up.</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>Provisioning a market</td><td><code>ops.CreateLedger</code> with a <code>Key</code></td></tr><tr><td>Reading one ledger</td><td><code>ops.GetLedger</code></td></tr><tr><td>Listing ledgers, e.g. in an admin tool</td><td><code>ops.ListLedgers</code></td></tr><tr><td>Making sure the app is configured right</td><td><code>svc.Check</code> at start-up</td></tr><tr><td>Stopping all money leaving a market</td><td><code>ops.FreezeLedger</code>, see <a href="freeze.html">Freeze</a></td></tr></tbody></table></div>
+<h2 id="create-a-ledger-ops-createledger"><a href="#create-a-ledger-ops-createledger">Create a ledger: ops.CreateLedger</a></h2>
+<figure class="code"><figcaption>The provisioning job, run twice</figcaption><pre><code><span class="c">// The provisioning job for Nigeria.</span>
+ng, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{
+	<span class="t">Key</span>:      <span class="s">&quot;oja-ng&quot;</span>,      <span class="c">// required: your stable name; makes the call safe to repeat</span>
+	<span class="t">Name</span>:     <span class="s">&quot;Oja Nigeria&quot;</span>, <span class="c">// default: Key</span>
+	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;country&quot;</span>: <span class="s">&quot;NG&quot;</span>, <span class="s">&quot;regulator&quot;</span>: <span class="s">&quot;CBN&quot;</span>},
+})
+check(err)
+fmt.<span class="t">Println</span>(ng.<span class="t">ID</span>, ng.<span class="t">Key</span>, ng.<span class="t">Name</span>, ng.<span class="t">Status</span>, ng.<span class="t">MetaData</span>[<span class="s">&quot;country&quot;</span>], <span class="s">&quot;replayed:&quot;</span>, ng.<span class="t">Replayed</span>)
+
+<span class="c">// The job runs again on the next deploy.</span>
+again, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-ng&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Nigeria&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(again.<span class="t">ID</span>, <span class="s">&quot;same ledger:&quot;</span>, again.<span class="t">ID</span> == ng.<span class="t">ID</span>, <span class="s">&quot;replayed:&quot;</span>, again.<span class="t">Replayed</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ldg_000002 oja-ng Oja Nigeria active NG replayed: false
+ldg_000002 same ledger: true replayed: true</pre></figure>
+<ul><li><code>Key</code> is required. It is your stable name for the ledger and what makes the call safe to repeat: a second call with the same <code>Key</code> returns the ledger the first one made, with <code>Replayed</code> set. It is stored on the ledger as <code>meta_data.ledger_key</code>.</li><li><code>Name</code> is the display name. It defaults to <code>Key</code>.</li><li><code>MetaData</code> is stored on the ledger. The keys humanblnk manages (<code>ledger_key</code>, <code>status</code>, <code>status_reason</code>, <code>status_changed_at</code>, <code>duplicate_of</code>) are ignored when you pass them.</li><li>Blnk itself has no idempotency for ledgers and allows two ledgers with the same name, which is why the <code>Key</code> matters.</li></ul>
+<p><code>LedgerInfo</code> fields:</p>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>ID</code></td><td>the Blnk ledger id (<code>ldg_…</code>), a <code>ledger.LedgerID</code></td></tr><tr><td><code>Key</code></td><td>the <code>Key</code> it was created with; empty for ledgers made outside humanblnk</td></tr><tr><td><code>Name</code></td><td>the display name</td></tr><tr><td><code>Status</code></td><td><code>active</code>, <code>frozen</code> or <code>duplicate</code></td></tr><tr><td><code>DuplicateOf</code></td><td>for a duplicate, the ledger to use instead</td></tr><tr><td><code>CreatedAt</code></td><td>when Blnk created it</td></tr><tr><td><code>MetaData</code></td><td>your metadata plus the keys humanblnk manages</td></tr><tr><td><code>Replayed</code></td><td>true when a ledger with this <code>Key</code> already existed and this is it</td></tr></tbody></table></div>
+<h2 id="one-ledger-per-market"><a href="#one-ledger-per-market">One ledger per market</a></h2>
+<p>Open each customer's accounts in their market's ledger with <code>LedgerID</code>. Without it, <code>OpenAccount</code> and <code>OpenCustomer</code> use <code>Config.LedgerID</code>.</p>
+<figure class="code"><figcaption>Ada in Nigeria, Kofi in Ghana</figcaption><pre><code>gh, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-gh&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Ghana&quot;</span>,
+	<span class="t">MetaData</span>: <span class="k">map</span>[<span class="b">string</span>]<span class="b">any</span>{<span class="s">&quot;country&quot;</span>: <span class="s">&quot;GH&quot;</span>}})
+check(err)
+
+ada, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">LedgerID</span>: ng.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_8812&quot;</span>})
+check(err)
+kofi, err := wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;GHS&quot;</span>, <span class="t">LedgerID</span>: gh.<span class="t">ID</span>, <span class="t">ExternalID</span>: <span class="s">&quot;user_9100&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s naira account in&quot;</span>, ada.<span class="t">LedgerID</span>, <span class="s">&quot;| Kofi&#x27;s cedi account in&quot;</span>, kofi.<span class="t">LedgerID</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>Ada&#x27;s naira account in ldg_000002 | Kofi&#x27;s cedi account in ldg_000003</pre></figure>
+<p>The ledger must exist; <code>OpenAccount</code> checks that before creating anything. See <a href="customer-accounts.html">Create customer accounts</a>.</p>
+<p>House accounts such as <code>@FeeIncome</code> don't belong to your ledgers. Blnk keeps them in its general ledger, <code>ledger.GeneralLedgerID</code> (<code>general_ledger_id</code>), one per currency, whatever ledger the customer side is in. See <a href="house-accounts.html">House accounts</a>.</p>
+<h2 id="read-ledgers-getledger-and-listledgers"><a href="#read-ledgers-getledger-and-listledgers">Read ledgers: GetLedger and ListLedgers</a></h2>
+<figure class="code"><pre><code>l, err := ops.<span class="t">GetLedger</span>(ctx, gh.<span class="t">ID</span>)
+check(err)
+fmt.<span class="t">Println</span>(l.<span class="t">ID</span>, l.<span class="t">Name</span>, l.<span class="t">Status</span>, l.<span class="t">CreatedAt</span>.<span class="t">Format</span>(<span class="s">&quot;2006-01-02&quot;</span>))
+
+page, err := ops.<span class="t">ListLedgers</span>(ctx, ledger.<span class="t">LedgerQuery</span>{<span class="t">Limit</span>: <span class="n">10</span>}) <span class="c">// oldest first</span>
+check(err)
+<span class="k">for</span> _, l := <span class="k">range</span> page.<span class="t">Items</span> {
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%s %q key=%q %s\n&quot;</span>, l.<span class="t">ID</span>, l.<span class="t">Name</span>, l.<span class="t">Key</span>, l.<span class="t">Status</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>ldg_000003 Oja Ghana active 2026-09-01
+general_ledger_id &quot;General Ledger&quot; key=&quot;&quot; active
+ldg_000001 &quot;Test Ledger&quot; key=&quot;&quot; active
+ldg_000002 &quot;Oja Nigeria&quot; key=&quot;oja-ng&quot; active
+ldg_000003 &quot;Oja Ghana&quot; key=&quot;oja-gh&quot; active</pre></figure>
+<ul><li><code>GetLedger</code> always reads the ledger fresh from Blnk, so its <code>Status</code> is current.</li><li><code>ListLedgers</code> returns ledgers oldest first. <code>LedgerQuery</code> has <code>Limit</code> (default 20, at most 100) and <code>Offset</code>. <code>LedgerPage</code> returns <code>Items</code> with the <code>Limit</code> and <code>Offset</code> used.</li><li>The list includes every ledger in Blnk: here Blnk's own General Ledger, and the ledger the in-memory Blnk for these examples starts with, which have no <code>Key</code>.</li></ul>
+<h2 id="check-the-configuration-at-start-up-svc-check"><a href="#check-the-configuration-at-start-up-svc-check">Check the configuration at start-up: svc.Check</a></h2>
+<p>Put the ledger id in <code>Config.LedgerID</code> and call <code>svc.Check</code> before serving traffic. A wrong id then fails at boot, not at the first sign-up.</p>
+<figure class="code"><pre><code><span class="c">// At start-up, with the ledger id from configuration (e.g. BLNK_LEDGER_ID).</span>
+svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ng.<span class="t">ID</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;good id:&quot;</span>, svc.<span class="t">Check</span>(ctx))
+
+typo := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: <span class="s">&quot;ldg_0000_typo&quot;</span>})
+err = typo.<span class="t">Check</span>(ctx)
+fmt.<span class="t">Println</span>(<span class="s">&quot;bad id:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>), err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>good id: &lt;nil&gt;
+bad id: true Config.LedgerID: ledger.Check: ledger: ledger not found: ledger: not found: ledger ldg_0000_typo does not exist</pre></figure>
+<p><code>Check</code> verifies that:</p>
+<ol><li>the client is configured correctly (URL, and the instance id for Blnk Cloud);</li><li>Blnk Core is up and reaches its database (<code>GET /health</code>);</li><li><code>Config.LedgerID</code>, when set, exists and is not a duplicate.</li></ol>
+<p>The error wraps <code>ErrUnavailable</code> when Core can't be reached, and <code>ErrLedgerNotFound</code> when the ledger is missing. humanblnk needs Blnk Core 0.15.4 or later.</p>
+<h2 id="two-provisioning-jobs-at-once"><a href="#two-provisioning-jobs-at-once">Two provisioning jobs at once</a></h2>
+<p>Calls in one process with the same <code>Key</code> run one at a time, so they can't both create. Two processes racing can: both look, find nothing, and create. humanblnk settles this on the next <code>CreateLedger</code> with that key. The oldest ledger is the one every caller gets; the others are marked <code>status: duplicate</code> with <code>duplicate_of</code> naming the oldest.</p>
+<figure class="code"><figcaption>Two "oja-ke" ledgers from a race</figcaption><pre><code><span class="c">// Two provisioning jobs raced and both created &quot;oja-ke&quot; (shown here by</span>
+<span class="c">// creating the twins straight in Blnk).</span>
+<span class="k">for</span> i := <span class="n">0</span>; i &lt; <span class="n">2</span>; i++ {
+	_, err := client.<span class="t">CreateLedger</span>(ctx, blnk.<span class="t">CreateLedgerRequest</span>{<span class="t">Name</span>: <span class="s">&quot;Oja Kenya&quot;</span>,
+		<span class="t">MetaData</span>: blnk.<span class="t">MetaData</span>{<span class="s">&quot;ledger_key&quot;</span>: <span class="s">&quot;oja-ke&quot;</span>, <span class="s">&quot;status&quot;</span>: <span class="s">&quot;active&quot;</span>}})
+	check(err)
+}
+
+ke, err := ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-ke&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Kenya&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;everyone gets&quot;</span>, ke.<span class="t">ID</span>, <span class="s">&quot;replayed:&quot;</span>, ke.<span class="t">Replayed</span>)
+
+all, err := ops.<span class="t">ListLedgers</span>(ctx, ledger.<span class="t">LedgerQuery</span>{<span class="t">Offset</span>: <span class="n">4</span>})
+check(err)
+<span class="k">for</span> _, l := <span class="k">range</span> all.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(l.<span class="t">ID</span>, l.<span class="t">Key</span>, l.<span class="t">Status</span>, l.<span class="t">DuplicateOf</span>)
+}
+twin := all.<span class="t">Items</span>[<span class="b">len</span>(all.<span class="t">Items</span>)-<span class="n">1</span>]
+_, err = wallet.<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;KES&quot;</span>, <span class="t">LedgerID</span>: twin.<span class="t">ID</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;open in the twin:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>everyone gets ldg_000006 replayed: true
+ldg_000006 oja-ke active 
+ldg_000007 oja-ke duplicate ldg_000006
+open in the twin: true ledger.Wallet.OpenAccount: ledger: invalid input: ledger ldg_000007 is a duplicate of ldg_000006; use that one</pre></figure>
+<ul><li><code>OpenAccount</code> refuses a duplicate ledger with <code>ErrInvalidInput</code>, naming the one to use, so no customer money lands in it.</li><li><code>svc.Check</code> refuses a <code>Config.LedgerID</code> that is a duplicate the same way.</li><li>The sample makes the twins straight in Blnk to stand in for the race. Your code only ever calls <code>CreateLedger</code>.</li></ul>
+<aside class="tip">Run provisioning from one job, and create ledgers before the app starts serving customers. Then a race can't happen at all.</aside>
+<h2 id="freezing-a-ledger"><a href="#freezing-a-ledger">Freezing a ledger</a></h2>
+<p><code>ops.FreezeLedger</code> stops money leaving every customer account in a ledger, for example on a regulator's order. Money can still come in, and house accounts are never blocked. A frozen ledger's <code>Status</code> reads <code>frozen</code>. Other app instances see the change within <code>Config.LedgerStatusTTL</code> (default 30 seconds), the time the status is cached when checking movements. See <a href="freeze.html">Freeze</a>.</p>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<div class="tablewrap"><table><thead><tr><th>Call</th><th>Blnk records</th></tr></thead><tbody><tr><td><code>CreateLedger</code>, first time</td><td>looks for a ledger with <code>meta_data.ledger_key</code> (<code>POST /ledgers/filter</code>), then <code>POST /ledgers</code> with <code>name</code> and <code>meta_data</code> including <code>ledger_key</code> and <code>status: active</code>, then looks again for a twin</td></tr><tr><td><code>CreateLedger</code>, again</td><td>the lookup only; nothing is written</td></tr><tr><td><code>CreateLedger</code> after a race</td><td>marks each younger twin with <code>status: duplicate</code> and <code>duplicate_of</code> (<code>POST /{ledger_id}/metadata</code>)</td></tr><tr><td><code>GetLedger</code></td><td><code>GET /ledgers/{id}</code></td></tr><tr><td><code>ListLedgers</code></td><td><code>GET /ledgers?limit=&amp;offset=</code></td></tr></tbody></table></div>
+<p>No money moves.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Key</span>: <span class="s">&quot;oja-ng&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Naija&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>), err)
+
+_, err = ops.<span class="t">CreateLedger</span>(ctx, ledger.<span class="t">CreateLedgerInput</span>{<span class="t">Name</span>: <span class="s">&quot;No key&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = ops.<span class="t">GetLedger</span>(ctx, <span class="s">&quot;ldg_0000_typo&quot;</span>)
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>), errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))
+
+_, err = ops.<span class="t">GetLedger</span>(ctx, ledger.<span class="t">LedgerID</span>(ada.<span class="t">ID</span>)) <span class="c">// an account id</span>
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>), err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Ops.CreateLedger: ledger: reference already used for a different transaction: ledger key &quot;oja-ng&quot; is already used by ldg_000002, named &quot;Oja Nigeria&quot;
+true ledger.Ops.CreateLedger: ledger: invalid input: key is required: it is what keeps the same ledger from being created twice
+true true
+true ledger.Ops.GetLedger: ledger: id names the wrong kind of object: ledger: invalid input: bln_000004 is a account, not a ledger</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrDuplicateReference</code></td><td>the <code>Key</code> is already used by a ledger with another <code>Name</code></td><td>pick another key, or use the existing name</td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Key</code>; opening an account in a duplicate ledger</td><td>add a key; use the ledger named in the message</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td>the ledger doesn't exist; also matches <code>ErrNotFound</code></td><td>fix the id or the configuration</td></tr><tr><td><code>ErrWrongKind</code></td><td>an account id or house account passed as a ledger id; also matches <code>ErrInvalidInput</code></td><td>pass a <code>LedgerID</code></td></tr><tr><td><code>ErrUnavailable</code></td><td>Blnk can't be reached</td><td>retry; the call is safe to repeat with the same <code>Key</code></td></tr></tbody></table></div>
+<h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
+<ul><li><a href="setup.html">Setup</a>: connecting to Blnk and the provisioning step.</li><li><a href="customer-accounts.html">Create customer accounts</a>: <code>LedgerID</code> on <code>OpenAccount</code>.</li><li><a href="house-accounts.html">House accounts</a>: the general ledger and the chart of accounts.</li><li><a href="freeze.html">Freeze</a>: <code>FreezeLedger</code> and <code>UnfreezeLedger</code>.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="statements.html"><small>Previous</small>Statements and history</a><a class="next" href="house-accounts.html"><small>Next</small>House accounts and the chart of accounts</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

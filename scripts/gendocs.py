@@ -601,7 +601,7 @@ ul.limits li {{ margin: 10px 0 }}
 <header class="hero">
   <h1>Wallets and financial operations on Blnk</h1>
   <p>A practical guide to humanblnk, the domain layer between your product and Blnk, told through Oja, a wallet business in Nigeria: naira, dollars and bitcoin, from a customer’s signup to the finance team’s month-end close.</p>
-  <p class="byline">By <a href="https://github.com/otyang">Otyang</a> · <a href="https://github.com/otyang/humanblnk">github.com/otyang/humanblnk</a></p>
+  <p class="byline">By <a href="https://github.com/otyang">Otyang</a> · <a href="https://github.com/otyang/humanblnk">github.com/otyang/humanblnk</a> · <a href="examples/">Detailed examples for every use case</a></p>
 </header>
 {''.join(sections)}
 <footer class="foot">

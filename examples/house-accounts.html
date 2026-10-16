@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>House accounts and the chart of accounts · humanblnk</title>
+<meta name="description" content="Read the business&#x27;s own accounts, such as @FeeIncome and @PaystackClearing, know what each one means in the books, and add or rename your own.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Financial operations</p>
+<h1>House accounts and the chart of accounts</h1>
+<p class="lead">Read the business's own accounts, such as @FeeIncome and @PaystackClearing, know what each one means in the books, and add or rename your own.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#what-house-accounts-are">What house accounts are</a><a href="#read-one-ops-gethouseaccount">Read one: ops.GetHouseAccount</a><a href="#every-house-account-ops-listhouseaccounts">Every house account: ops.ListHouseAccounts</a><a href="#the-chart-of-accounts-ledger-chart">The chart of accounts: ledger.Chart</a><a href="#history-balance-at-a-moment-statement">History, balance at a moment, statement</a><a href="#adding-your-own-accounts-to-the-chart">Adding your own accounts to the chart</a><a href="#renaming-the-accounts-humanblnk-uses">Renaming the accounts humanblnk uses</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related-pages">Related pages</a></nav>
+
+<article>
+<h2 id="what-house-accounts-are"><a href="#what-house-accounts-are">What house accounts are</a></h2>
+<p>Every movement has two sides. When Paystack collects ₦50,000 for Ada, Ada's account goes up, and something on Oja's side must record that Paystack now holds ₦50,000 that belongs to Oja. That other side is a <strong>house account</strong>: an account that belongs to the business itself ("the house"), not to a customer.</p>
+<p>In Blnk, house accounts are indicator balances whose name starts with <code>@</code>. Blnk creates one the first time a transaction uses it, one per currency, in its general ledger. Nobody opens them. They change only through the movements that use them (deposits, withdrawals, fees, settlement, adjustments), so the Ops methods for them only read.</p>
+<div class="tablewrap"><table><thead><tr><th>Need</th><th>Use</th></tr></thead><tbody><tr><td>One house account in one currency</td><td><code>ops.GetHouseAccount</code> with a <code>ledger.HouseRef</code></td></tr><tr><td>Every house account in a currency</td><td><code>ops.ListHouseAccounts</code></td></tr><tr><td>Its transactions</td><td><code>ops.HouseHistory</code></td></tr><tr><td>Its balance at a moment</td><td><code>ops.HouseBalanceAt</code></td></tr><tr><td>A statement for a period</td><td><code>ops.HouseStatement</code></td></tr><tr><td>What an account means in the books</td><td><code>ledger.Chart</code>, <code>ledger.ChartEntry</code></td></tr><tr><td>The clearing account of a provider</td><td><code>ledger.ClearingAccount</code></td></tr></tbody></table></div>
+<p>The samples on this page run after one day of activity: Ada tops up ₦50,000 through Paystack (₦750 fee), Tunde tops up ₦20,000 (₦300 fee), Ada withdraws ₦10,000 through Flutterwave (₦50 fee), and in the evening Paystack settles Ada's ₦50,000 to Oja's bank, keeping a ₦750 provider fee.</p>
+<h2 id="read-one-ops-gethouseaccount"><a href="#read-one-ops-gethouseaccount">Read one: ops.GetHouseAccount</a></h2>
+<p>A house account is named by its indicator and a currency, together a <code>ledger.HouseRef</code>.</p>
+<figure class="code"><figcaption>Fee income and the Paystack clearing account</figcaption><pre><code><span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{ledger.<span class="t">FeeIncomeAccount</span>, <span class="s">&quot;@PaystackClearing&quot;</span>} {
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	check(err)
+	fmt.<span class="t">Println</span>(h.<span class="t">Indicator</span>, h.<span class="t">Currency</span>, h.<span class="t">Type</span>, h.<span class="t">Normal</span>, <span class="s">&quot;balance:&quot;</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;natural:&quot;</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@FeeIncome NGN income credit balance: 1100.00 natural: 1100.00
+@PaystackClearing NGN asset debit balance: -20000.00 natural: 20000.00</pre></figure>
+<p><code>HouseAccount</code> fields:</p>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>ID</code></td><td>Blnk's balance id for this indicator and currency</td></tr><tr><td><code>Indicator</code>, <code>Currency</code>, <code>Precision</code></td><td>the name, currency and precision</td></tr><tr><td><code>LedgerID</code></td><td>Blnk's general ledger, <code>general_ledger_id</code></td></tr><tr><td><code>Type</code></td><td><code>asset</code>, <code>liability</code>, <code>equity</code>, <code>income</code> or <code>expense</code>, from the chart</td></tr><tr><td><code>Normal</code></td><td>the side its balance normally sits on: <code>debit</code> or <code>credit</code></td></tr><tr><td><code>Balance</code>, <code>PendingIn</code>, <code>PendingOut</code>, <code>Credits</code>, <code>Debits</code></td><td>the figures as Blnk stores them</td></tr><tr><td><code>Natural</code></td><td><code>Balance</code> on the account's normal side</td></tr><tr><td><code>CreatedAt</code>, <code>MetaData</code></td><td>as Blnk stores them</td></tr></tbody></table></div>
+<p><code>Ref()</code> returns the <code>HouseRef</code> for the account, ready for the other house methods.</p>
+<h3 id="balance-and-natural">Balance and Natural</h3>
+<p>Blnk takes money from the source and adds it to the destination. A deposit takes ₦50,000 from <code>@PaystackClearing</code>, so in Blnk that balance runs negative. In the books it is an asset: Paystack owes Oja the money.</p>
+<p><code>Natural</code> turns the balance the right way round for its type. For a debit-normal account (assets, expenses) it is <code>Balance</code> with the sign flipped; for a credit-normal one it equals <code>Balance</code>. In their usual state, all house accounts read positive in <code>Natural</code>. Here <code>@PaystackClearing</code> reads ₦20,000: Tunde's top-up, which Paystack has not settled yet.</p>
+<h2 id="every-house-account-ops-listhouseaccounts"><a href="#every-house-account-ops-listhouseaccounts">Every house account: ops.ListHouseAccounts</a></h2>
+<figure class="code"><figcaption>Oja's naira house accounts</figcaption><pre><code>all, err := ops.<span class="t">ListHouseAccounts</span>(ctx, <span class="s">&quot;NGN&quot;</span>)
+check(err)
+<span class="k">for</span> _, h := <span class="k">range</span> all {
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-21s %-9s %-6s %10s\n&quot;</span>, h.<span class="t">Indicator</span>, h.<span class="t">Type</span>, h.<span class="t">Normal</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@PaystackClearing     asset     debit    20000.00
+@FeeIncome            income    credit    1100.00
+@FlutterwaveClearing  asset     debit   -10000.00
+@BankOperating        asset     debit    49250.00
+@ProviderFees         expense   debit      750.00</pre></figure>
+<ul><li>The list is in the order Blnk created the accounts. Accounts never used in the currency are not there.</li><li><code>@FlutterwaveClearing</code> reads <code>-10000.00</code> in <code>Natural</code>. By default every <code>@…Clearing</code> account is an asset, but Flutterwave only pays out for Oja, so it holds money Oja owes. The chart below fixes that.</li><li><code>wallet.FindAccounts</code> never lists house accounts. This is the way to see them.</li></ul>
+<h2 id="the-chart-of-accounts-ledger-chart"><a href="#the-chart-of-accounts-ledger-chart">The chart of accounts: ledger.Chart</a></h2>
+<p><code>ledger.Chart</code> maps each indicator to a <code>GLDef</code> (its <code>Type</code> and <code>Normal</code> side). These are the accounts humanblnk uses, each with a constant:</p>
+<figure class="code"><pre><code>names := <span class="b">make</span>([]<span class="b">string</span>, <span class="n">0</span>, <span class="b">len</span>(ledger.<span class="t">Chart</span>))
+<span class="k">for</span> name := <span class="k">range</span> ledger.<span class="t">Chart</span> {
+	names = <span class="b">append</span>(names, name)
+}
+sort.<span class="t">Strings</span>(names)
+<span class="k">for</span> _, name := <span class="k">range</span> names {
+	def := ledger.<span class="t">Chart</span>[name]
+	fmt.<span class="t">Printf</span>(<span class="s">&quot;%-17s %-9s %s\n&quot;</span>, name, def.<span class="t">Type</span>, def.<span class="t">Normal</span>)
+}
+
+fmt.<span class="t">Println</span>(ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;paystack&quot;</span>), ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;@Flutterwave&quot;</span>), ledger.<span class="t">ClearingAccount</span>(<span class="s">&quot;&quot;</span>))
+fmt.<span class="t">Println</span>(<span class="s">&quot;@MonnifyClearing:&quot;</span>, ledger.<span class="t">ChartEntry</span>(<span class="s">&quot;@MonnifyClearing&quot;</span>).<span class="t">Type</span>, <span class="s">&quot;| @Marketing:&quot;</span>, ledger.<span class="t">ChartEntry</span>(<span class="s">&quot;@Marketing&quot;</span>).<span class="t">Type</span> == ledger.<span class="t">GLUnknown</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@Adjustments      equity    credit
+@BankOperating    asset     debit
+@DepositClearing  asset     debit
+@FXPool           asset     debit
+@FeeIncome        income    credit
+@MerchantPayable  liability credit
+@PayoutClearing   liability credit
+@ProviderFees     expense   debit
+@Suspense         liability credit
+@PaystackClearing @FlutterwaveClearing @DepositClearing
+@MonnifyClearing: asset | @Marketing: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Constant</th><th>Account</th><th>Type</th><th>Role</th></tr></thead><tbody><tr><td><code>FeeIncomeAccount</code></td><td><code>@FeeIncome</code></td><td>income</td><td>every fee leg is credited here</td></tr><tr><td><code>DepositClearingAccount</code></td><td><code>@DepositClearing</code></td><td>asset</td><td>the deposit source when no provider is named</td></tr><tr><td><code>PayoutClearingAccount</code></td><td><code>@PayoutClearing</code></td><td>liability</td><td>the withdrawal destination when no provider is named</td></tr><tr><td><code>MerchantPayableAccount</code></td><td><code>@MerchantPayable</code></td><td>liability</td><td>captured card-style holds owed to merchants</td></tr><tr><td><code>SuspenseAccount</code></td><td><code>@Suspense</code></td><td>liability</td><td>money that arrived but can't be matched yet</td></tr><tr><td><code>FXPoolAccount</code></td><td><code>@FXPool</code></td><td>asset</td><td>the open currency position from exchanges, one balance per currency</td></tr><tr><td><code>AdjustmentsAccount</code></td><td><code>@Adjustments</code></td><td>equity</td><td>the other side of manual corrections</td></tr><tr><td><code>BankOperatingAccount</code></td><td><code>@BankOperating</code></td><td>asset</td><td>your bank account</td></tr><tr><td><code>ProviderFeesAccount</code></td><td><code>@ProviderFees</code></td><td>expense</td><td>fees providers keep at settlement</td></tr></tbody></table></div>
+<p><code>ledger.ChartEntry(indicator)</code> looks an indicator up: its <code>Chart</code> entry, else asset and debit-normal for any <code>@…Clearing</code> account, else <code>GLUnknown</code> (an empty type).</p>
+<h3 id="clearing-accounts-one-per-provider">Clearing accounts, one per provider</h3>
+<p><code>Provider: &quot;paystack&quot;</code> on a deposit or withdrawal uses <code>@PaystackClearing</code>, and <code>Provider: &quot;flutterwave&quot;</code> uses <code>@FlutterwaveClearing</code>. <code>ledger.ClearingAccount</code> gives the name: it accepts <code>&quot;paystack&quot;</code>, <code>&quot;@Paystack&quot;</code> or <code>&quot;@PaystackClearing&quot;</code>, and returns <code>@DepositClearing</code> for an empty provider. To use an exact account, set <code>ClearingAccount</code> on the input instead of <code>Provider</code>.</p>
+<p>One clearing account per provider means each provider's balance is what that provider still owes you, or you owe it, and can be reconciled against that provider's settlement report. See <a href="settlement.html">Settlement</a>.</p>
+<h2 id="history-balance-at-a-moment-statement"><a href="#history-balance-at-a-moment-statement">History, balance at a moment, statement</a></h2>
+<figure class="code"><figcaption>@PaystackClearing over the day</figcaption><pre><code>paystack := ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@PaystackClearing&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>}
+h, err := ops.<span class="t">HouseHistory</span>(ctx, paystack, ledger.<span class="t">HistoryQuery</span>{}) <span class="c">// newest first; same query as wallet.History</span>
+check(err)
+<span class="k">for</span> _, r := <span class="k">range</span> h.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(r.<span class="t">CreatedAt</span>.<span class="t">Format</span>(<span class="s">&quot;15:04&quot;</span>), r.<span class="t">Reference</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>, r.<span class="t">Description</span>)
+}
+
+noon, err := ops.<span class="t">HouseBalanceAt</span>(ctx, paystack, time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">12</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>))
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;at noon, as Blnk stores it:&quot;</span>, noon.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>17:00 paystack_stl_0901_fee 750.00 Settlement PaystackClearing fee
+17:00 paystack_stl_0901 49250.00 Settlement PaystackClearing
+11:00 paystack_T100202-2 300.00 Deposit
+11:00 paystack_T100202-1 19700.00 Deposit
+09:00 paystack_T100201-2 750.00 Deposit
+09:00 paystack_T100201-1 49250.00 Deposit
+at noon, as Blnk stores it: -70000.00</pre></figure>
+<ul><li><code>HouseHistory</code> takes the same <code>HistoryQuery</code> as <code>wallet.History</code> and returns the same <code>HistoryPage</code>, newest first.</li><li>A deposit with a fee is recorded as two legs from the clearing account (<code>paystack_T100201-1</code> to Ada, <code>paystack_T100201-2</code> to <code>@FeeIncome</code>), so both appear.</li><li><code>HouseBalanceAt</code> returns the posted balance at that instant as Blnk stores it, so a debit-normal account reads negative. At noon, Paystack held both top-ups: <code>-70000.00</code>.</li></ul>
+<figure class="code"><figcaption>The day's statement for @PaystackClearing</figcaption><pre><code>day := time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>)
+st, err := ops.<span class="t">HouseStatement</span>(ctx, paystack, day, day.<span class="t">AddDate</span>(<span class="n">0</span>, <span class="n">0</span>, <span class="n">1</span>))
+check(err)
+fmt.<span class="t">Println</span>(st.<span class="t">Indicator</span>, <span class="s">&quot;opening&quot;</span>, st.<span class="t">Opening</span>.<span class="t">Display</span>, <span class="s">&quot;closing&quot;</span>, st.<span class="t">Closing</span>.<span class="t">Display</span>)
+<span class="k">for</span> _, l := <span class="k">range</span> st.<span class="t">Lines</span> {
+	fmt.<span class="t">Println</span>(l.<span class="t">Date</span>.<span class="t">Format</span>(<span class="s">&quot;15:04&quot;</span>), l.<span class="t">Reference</span>, <span class="s">&quot;| credit&quot;</span>, l.<span class="t">Credit</span>.<span class="t">Display</span>, <span class="s">&quot;| debit&quot;</span>, l.<span class="t">Debit</span>.<span class="t">Display</span>,
+		<span class="s">&quot;| balance&quot;</span>, l.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;|&quot;</span>, l.<span class="t">Counterpart</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@PaystackClearing opening 0.00 closing -20000.00
+09:00 paystack_T100201-1 | credit 0.00 | debit 49250.00 | balance -49250.00 | bln_000003
+09:00 paystack_T100201-2 | credit 0.00 | debit 750.00 | balance -50000.00 | @FeeIncome
+11:00 paystack_T100202-1 | credit 0.00 | debit 19700.00 | balance -69700.00 | bln_000005
+11:00 paystack_T100202-2 | credit 0.00 | debit 300.00 | balance -70000.00 | @FeeIncome
+17:00 paystack_stl_0901 | credit 49250.00 | debit 0.00 | balance -20750.00 | @BankOperating
+17:00 paystack_stl_0901_fee | credit 750.00 | debit 0.00 | balance -20000.00 | @ProviderFees</pre></figure>
+<p><code>HouseStatement</code> works like <code>wallet.Statement</code>: posted entries only, dated by when they took effect, checked against Blnk's historical balance. <code>Indicator</code> is set on the statement, and each line's <code>Counterpart</code> names the other account, as an id for a customer account or as <code>@Name</code> for a house account. See <a href="statements.html">Statements</a>.</p>
+<h2 id="adding-your-own-accounts-to-the-chart"><a href="#adding-your-own-accounts-to-the-chart">Adding your own accounts to the chart</a></h2>
+<p>Add or change entries in <code>ledger.Chart</code> at start-up, before the app serves requests. The map is not safe to change while other goroutines read it.</p>
+<figure class="code"><figcaption>Flutterwave as a payable, and a marketing budget</figcaption><pre><code><span class="c">// At start-up, before any request is served.</span>
+ledger.<span class="t">Chart</span>[<span class="s">&quot;@FlutterwaveClearing&quot;</span>] = ledger.<span class="t">GLDef</span>{<span class="t">Type</span>: ledger.<span class="t">GLLiability</span>, <span class="t">Normal</span>: ledger.<span class="t">CreditNormal</span>} <span class="c">// payouts only</span>
+ledger.<span class="t">Chart</span>[<span class="s">&quot;@Marketing&quot;</span>] = ledger.<span class="t">GLDef</span>{<span class="t">Type</span>: ledger.<span class="t">GLExpense</span>, <span class="t">Normal</span>: ledger.<span class="t">DebitNormal</span>}
+
+<span class="c">// Oja pays Tunde a ₦500 sign-up bonus out of its marketing budget.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: ledger.<span class="t">AccountID</span>(<span class="s">&quot;@Marketing&quot;</span>), <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_9034&quot;</span>, <span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+	<span class="t">Description</span>: <span class="s">&quot;Sign-up bonus&quot;</span>})
+check(err)
+
+<span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;@FlutterwaveClearing&quot;</span>, <span class="s">&quot;@Marketing&quot;</span>} {
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	check(err)
+	fmt.<span class="t">Println</span>(h.<span class="t">Indicator</span>, h.<span class="t">Type</span>, h.<span class="t">Normal</span>, <span class="s">&quot;balance:&quot;</span>, h.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;natural:&quot;</span>, h.<span class="t">Natural</span>.<span class="t">Display</span>)
+}</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@FlutterwaveClearing liability credit balance: 10000.00 natural: 10000.00
+@Marketing expense debit balance: -500.00 natural: 500.00</pre></figure>
+<ul><li>With <code>@FlutterwaveClearing</code> marked a liability, its <code>Natural</code> reads positive: Oja owes Flutterwave ₦10,000 for the payout it made.</li><li><code>@Marketing</code> is a new house account. A transfer from <code>AccountID(&quot;@Marketing&quot;)</code> creates it in Blnk; it needs <code>AllowOverdraft</code> because it starts at zero. The chart makes it an expense, so ₦500 of bonuses reads as ₦500 spent.</li><li>An indicator not in the chart and not ending in <code>Clearing</code> has an empty <code>Type</code> and <code>Normal</code>, and its <code>Natural</code> equals <code>Balance</code>.</li></ul>
+<h2 id="renaming-the-accounts-humanblnk-uses"><a href="#renaming-the-accounts-humanblnk-uses">Renaming the accounts humanblnk uses</a></h2>
+<p>If your books already carry money on other indicators, point humanblnk at them so balances aren't split across two accounts:</p>
+<div class="tablewrap"><table><thead><tr><th>Config field</th><th>Default</th><th>Used for</th></tr></thead><tbody><tr><td><code>FeeIncomeAccount</code></td><td><code>@FeeIncome</code></td><td>every fee leg</td></tr><tr><td><code>DepositClearingAccount</code></td><td><code>@DepositClearing</code></td><td>a deposit with no <code>Provider</code> or <code>ClearingAccount</code></td></tr><tr><td><code>PayoutClearingAccount</code></td><td><code>@PayoutClearing</code></td><td>a withdrawal with no <code>Provider</code> or <code>ClearingAccount</code></td></tr></tbody></table></div>
+<figure class="code"><figcaption>Oja's older books used @Fees and @World</figcaption><pre><code><span class="c">// Oja&#x27;s books already used @Fees and @World before humanblnk.</span>
+svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
+	<span class="t">LedgerID</span>:               ledgerID,
+	<span class="t">FeeIncomeAccount</span>:       <span class="s">&quot;@Fees&quot;</span>,  <span class="c">// default @FeeIncome</span>
+	<span class="t">DepositClearingAccount</span>: <span class="s">&quot;@World&quot;</span>, <span class="c">// default @DepositClearing, when a deposit names no provider</span>
+	<span class="t">PayoutClearingAccount</span>:  <span class="s">&quot;@World&quot;</span>, <span class="c">// default @PayoutClearing, when a withdrawal names no provider</span>
+})
+r, err := svc.<span class="t">Wallet</span>().<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;15&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;bank_transfer_5531&quot;</span>}) <span class="c">// no Provider</span>
+check(err)
+<span class="k">for</span> _, leg := <span class="k">range</span> r.<span class="t">Legs</span> {
+	fmt.<span class="t">Println</span>(<span class="s">&quot;leg to&quot;</span>, leg.<span class="t">Account</span>, leg.<span class="t">Narration</span>)
+}
+fees, err := svc.<span class="t">Ops</span>().<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@Fees&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(fees.<span class="t">Indicator</span>, fees.<span class="t">Type</span>, fees.<span class="t">Natural</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>leg to @Fees Deposit fee
+leg to bln_000003 Deposit
+@Fees income 15.00</pre></figure>
+<p>A renamed account keeps the meaning of the one it replaces: <code>@Fees</code> reads as income, and <code>@World</code> as an asset, like <code>@DepositClearing</code>. Set these once and never change them after money has moved, or balances will sit in two places.</p>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>The day on this page, as entries (Blnk takes from the debit side and adds to the credit side):</p>
+<div class="tablewrap"><table><thead><tr><th>Movement</th><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's top-up</td><td><code>@PaystackClearing</code></td><td>₦50,000</td><td></td></tr><tr><td>Ada's top-up</td><td>Ada's account</td><td></td><td>₦49,250</td></tr><tr><td>Ada's top-up</td><td><code>@FeeIncome</code></td><td></td><td>₦750</td></tr><tr><td>Tunde's top-up</td><td><code>@PaystackClearing</code></td><td>₦20,000</td><td></td></tr><tr><td>Tunde's top-up</td><td>Tunde's account</td><td></td><td>₦19,700</td></tr><tr><td>Tunde's top-up</td><td><code>@FeeIncome</code></td><td></td><td>₦300</td></tr><tr><td>Ada's withdrawal</td><td>Ada's account</td><td>₦10,050</td><td></td></tr><tr><td>Ada's withdrawal</td><td><code>@FlutterwaveClearing</code></td><td></td><td>₦10,000</td></tr><tr><td>Ada's withdrawal</td><td><code>@FeeIncome</code></td><td></td><td>₦50</td></tr><tr><td>Paystack settles</td><td><code>@BankOperating</code></td><td>₦49,250</td><td></td></tr><tr><td>Paystack settles</td><td><code>@ProviderFees</code></td><td>₦750</td><td></td></tr><tr><td>Paystack settles</td><td><code>@PaystackClearing</code></td><td></td><td>₦50,000</td></tr></tbody></table></div>
+<p>Blnk creates each <code>@</code> balance in its general ledger the first time it is used, and stores it on transactions by its balance id. Receipts and history therefore show the id; statements show the <code>@Name</code>.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>income, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+
+_, err = wallet.<span class="t">GetAccount</span>(ctx, ledger.<span class="t">AccountID</span>(income.<span class="t">ID</span>)) <span class="c">// its balance id</span>
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>), err)
+
+_, err = wallet.<span class="t">GetAccount</span>(ctx, ledger.<span class="t">AccountID</span>(<span class="s">&quot;@FeeIncome&quot;</span>))
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))
+
+_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;GHS&quot;</span>}) <span class="c">// never used in GHS</span>
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.GetAccount: ledger: id names the wrong kind of object: ledger: invalid input: bln_000007 is a house account (@FeeIncome), not a customer account
+true
+true ledger.Ops.GetHouseAccount: ledger: invalid input: indicator must start with @, e.g. @FeeIncome
+true ledger.Ops.GetHouseAccount: ledger: invalid input: currency is required
+true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrWrongKind</code></td><td>a house account, by <code>@Name</code> or by its balance id, passed to a wallet method such as <code>wallet.GetAccount</code>; also matches <code>ErrInvalidInput</code></td><td>read it with <code>ops.GetHouseAccount</code></td></tr><tr><td><code>ErrInvalidInput</code></td><td>an indicator that doesn't start with <code>@</code>; no currency</td><td>fix the <code>HouseRef</code></td></tr><tr><td><code>ErrNotFound</code></td><td>the account has never been used in that currency</td><td>nothing to read yet</td></tr></tbody></table></div>
+<h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
+<ul><li><a href="fees.html">Fees and pricing</a>: what lands in <code>@FeeIncome</code>.</li><li><a href="settlement.html">Settlement</a>: clearing provider accounts against your bank.</li><li><a href="suspense.html">Suspense</a>, <a href="adjustments.html">Adjustments</a>, <a href="currency-exchange.html">Currency exchange</a>: the other house accounts at work.</li><li><a href="reports.html">Reports</a>: the trial balance across every account.</li><li><a href="statements.html">Statements</a>: the customer-side history and statements.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="ledgers.html"><small>Previous</small>Provision ledgers</a><a class="next" href="freeze.html"><small>Next</small>Freeze and unfreeze</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>

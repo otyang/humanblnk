@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Transfers between customers · humanblnk</title>
+<meta name="description" content="Move money from one account to another: instant, with a fee, held until both sides agree, scheduled for later, or to and from the business&#x27;s own accounts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="index.html">humanblnk <span>examples</span></a>
+  <nav><a href="index.html">All examples</a><a href="../docs.html">Guide</a><a href="https://github.com/otyang/humanblnk">GitHub</a></nav>
+</div></header>
+<main class="wrap page">
+<p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
+<h1>Transfers between customers</h1>
+<p class="lead">Move money from one account to another: instant, with a fee, held until both sides agree, scheduled for later, or to and from the business's own accounts.</p>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#a-transfer">A transfer</a><a href="#with-a-fee">With a fee</a><a href="#pending-settle-later">Pending: settle later</a><a href="#scheduled-for-later">Scheduled for later</a><a href="#to-and-from-house-accounts">To and from house accounts</a><a href="#overdrafts">Overdrafts</a><a href="#retries">Retries</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code>balances := <span class="k">func</span>() {
+	a, err := wallet.<span class="t">GetAccount</span>(ctx, adaNGN)
+	check(err)
+	b, err := wallet.<span class="t">GetAccount</span>(ctx, tundeNGN)
+	check(err)
+	fmt.<span class="t">Println</span>(<span class="s">&quot;Ada:&quot;</span>, a.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, a.<span class="t">Available</span>.<span class="t">Display</span>, <span class="s">&quot;| Tunde:&quot;</span>, b.<span class="t">Balance</span>.<span class="t">Display</span>)
+}</code></pre></figure></details>
+<article>
+<h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
+<p>Ada sends Tunde his share of the rent from inside the Oja app. No provider is involved: the money moves between two accounts in the same ledger with <code>wallet.Transfer</code>. The sender pays the amount plus any fee; the recipient gets the amount.</p>
+<p>Pick the options by situation:</p>
+<div class="tablewrap"><table><thead><tr><th>Situation</th><th>Use</th></tr></thead><tbody><tr><td>A normal payment, posted at once</td><td><code>wallet.Transfer</code></td></tr><tr><td>A payment with a fee</td><td><code>Fee</code> on the call, or leave it out and let <code>Config.Fees</code> price it</td></tr><tr><td>A payment that settles later, possibly for less</td><td><code>Pending: true</code>, then <code>wallet.Confirm</code> and <code>wallet.Cancel</code></td></tr><tr><td>A payment on a future date</td><td><code>ScheduledFor</code></td></tr><tr><td>A repeating payment</td><td><code>wallet.Schedule</code>, see <a href="savings-pots.html">Savings pots and standing orders</a></td></tr><tr><td>Cashback, airtime, or any payment to or from the business</td><td><code>From</code> or <code>To</code> as <code>ledger.AccountID(&quot;@Name&quot;)</code></td></tr><tr><td>One payment to several people</td><td><code>wallet.Split</code>, see <a href="split-payments.html">Split payments</a></td></tr><tr><td>Many payments at once</td><td><code>wallet.Bulk</code>, see <a href="bulk-payouts.html">Bulk payouts</a></td></tr></tbody></table></div>
+<h2 id="a-transfer"><a href="#a-transfer">A transfer</a></h2>
+<figure class="code"><figcaption>Ada sends Tunde ₦12,500</figcaption><pre><code>sent, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>:        adaNGN,
+	<span class="t">To</span>:          tundeNGN,
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="c">// what Tunde receives</span>
+	<span class="t">Fee</span>:         ledger.<span class="t">NoFee</span>,                  <span class="c">// free: overrides Config.Fees</span>
+	<span class="t">Reference</span>:   <span class="s">&quot;p2p_01J8ZK2M4Q&quot;</span>,              <span class="c">// generate once, when Ada taps &quot;Send&quot;</span>
+	<span class="t">Description</span>: <span class="s">&quot;Rent share&quot;</span>,                  <span class="c">// shown on both statements</span>
+})
+check(err)
+fmt.<span class="t">Println</span>(sent.<span class="t">Amount</span>.<span class="t">Display</span>, sent.<span class="t">EntryStatus</span>, sent.<span class="t">Description</span>, sent.<span class="t">MetaData</span>[<span class="s">&quot;txn_type&quot;</span>])
+balances()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>12500.00 posted Rent share transfer
+Ada: 87500.00 available: 87500.00 | Tunde: 12500.00</pre></figure>
+<ul><li><code>Amount</code> is what the recipient receives.</li><li><code>Reference</code> is required. Generate it once, when the customer taps "Send", and reuse it on every retry.</li><li><code>Description</code> is stored on the transaction and shows on both statements. Without one, Blnk gets "Transfer".</li><li>The receipt's <code>EntryStatus</code> is <code>posted</code>: the money has moved.</li></ul>
+<h2 id="with-a-fee"><a href="#with-a-fee">With a fee</a></h2>
+<p>The fee is charged to the sender on top of <code>Amount</code> and goes to <code>@FeeIncome</code>.</p>
+<figure class="code"><figcaption>Config.Fees charges ₦10</figcaption><pre><code><span class="c">// No Fee: Config.Fees prices it at ₦10, paid by Ada on top.</span>
+r, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Reference</span>: <span class="s">&quot;p2p_01J8ZK3A7B&quot;</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;debited:&quot;</span>, r.<span class="t">Amount</span>.<span class="t">Display</span>, <span class="s">&quot;fee:&quot;</span>, r.<span class="t">MetaData</span>[<span class="s">&quot;fee&quot;</span>], <span class="s">&quot;to Tunde:&quot;</span>, r.<span class="t">MetaData</span>[<span class="s">&quot;net_amount&quot;</span>])
+<span class="k">for</span> _, leg := <span class="k">range</span> r.<span class="t">Legs</span> {
+	fmt.<span class="t">Println</span>(<span class="s">&quot; leg:&quot;</span>, leg.<span class="t">Amount</span>.<span class="t">Display</span>, leg.<span class="t">Narration</span>)
+}
+balances()
+
+fees, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: ledger.<span class="t">FeeIncomeAccount</span>, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;@FeeIncome:&quot;</span>, fees.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>debited: 5010.00 fee: 10 to Tunde: 5000
+ leg: 5000.00 Transfer
+ leg: 10.00 Transfer fee
+Ada: 82490.00 available: 82490.00 | Tunde: 17500.00
+@FeeIncome: 10.00</pre></figure>
+<ul><li>Leave <code>Fee</code> out and <code>Config.Fees</code> prices the transfer with <code>Kind: ledger.FeeTransfer</code> and the sender's account. Set <code>Fee</code> to charge a fixed amount, or <code>ledger.NoFee</code> for a free one. With neither <code>Fee</code> nor <code>Config.Fees</code>, the call is refused.</li><li>The receipt's <code>Amount</code> is the total debited. The legs show what went to the recipient and what went to fees.</li><li>Fee and net amount are also in metadata as <code>fee</code>, <code>fee_precise</code>, <code>net_amount</code> and <code>net_precise</code>.</li></ul>
+<h2 id="pending-settle-later"><a href="#pending-settle-later">Pending: settle later</a></h2>
+<p><code>Pending: true</code> reserves the money on the sender's account without moving it. It leaves <code>Available</code> at once but stays in <code>Balance</code> until you confirm.</p>
+<figure class="code"><figcaption>Ada reserves ₦30,000 for a phone, then pays ₦25,000</figcaption><pre><code><span class="c">// Tunde sells Ada a used phone: reserve ₦30,000 now, settle when she has it.</span>
+p, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;30000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;p2p_01J8ZK4C9D&quot;</span>,
+	<span class="t">Pending</span>:   <span class="b">true</span>,
+})
+check(err)
+fmt.<span class="t">Println</span>(p.<span class="t">EntryStatus</span>)
+balances()
+
+<span class="c">// The phone has a cracked screen: they agree on ₦25,000.</span>
+part := ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;&quot;</span>)
+_, err = wallet.<span class="t">Confirm</span>(ctx, p.<span class="t">TransactionID</span>, &amp;part)
+check(err)
+_, err = wallet.<span class="t">Cancel</span>(ctx, p.<span class="t">TransactionID</span>) <span class="c">// releases the other ₦5,000</span>
+check(err)
+balances()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>pending
+Ada: 82490.00 available: 52490.00 | Tunde: 17500.00
+Ada: 57490.00 available: 57490.00 | Tunde: 42500.00</pre></figure>
+<ul><li><code>wallet.Confirm(ctx, id, nil)</code> settles all of it. With an amount, only that part settles and the rest stays held.</li><li><code>wallet.Cancel</code> releases whatever is still held.</li><li>A pending transfer with a fee has two legs, so it can only be confirmed in full.</li><li>Unlike a withdrawal, a pending transfer has no automatic expiry. For a hold that lapses, use <code>wallet.Hold</code> with <code>ExpiresAt</code>, see <a href="card-holds.html">Card holds and capture</a>.</li></ul>
+<h2 id="scheduled-for-later"><a href="#scheduled-for-later">Scheduled for later</a></h2>
+<p><code>ScheduledFor</code> asks Blnk to post the transfer at that time. Until then it is <code>SCHEDULED</code> and nothing moves.</p>
+<figure class="code"><figcaption>₦2,000 tomorrow morning</figcaption><pre><code><span class="c">// Ada sends Tunde ₦2,000 tomorrow at 08:00.</span>
+s, err := wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN,
+	<span class="t">Amount</span>:       ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:          ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>:    <span class="s">&quot;p2p_01J8ZK5E1F&quot;</span>,
+	<span class="t">ScheduledFor</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">2</span>, <span class="n">8</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>),
+})
+check(err)
+fmt.<span class="t">Println</span>(s.<span class="t">Status</span>, s.<span class="t">EntryStatus</span>)
+balances()
+
+core.<span class="t">Advance</span>(<span class="n">24</span> * time.<span class="t">Hour</span>) <span class="c">// the in-memory Blnk&#x27;s clock reaches the date</span>
+got, err := wallet.<span class="t">GetTransaction</span>(ctx, s.<span class="t">TransactionID</span>)
+check(err)
+fmt.<span class="t">Println</span>(got.<span class="t">Status</span>, got.<span class="t">EntryStatus</span>)
+balances()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>SCHEDULED scheduled
+Ada: 57490.00 available: 57490.00 | Tunde: 42500.00
+APPLIED posted
+Ada: 55490.00 available: 55490.00 | Tunde: 44500.00</pre></figure>
+<ul><li>The in-memory Blnk used here posts it when its clock passes the date (<code>core.Advance</code>). Real Blnk does the same on its own schedule.</li><li>Account status and limits are checked when you create it. When Blnk posts it later, humanblnk is not involved, so those checks are not repeated. That is why <code>ops.CloseAccount</code> refuses an account with scheduled transfers.</li><li>A transfer can't be both pending and scheduled.</li></ul>
+<h2 id="to-and-from-house-accounts"><a href="#to-and-from-house-accounts">To and from house accounts</a></h2>
+<p><code>From</code> and <code>To</code> also accept a house account, written <code>ledger.AccountID(&quot;@Name&quot;)</code>. Use this for money the business pays to a customer, or a customer pays to the business.</p>
+<figure class="code"><figcaption>Cashback in, airtime out</figcaption><pre><code><span class="c">// Oja pays Ada ₦500 cashback out of its marketing budget.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>:           ledger.<span class="t">AccountID</span>(<span class="s">&quot;@MarketingCashback&quot;</span>),
+	<span class="t">To</span>:             adaNGN,
+	<span class="t">Amount</span>:         ledger.<span class="t">Amount</span>(<span class="s">&quot;500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:            ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>:      <span class="s">&quot;cashback_sept_8812&quot;</span>,
+	<span class="t">AllowOverdraft</span>: <span class="b">true</span>, <span class="c">// a house account starts at zero</span>
+	<span class="t">Description</span>:    <span class="s">&quot;September cashback&quot;</span>,
+})
+check(err)
+
+<span class="c">// Ada buys ₦1,000 of airtime; the money goes to the house account Oja settles with the vendor.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>:        adaNGN,
+	<span class="t">To</span>:          ledger.<span class="t">AccountID</span>(<span class="s">&quot;@AirtimePayable&quot;</span>),
+	<span class="t">Amount</span>:      ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:         ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>:   <span class="s">&quot;airtime_77120&quot;</span>,
+	<span class="t">Description</span>: <span class="s">&quot;MTN airtime 0803***0000&quot;</span>,
+})
+check(err)
+<span class="k">for</span> _, name := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;@MarketingCashback&quot;</span>, <span class="s">&quot;@AirtimePayable&quot;</span>} {
+	h, err := ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: name, <span class="t">Currency</span>: <span class="s">&quot;NGN&quot;</span>})
+	check(err)
+	fmt.<span class="t">Println</span>(name, h.<span class="t">Balance</span>.<span class="t">Display</span>)
+}
+balances()</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>@MarketingCashback -500.00
+@AirtimePayable 1000.00
+Ada: 54990.00 available: 54990.00 | Tunde: 44500.00</pre></figure>
+<ul><li>A house account starts at zero, so paying out of it needs <code>AllowOverdraft: true</code>. Its balance going negative is the cost of the cashback.</li><li>House accounts are never frozen and have no limits.</li><li><code>Config.Fees</code> gets a nil <code>Account</code> when the sender is a house account.</li><li>Read house balances with <code>ops.GetHouseAccount</code>. See <a href="house-accounts.html">House accounts</a>.</li></ul>
+<h2 id="overdrafts"><a href="#overdrafts">Overdrafts</a></h2>
+<p><code>AllowOverdraft: true</code> lets the sender's balance go below zero. Blnk sets no floor, so your app decides who may overdraw and by how much.</p>
+<figure class="code"><figcaption>Tunde uses his overdraft</figcaption><pre><code><span class="c">// Tunde has an approved ₦5,000 overdraft; your app decides who gets one.</span>
+tunde, err := wallet.<span class="t">GetAccount</span>(ctx, tundeNGN)
+check(err)
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN,
+	<span class="t">Amount</span>:    ledger.<span class="t">Amount</span>(<span class="s">&quot;48000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:       ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>: <span class="s">&quot;p2p_01J8ZK6G2H&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;has&quot;</span>, tunde.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;- without overdraft:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN,
+	<span class="t">Amount</span>:         ledger.<span class="t">Amount</span>(<span class="s">&quot;48000&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>:            ledger.<span class="t">NoFee</span>,
+	<span class="t">Reference</span>:      <span class="s">&quot;p2p_01J8ZK6G2H&quot;</span>,
+	<span class="t">AllowOverdraft</span>: <span class="b">true</span>,
+})
+check(err)
+tunde, err = wallet.<span class="t">GetAccount</span>(ctx, tundeNGN)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;with AllowOverdraft:&quot;</span>, tunde.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>has 44500.00 - without overdraft: true
+with AllowOverdraft: -3500.00</pre></figure>
+<h2 id="retries"><a href="#retries">Retries</a></h2>
+<figure class="code"><pre><code>in := ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;12500&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
+	<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_01J8ZK2M4Q&quot;</span>, <span class="t">Description</span>: <span class="s">&quot;Rent share&quot;</span>,
+}
+again, err := wallet.<span class="t">Transfer</span>(ctx, in) <span class="c">// the app timed out and sends it again</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;replayed:&quot;</span>, again.<span class="t">Replayed</span>, <span class="s">&quot;same transaction:&quot;</span>, again.<span class="t">TransactionID</span> == sent.<span class="t">TransactionID</span>)
+
+in.<span class="t">Amount</span> = ledger.<span class="t">Amount</span>(<span class="s">&quot;15000&quot;</span>, <span class="s">&quot;NGN&quot;</span>) <span class="c">// same reference, different payment</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, in)
+fmt.<span class="t">Println</span>(<span class="s">&quot;conflict:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrDuplicateReference</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>replayed: true same transaction: true
+conflict: true</pre></figure>
+<ul><li>The same input with the same reference returns the original with <code>Replayed: true</code>. Nothing is posted twice.</li><li>The same reference with a different amount, account or kind of movement is <code>ErrDuplicateReference</code>.</li></ul>
+<h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
+<p>A transfer is one Blnk transaction with <code>txn_type: transfer</code>. For the ₦5,000 transfer with a ₦10 fee:</p>
+<div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada's NGN account</td><td>₦5,010</td><td></td></tr><tr><td>Tunde's NGN account</td><td></td><td>₦5,000</td></tr><tr><td><code>@FeeIncome</code></td><td></td><td>₦10</td></tr></tbody></table></div>
+<p>Without a fee there is one destination. With a fee, Blnk stores two leg transactions, <code>&lt;reference&gt;-1</code> and <code>&lt;reference&gt;-2</code>. A pending transfer holds the same entries <code>INFLIGHT</code>; a scheduled one is stored with <code>scheduled_for</code> and posts at that time.</p>
+<h2 id="errors"><a href="#errors">Errors</a></h2>
+<figure class="code"><pre><code>_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;e1&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;insufficient funds:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;e2&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;limit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>), err)
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;e3&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;same account:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;e4&quot;</span>,
+	<span class="t">Pending</span>: <span class="b">true</span>, <span class="t">ScheduledFor</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">3</span>, <span class="n">8</span>, <span class="n">0</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>),
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;pending and scheduled:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+check(ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN, <span class="s">&quot;KYC review&quot;</span>))
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
+	<span class="t">From</span>: adaNGN, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;e5&quot;</span>,
+})
+fmt.<span class="t">Println</span>(<span class="s">&quot;frozen recipient:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
+limit: true ledger.Wallet.Transfer: ledger: transaction limit exceeded: per-transaction limit 100000 NGN: already used 0, this needs 150000
+same account: true
+pending and scheduled: true
+frozen recipient: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td>the sender's available balance is less than amount plus fee</td><td>show the balance; top up first</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>over the sender's per-transaction, daily or monthly limit</td><td>show <code>wallet.LimitUsage</code>; see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Reference</code> or <code>To</code>; same account on both sides; pending and scheduled together; no fee and no <code>Config.Fees</code></td><td>fix the call</td></tr><tr><td><code>ErrAccountFrozen</code></td><td>either account is frozen or blocked</td><td>wait for review; see <a href="freeze.html">Freeze and unfreeze</a></td></tr><tr><td><code>ErrAccountClosed</code></td><td>either account is closed</td><td>stop; the account takes nothing</td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>the sender's ledger is frozen</td><td>wait until operations unfreezes it</td></tr><tr><td><code>ErrDuplicateReference</code></td><td>the reference was used for a different payment</td><td>use a new reference only for a new payment</td></tr></tbody></table></div>
+<h2 id="related"><a href="#related">Related</a></h2>
+<ul><li><a href="quotes.html">Quotes for confirm screens</a>: fee, total and balance after, before Ada taps Confirm.</li><li><a href="refunds.html">Refunds</a>: send a transfer back, in full or in part.</li><li><a href="escrow.html">Escrow</a>: hold a payment until delivery.</li><li><a href="fees.html">Fees</a> and <a href="limits.html">Limits</a>.</li></ul>
+</article>
+<nav class="prevnext"><a class="prev" href="deposits.html"><small>Previous</small>Deposits and top-ups</a><a class="next" href="withdrawals.html"><small>Next</small>Withdrawals and payouts</a></nav>
+</main>
+<footer class="foot"><div class="wrap">
+  <p><strong>humanblnk</strong>: a wallet and financial-operations domain layer for Go, built on top of Blnk. By <a href="https://github.com/otyang">Otyang</a>.</p>
+  <p>Every sample on this page runs against the library's in-memory Blnk Core when the tests run; the output shown is what it printed. In the samples, <code>check(err)</code> stands for your own error handling.</p>
+</div></footer>
+</body>
+</html>
