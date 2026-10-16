@@ -17,7 +17,11 @@ change the API; such changes are listed under **Changed**.
   `ListPots`.
 - Money could reach a frozen or closed account: `Hold` now checks its
   `Destination`, and `Confirm` and `ConfirmMany` check the accounts receiving
-  the money. `Cancel` is still always allowed.
+  the money. `ConfirmMany` fails only the affected item. `Cancel` is still
+  always allowed, and disputes are exempt, so money can be ring-fenced for a
+  frozen payer and returned to them.
+- A `txn_type` in a movement's `MetaData` replaced the library's own, which
+  could keep a transfer out of limit usage. The library's value now wins.
 - `RecordSettlement`, `HoldInSuspense` and `ReturnFromSuspense` accepted a
   customer account as a clearing, bank or fee account and could overdraw it.
   They now require house accounts (`ErrWrongKind` otherwise).
