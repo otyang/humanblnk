@@ -158,6 +158,11 @@ func TestAdjustments(t *testing.T) {
 	_, err = ops.Adjust(ctx, noApprover)
 	fmt.Println("no approver:", errors.Is(err, ledger.ErrApprovalRequired))
 
+	noRequester := base
+	noRequester.RequestedBy = ""
+	_, err = ops.Adjust(ctx, noRequester)
+	fmt.Println("no requester:", errors.Is(err, ledger.ErrApprovalRequired))
+
 	noReason := base
 	noReason.Reason = ""
 	_, err = ops.Adjust(ctx, noReason)

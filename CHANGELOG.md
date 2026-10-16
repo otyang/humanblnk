@@ -7,6 +7,12 @@ change the API; such changes are listed under **Changed**.
 
 ## [Unreleased]
 
+### Changed
+- `ops.Adjust` and `ops.CloseAccount` require `RequestedBy` as well as
+  `ApprovedBy`, and the two must be different people. Before, leaving
+  `RequestedBy` empty skipped the check, so one person could approve their
+  own correction or closure.
+
 ### Added
 - Example pages for every use case, in `examples/` and at
   https://otyang.github.io/humanblnk/examples/. Every sample on them runs in

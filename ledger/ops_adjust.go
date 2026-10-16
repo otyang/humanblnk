@@ -2,7 +2,6 @@ package ledger
 
 import (
 	"context"
-	"fmt"
 	"strings"
 )
 
@@ -20,8 +19,8 @@ type AdjustInput struct {
 	Type        AdjustmentType
 	Amount      Money
 	Reason      string // REQUIRED
-	RequestedBy string
-	ApprovedBy  string // REQUIRED; must differ from RequestedBy when both are set
+	RequestedBy string // REQUIRED: who asked for it
+	ApprovedBy  string // REQUIRED: who approved it; must be someone else
 	Reference   string // REQUIRED
 	// Counterparty is the other side of the entry, a house account; default @Adjustments.
 	Counterparty string
@@ -36,11 +35,8 @@ func (s opsAPI) Adjust(ctx context.Context, in AdjustInput) (*Receipt, error) {
 	if strings.TrimSpace(in.Reason) == "" {
 		return nil, invalid(op, "reason is required")
 	}
-	if strings.TrimSpace(in.ApprovedBy) == "" {
-		return nil, &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("ApprovedBy is required")}
-	}
-	if in.RequestedBy != "" && strings.EqualFold(in.RequestedBy, in.ApprovedBy) {
-		return nil, &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("requester cannot approve their own adjustment")}
+	if err := fourEyes(op, "adjustment", in.RequestedBy, in.ApprovedBy); err != nil {
+		return nil, err
 	}
 	if err := customerOnly(op, in.AccountID); err != nil {
 		return nil, err

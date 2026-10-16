@@ -144,7 +144,7 @@ _, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">Transac
 fmt.<span class="t">Println</span>(<span class="s">&quot;amount exceeded:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAmountExceeded</span>))
 
 _, err = ops.<span class="t">CloseAccount</span>(ctx, ada, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>,
-	<span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead_femi&quot;</span>, <span class="t">SweepTo</span>: tunde, <span class="t">Reference</span>: <span class="s">&quot;close_ada&quot;</span>})
+	<span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead_femi&quot;</span>, <span class="t">SweepTo</span>: tunde, <span class="t">Reference</span>: <span class="s">&quot;close_ada&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;pending activity:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))
 
 _, err = wallet.<span class="t">Confirm</span>(ctx, hold.<span class="t">TransactionID</span>, <span class="b">nil</span>)

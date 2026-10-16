@@ -38,7 +38,7 @@ A customer leaves Oja, an account was opened twice by mistake, or a merchant is 
 
 @sample zero | A duplicate account opened by mistake
 
-With a zero balance there is nothing to move, so `SweepTo` and `Reference` can be left out. `Reason` and `ApprovedBy` are still required.
+With a zero balance there is nothing to move, so `SweepTo` and `Reference` can be left out. `Reason`, `RequestedBy` and `ApprovedBy` are still required.
 
 ## The fields
 
@@ -46,7 +46,7 @@ With a zero balance there is nothing to move, so `SweepTo` and `Reference` can b
 |---|---|---|
 | `Reason` | yes | why the account is closed, e.g. `customer request` or `dormant 24 months`. Stored as `status_reason` and on the sweep as `close_reason` |
 | `ApprovedBy` | yes | who approved the closure. Missing gives `ErrApprovalRequired` |
-| `RequestedBy` | no | who asked for it. When set, it must differ from `ApprovedBy`, ignoring case |
+| `RequestedBy` | yes | who asked for it. It must differ from `ApprovedBy`, ignoring case. Missing gives `ErrApprovalRequired` |
 | `SweepTo` | when the balance isn't zero | where the balance goes: a customer account, or a house account such as `@PayoutClearing` |
 | `Reference` | when the balance isn't zero | the sweep's idempotency key |
 
@@ -121,7 +121,7 @@ Then the balance's metadata is updated: `status: closed`, `status_reason`, `clos
 | Error | When | What to do |
 |---|---|---|
 | `ErrInvalidInput` | no `Reason`; a balance but no `SweepTo` or `Reference`; `SweepTo` is the account itself; the balance is negative | fix the call, or settle the overdraft |
-| `ErrApprovalRequired` | no `ApprovedBy`, or `ApprovedBy` is the same person as `RequestedBy` | get a second person to approve |
+| `ErrApprovalRequired` | no `RequestedBy` or `ApprovedBy`, or they are the same person | get a second person to approve |
 | `ErrPendingActivity` | a pending or scheduled transaction, an open pot, or an escrow holding money | clear the blocker the message names, then retry |
 | `ErrAccountClosed` | `SweepTo` is closed; any movement on the account after closure | sweep somewhere else; open a new account for the customer |
 | `ErrAccountFrozen` | `SweepTo` is frozen | unfreeze it or sweep somewhere else. The account being closed may itself be frozen |

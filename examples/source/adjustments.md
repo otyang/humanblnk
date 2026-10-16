@@ -7,7 +7,7 @@ lead: Correct a customer balance by hand, for cashback, goodwill or a posting mi
 
 Most money moves because something happened outside: a deposit, a payout, a card payment. Sometimes Oja has to change a balance by hand. Paystack sent a webhook twice and Tunde was credited twice. Marketing promised Ada ₦500 cashback. Support wants to pay Tunde ₦1,000 for a failed transfer.
 
-`ops.Adjust` posts that correction as an ordinary Blnk transaction between the customer account and a house account. It refuses to run without a reason and an approver who isn't the requester, and it writes all three into the transaction's metadata, so every hand-made change can be traced later.
+`ops.Adjust` posts that correction as an ordinary Blnk transaction between the customer account and a house account. It refuses to run without a reason, a requester and an approver who is someone else, and it writes all three into the transaction's metadata, so every hand-made change can be traced later.
 
 Pick the call by situation:
 
@@ -85,14 +85,13 @@ Here ₦28,000 came in from the two debits and ₦500 went out as cashback. The 
 | `Amount` | yes | a positive amount in the account's currency |
 | `Reason` | yes | why. Stored as `adjust_reason` and in the description |
 | `ApprovedBy` | yes | who approved it. Stored as `approved_by` |
-| `RequestedBy` | no | who asked for it. Stored as `requested_by`. When set, it must differ from `ApprovedBy`, ignoring case |
+| `RequestedBy` | yes | who asked for it. Stored as `requested_by`. It must differ from `ApprovedBy`, ignoring case |
 | `Reference` | yes | idempotency key |
 | `Counterparty` | no | the house account on the other side; default `@Adjustments` |
 | `AllowOverdraft` | no | lets an `AdjustDebit` take the account below zero |
 
 > warn: humanblnk checks that the two names differ. It doesn't know who your staff are. Take `RequestedBy` from the logged-in user and `ApprovedBy` from a real approval step in your own tool, never from the same form field.
 
-> tip: When `RequestedBy` is empty only `ApprovedBy` is checked. Always set both so the record shows two people.
 
 ## What happens in Blnk
 
@@ -113,7 +112,7 @@ A credit is sent with `allow_overdraft`, since the house account is the source. 
 
 | Error | When | What to do |
 |---|---|---|
-| `ErrApprovalRequired` | no `ApprovedBy`, or `ApprovedBy` is the same person as `RequestedBy` | get a second person to approve |
+| `ErrApprovalRequired` | no `RequestedBy` or `ApprovedBy`, or they are the same person | get a second person to approve |
 | `ErrInvalidInput` | no `Reason`, no `Reference`, no or bad `Type`, a non-positive `Amount`, or a `Counterparty` that doesn't start with `@` | fix the call |
 | `ErrWrongKind` | `AccountID` is a house account or a ledger id | pass a customer account |
 | `ErrInsufficientFunds` | an `AdjustDebit` would take the account below zero | set `AllowOverdraft` if that is intended |

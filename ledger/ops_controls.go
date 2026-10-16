@@ -122,8 +122,8 @@ func (s *Service) setLedgerStatus(ctx context.Context, op string, id LedgerID, s
 // and a second person's approval, like Ops().Adjust.
 type CloseInput struct {
 	Reason      string // REQUIRED, e.g. "customer request", "dormant 24 months"
-	ApprovedBy  string // REQUIRED; must differ from RequestedBy when both are set
-	RequestedBy string
+	ApprovedBy  string // REQUIRED: who approved it; must be someone else
+	RequestedBy string // REQUIRED: who asked for it
 
 	// SweepTo receives any remaining balance: another customer account, or a
 	// house account such as AccountID("@PayoutClearing"). Required when the
@@ -152,11 +152,8 @@ func (s opsAPI) CloseAccount(ctx context.Context, accountID AccountID, in CloseI
 	if strings.TrimSpace(in.Reason) == "" {
 		return nil, invalid(op, "reason is required: closing an account is final")
 	}
-	if strings.TrimSpace(in.ApprovedBy) == "" {
-		return nil, &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("ApprovedBy is required: closing an account is final")}
-	}
-	if in.RequestedBy != "" && strings.EqualFold(in.RequestedBy, in.ApprovedBy) {
-		return nil, &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("requester cannot approve their own closure")}
+	if err := fourEyes(op, "closure", in.RequestedBy, in.ApprovedBy); err != nil {
+		return nil, err
 	}
 	if b.InflightDebitBalance.Sign() != 0 || b.InflightCreditBalance.Sign() != 0 {
 		return nil, &OpError{Op: op, Kind: ErrPendingActivity,

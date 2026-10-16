@@ -113,7 +113,7 @@ func TestErrors(t *testing.T) {
 	fmt.Println("amount exceeded:", errors.Is(err, ledger.ErrAmountExceeded))
 
 	_, err = ops.CloseAccount(ctx, ada, ledger.CloseInput{Reason: "customer request",
-		ApprovedBy: "ops_lead_femi", SweepTo: tunde, Reference: "close_ada"})
+		RequestedBy: "ops.kemi", ApprovedBy: "ops_lead_femi", SweepTo: tunde, Reference: "close_ada"})
 	fmt.Println("pending activity:", errors.Is(err, ledger.ErrPendingActivity))
 
 	_, err = wallet.Confirm(ctx, hold.TransactionID, nil)

@@ -202,7 +202,7 @@ func TestLiveCoreNamespaces(t *testing.T) {
 	if _, err := svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{Reason: "live", SweepTo: b.ID, Reference: "ns_close_" + run}); !errors.Is(err, ledger.ErrApprovalRequired) {
 		t.Fatalf("close without approver: %v", err)
 	}
-	closed, err := svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{Reason: "live", ApprovedBy: "ops", SweepTo: b.ID, Reference: "ns_close_" + run})
+	closed, err := svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{Reason: "live", RequestedBy: "ops.kemi", ApprovedBy: "ops", SweepTo: b.ID, Reference: "ns_close_" + run})
 	if err != nil || closed.Status != "closed" || closed.Balance.Sign() != 0 {
 		t.Fatalf("close: %+v %v", closed, err)
 	}

@@ -93,7 +93,7 @@ Blnk gives you primitives and leaves the rules to you. humanblnk is where those 
 | Account status | stored, not enforced | frozen, closed and frozen-ledger states refuse money on every movement |
 | Fees | none | every chargeable operation states its fee, or `Config.Fees` prices it; fees post as legs to `@FeeIncome` |
 | Limits | none | per KYC tier and currency: per transaction, daily, monthly |
-| Approvals | none | closing an account and manual adjustments need an approver who isn't the requester |
+| Approvals | none | closing an account and manual adjustments need two people: `RequestedBy` and an `ApprovedBy` who is someone else |
 | Kinds of object | one balance type for everything | ledgers, customer accounts and house accounts are separate types; mix-ups fail with `ErrWrongKind` |
 | Who can do what | anyone with the API key | customer-facing code gets `Wallet`; freezing, closing, adjusting and settling are only on `Ops` |
 | Chart of accounts | free-form `@` indicators | `ledger.Chart`: each house account has a type (asset, liability, …) and a normal side |
@@ -361,7 +361,7 @@ House accounts are the business's own accounts ("house" is the business itself; 
 | `ops.RecordSettlement` | clears a provider clearing account against `@BankOperating`, provider fees to `@ProviderFees`; atomic |
 | `ops.HoldInSuspense` | money you can't match yet: clearing → `@Suspense` |
 | `ops.ClaimFromSuspense` / `ReturnFromSuspense` | `@Suspense` → its owner's account, or back to the provider's clearing account |
-| `ops.Adjust` | manual correction against `@Adjustments`; reason and an approver (not the requester) required |
+| `ops.Adjust` | manual correction against `@Adjustments`; a reason, `RequestedBy` and a different `ApprovedBy` required |
 | `ops.WatchBalance` / `UnwatchBalance` | balance alerts → `balance.monitor` webhook. Watch a customer account with `AccountID` or a house account with `House: ledger.HouseRef{...}` |
 | `ops.CreateMatchingRule` / `StartReconciliation` / `GetReconciliation` | match a provider's report against the ledger: records inline (up to 10,000) or a CSV/JSON upload |
 
@@ -380,7 +380,7 @@ Blnk itself ignores status, so this layer enforces it on **every** movement, inc
 | Account closed (`ops.CloseAccount`) | nothing in or out, for good (`ErrAccountClosed`). For late money (a provider refund, say), hold it with `HoldInSuspense`, then claim it for the customer's new account or return it |
 | Ledger frozen (`ops.FreezeLedger`) | nothing leaves its customer accounts, closure sweeps included (`ErrLedgerFrozen`); deposits in and house postings carry on |
 
-`ops.CloseAccount` is final. It needs a `Reason` and an `ApprovedBy` other than the requester, and refuses while anything is pending or scheduled, while a pot under the account is open or an escrow on it still holds money. It sweeps the balance to `SweepTo`, then marks the account `closed`. A closed account can't be frozen or unfrozen.
+`ops.CloseAccount` is final. It needs a `Reason`, a `RequestedBy` and an `ApprovedBy` who is someone else, and refuses while anything is pending or scheduled, while a pot under the account is open or an escrow on it still holds money. It sweeps the balance to `SweepTo`, then marks the account `closed`. A closed account can't be frozen or unfrozen.
 
 Each movement reads the customer accounts it touches (one request each; `Bulk` reuses what it already read). It also checks the ledger of each account money leaves, using a cached status that refreshes every `Config.LedgerStatusTTL` (default 30s). Confirming a pending transaction checks again that the accounts receiving the money aren't frozen or closed; cancelling one is never refused, since it only returns reserved money. Some movements aren't checked: the ones Blnk posts by itself (scheduled transfers, auto-capture, hold expiry) and calls made to Blnk directly. That's why `CloseAccount` refuses while transfers are scheduled.
 

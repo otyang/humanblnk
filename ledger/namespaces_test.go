@@ -75,7 +75,7 @@ func TestCustomerOnlyInputsRefuseHouseAccounts(t *testing.T) {
 	_, errs["Hold"] = svc.Wallet().Hold(ctx, ledger.HoldInput{AccountID: sysAcct, Destination: a.ID, Amount: ledger.Amount("1", "NGN"), Reference: "x3"})
 	_, errs["Exchange"] = svc.Wallet().Exchange(ctx, ledger.ExchangeInput{From: a.ID, To: sysAcct, Sell: ledger.Amount("1", "NGN"), Rate: "1", Fee: ledger.NoFee, Reference: "x4"})
 	_, errs["ClaimFromSuspense"] = svc.Ops().ClaimFromSuspense(ctx, ledger.ClaimFromSuspenseInput{AccountID: ledger.AccountID(ledger.DepositClearingAccount), Amount: ledger.Amount("1", "NGN"), Reference: "x5"})
-	_, errs["Adjust"] = svc.Ops().Adjust(ctx, ledger.AdjustInput{AccountID: sysAcct, Type: ledger.AdjustCredit, Amount: ledger.Amount("1", "NGN"), Reason: "r", ApprovedBy: "ops", Reference: "x6"})
+	_, errs["Adjust"] = svc.Ops().Adjust(ctx, ledger.AdjustInput{AccountID: sysAcct, Type: ledger.AdjustCredit, Amount: ledger.Amount("1", "NGN"), Reason: "r", RequestedBy: "ops.kemi", ApprovedBy: "ops", Reference: "x6"})
 	_, errs["Escrow payer"] = svc.Wallet().OpenEscrow(ctx, ledger.EscrowInput{Payer: sysAcct, Beneficiary: a.ID, Amount: ledger.Amount("1", "NGN"), Reference: "x7"})
 	_, errs["OpenPot"] = svc.Wallet().OpenPot(ctx, ledger.PotInput{ParentID: sysAcct, Name: "Rent"})
 	for call, err := range errs {
@@ -85,7 +85,7 @@ func TestCustomerOnlyInputsRefuseHouseAccounts(t *testing.T) {
 	}
 	// Adjust's counterparty must be a house account.
 	_, err := svc.Ops().Adjust(ctx, ledger.AdjustInput{AccountID: a.ID, Type: ledger.AdjustCredit, Amount: ledger.Amount("1", "NGN"),
-		Reason: "r", ApprovedBy: "ops", Reference: "x8", Counterparty: string(open(t, svc, "NGN").ID)})
+		Reason: "r", RequestedBy: "ops.kemi", ApprovedBy: "ops", Reference: "x8", Counterparty: string(open(t, svc, "NGN").ID)})
 	if !errors.Is(err, ledger.ErrInvalidInput) {
 		t.Fatalf("customer counterparty: %v", err)
 	}
@@ -337,7 +337,7 @@ func TestFrozenLedgerBlocksOnlyOutgoingMoney(t *testing.T) {
 		t.Fatalf("fee income: %s", got)
 	}
 
-	_, err = svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{SweepTo: outside.ID, Reference: "close_a", Reason: "r", ApprovedBy: "ops"})
+	_, err = svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{SweepTo: outside.ID, Reference: "close_a", Reason: "r", RequestedBy: "ops.kemi", ApprovedBy: "ops"})
 	if !errors.Is(err, ledger.ErrLedgerFrozen) {
 		t.Fatalf("close sweeping out of a frozen ledger: %v", err)
 	}
@@ -519,7 +519,7 @@ func TestCloseIsGuarded(t *testing.T) {
 	if err := try(ok); !errors.Is(err, ledger.ErrPendingActivity) {
 		t.Fatalf("open pot: %v", err)
 	}
-	if _, err := svc.Ops().CloseAccount(ctx, pot.ID, ledger.CloseInput{Reason: "parent closing", ApprovedBy: "ops.lead"}); err != nil {
+	if _, err := svc.Ops().CloseAccount(ctx, pot.ID, ledger.CloseInput{Reason: "parent closing", RequestedBy: "ops.kemi", ApprovedBy: "ops.lead"}); err != nil {
 		t.Fatalf("close pot: %v", err)
 	}
 
@@ -573,7 +573,7 @@ func TestStatusIsAlwaysEnforced(t *testing.T) {
 		t.Fatal(err)
 	}
 	// ...or back into a closed payer.
-	if _, err := svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{Reason: "left", ApprovedBy: "ops", SweepTo: c.ID, Reference: "close_a"}); err != nil {
+	if _, err := svc.Ops().CloseAccount(ctx, a.ID, ledger.CloseInput{Reason: "left", RequestedBy: "ops.kemi", ApprovedBy: "ops", SweepTo: c.ID, Reference: "close_a"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := svc.Wallet().Refund(ctx, pay.TransactionID, ledger.RefundInput{}); !errors.Is(err, ledger.ErrAccountClosed) {
@@ -583,7 +583,7 @@ func TestStatusIsAlwaysEnforced(t *testing.T) {
 		t.Fatalf("late deposit into closed account: %v", err)
 	}
 	// A closure can't sweep into a closed account either.
-	if _, err := svc.Ops().CloseAccount(ctx, b.ID, ledger.CloseInput{Reason: "left", ApprovedBy: "ops", SweepTo: a.ID, Reference: "close_b"}); !errors.Is(err, ledger.ErrAccountClosed) {
+	if _, err := svc.Ops().CloseAccount(ctx, b.ID, ledger.CloseInput{Reason: "left", RequestedBy: "ops.kemi", ApprovedBy: "ops", SweepTo: a.ID, Reference: "close_b"}); !errors.Is(err, ledger.ErrAccountClosed) {
 		t.Fatalf("sweep into closed account: %v", err)
 	}
 }

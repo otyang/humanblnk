@@ -296,8 +296,8 @@ type Ops interface {
 	UnfreezeAccount(ctx context.Context, id AccountID) error
 
 	// CloseAccount moves any remaining balance to SweepTo and marks the account
-	// closed, for good; it needs a Reason and an ApprovedBy other than the
-	// requester. It refuses while anything is pending (INFLIGHT) or scheduled,
+	// closed, for good; it needs a Reason, a RequestedBy and an ApprovedBy who
+	// is someone else (ErrApprovalRequired otherwise). It refuses while anything is pending (INFLIGHT) or scheduled,
 	// while a pot under it is open or an escrow on it still holds money, and
 	// when the balance is negative. Every movement touching a closed account
 	// is refused (ErrAccountClosed). Closing a frozen account is allowed;
@@ -363,6 +363,8 @@ type Ops interface {
 
 	// Adjust posts a correction between a customer account and @Adjustments, recording
 	// reason, requester and approver in metadata so every correction is auditable.
+	// RequestedBy and ApprovedBy are both required and must be different people
+	// (ErrApprovalRequired otherwise).
 	Adjust(ctx context.Context, in AdjustInput) (*Receipt, error)
 
 	// ---- Reports (ops_reports.go)
@@ -583,8 +585,8 @@ type AccountPage struct {
 // and a second person's approval, like Ops().Adjust.
 type CloseInput struct {
 	Reason      string // REQUIRED, e.g. "customer request", "dormant 24 months"
-	ApprovedBy  string // REQUIRED; must differ from RequestedBy when both are set
-	RequestedBy string
+	ApprovedBy  string // REQUIRED: who approved it; must be someone else
+	RequestedBy string // REQUIRED: who asked for it
 
 	// SweepTo receives any remaining balance: another customer account, or a
 	// house account such as AccountID("@PayoutClearing"). Required when the
@@ -1235,8 +1237,8 @@ type AdjustInput struct {
 	Type        AdjustmentType
 	Amount      Money
 	Reason      string // REQUIRED
-	RequestedBy string
-	ApprovedBy  string // REQUIRED; must differ from RequestedBy when both are set
+	RequestedBy string // REQUIRED: who asked for it
+	ApprovedBy  string // REQUIRED: who approved it; must be someone else
 	Reference   string // REQUIRED
 	// Counterparty is the other side of the entry, a house account; default @Adjustments.
 	Counterparty string

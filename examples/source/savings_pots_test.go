@@ -184,7 +184,7 @@ func TestSavingsPots(t *testing.T) {
 	_, err = wallet.Cancel(ctx, next.TransactionID)
 	fmt.Println("cancel a scheduled occurrence:", errors.Is(err, ledger.ErrNotPending))
 
-	_, err = ops.CloseAccount(ctx, adaNGN, ledger.CloseInput{Reason: "customer request", ApprovedBy: "ops_lead",
+	_, err = ops.CloseAccount(ctx, adaNGN, ledger.CloseInput{Reason: "customer request", RequestedBy: "ops.kemi", ApprovedBy: "ops_lead",
 		SweepTo: ledger.AccountID(ledger.PayoutClearingAccount)})
 	fmt.Println("close with a plan running:", errors.Is(err, ledger.ErrPendingActivity))
 	// end

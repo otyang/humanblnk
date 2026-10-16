@@ -87,8 +87,11 @@ func TestCloseAccount(t *testing.T) {
 
 	begin("close-account/approval")
 	// sample: close-account/approval
-	_, err = ops.CloseAccount(ctx, adaNGN.ID, ledger.CloseInput{ApprovedBy: "lead.femi"})
+	_, err = ops.CloseAccount(ctx, adaNGN.ID, ledger.CloseInput{RequestedBy: "ops.kemi", ApprovedBy: "lead.femi"})
 	fmt.Println("no reason:", errors.Is(err, ledger.ErrInvalidInput))
+
+	_, err = ops.CloseAccount(ctx, adaNGN.ID, ledger.CloseInput{Reason: "customer request", ApprovedBy: "lead.femi"})
+	fmt.Println("no requester:", errors.Is(err, ledger.ErrApprovalRequired))
 
 	_, err = ops.CloseAccount(ctx, adaNGN.ID, ledger.CloseInput{Reason: "customer request", RequestedBy: "ops.kemi"})
 	fmt.Println("no approver:", errors.Is(err, ledger.ErrApprovalRequired))

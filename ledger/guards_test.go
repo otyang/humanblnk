@@ -448,3 +448,27 @@ func TestWrongKindArticle(t *testing.T) {
 		t.Fatalf("message: %v", err)
 	}
 }
+
+// Manual money movements need two people: one asks, another approves.
+func TestFourEyes(t *testing.T) {
+	svc, _ := ledgertest.New(t, ledger.Config{})
+	ops := svc.Ops()
+	ada := open(t, svc, "NGN")
+	adj := func(req, appr string) error {
+		_, err := ops.Adjust(ctx, ledger.AdjustInput{AccountID: ada.ID, Type: ledger.AdjustCredit, Amount: ledger.Amount("100", "NGN"),
+			Reason: "goodwill", RequestedBy: req, ApprovedBy: appr, Reference: "adj_" + req + appr})
+		return err
+	}
+	for _, c := range [][2]string{{"", "lead.femi"}, {"ops.kemi", ""}, {"ops.kemi", "ops.kemi"}, {"ops.kemi", " OPS.KEMI "}} {
+		if err := adj(c[0], c[1]); !errors.Is(err, ledger.ErrApprovalRequired) {
+			t.Errorf("adjust %q/%q: %v", c[0], c[1], err)
+		}
+		_, err := ops.CloseAccount(ctx, ada.ID, ledger.CloseInput{Reason: "x", RequestedBy: c[0], ApprovedBy: c[1]})
+		if !errors.Is(err, ledger.ErrApprovalRequired) {
+			t.Errorf("close %q/%q: %v", c[0], c[1], err)
+		}
+	}
+	if err := adj("ops.kemi", "lead.femi"); err != nil {
+		t.Fatalf("two people: %v", err)
+	}
+}

@@ -340,7 +340,7 @@ func TestRecurringCloseSuspenseAdjustSettlement(t *testing.T) {
 
 	// Close: pending activity blocks, then sweep and close.
 	h, _ := svc.Wallet().Hold(ctx, ledger.HoldInput{AccountID: savings.ID, Destination: main.ID, Amount: ledger.Amount("1", "NGN"), Reference: "h"})
-	if _, err := svc.Ops().CloseAccount(ctx, savings.ID, ledger.CloseInput{SweepTo: main.ID, Reference: "close1", Reason: "customer request", ApprovedBy: "ops.lead"}); !errors.Is(err, ledger.ErrPendingActivity) {
+	if _, err := svc.Ops().CloseAccount(ctx, savings.ID, ledger.CloseInput{SweepTo: main.ID, Reference: "close1", Reason: "customer request", RequestedBy: "ops.kemi", ApprovedBy: "ops.lead"}); !errors.Is(err, ledger.ErrPendingActivity) {
 		t.Fatalf("want pending activity, got %v", err)
 	}
 	res, err := svc.Wallet().CancelMany(ctx, []string{h.TransactionID, "txn_missing"})
@@ -348,7 +348,7 @@ func TestRecurringCloseSuspenseAdjustSettlement(t *testing.T) {
 		t.Fatalf("cancel many: %+v %v", res, err)
 	}
 	// The last standing-order payment into savings is still scheduled: closing waits for it.
-	if _, err := svc.Ops().CloseAccount(ctx, savings.ID, ledger.CloseInput{SweepTo: main.ID, Reference: "close1", Reason: "customer request", ApprovedBy: "ops.lead"}); !errors.Is(err, ledger.ErrPendingActivity) {
+	if _, err := svc.Ops().CloseAccount(ctx, savings.ID, ledger.CloseInput{SweepTo: main.ID, Reference: "close1", Reason: "customer request", RequestedBy: "ops.kemi", ApprovedBy: "ops.lead"}); !errors.Is(err, ledger.ErrPendingActivity) {
 		t.Fatalf("scheduled transfer must block closing, got %v", err)
 	}
 	core.Advance(31 * 24 * time.Hour) // third occurrence posts

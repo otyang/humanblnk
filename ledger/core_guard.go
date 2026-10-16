@@ -134,3 +134,20 @@ func (s *Service) ledgerFor(ctx context.Context, op string, id LedgerID, forOpen
 
 // forgetLedger drops a cached ledger after this Service changed its status.
 func (s *Service) forgetLedger(id LedgerID) { s.ledgers.Delete(id) }
+
+// fourEyes enforces the maker-checker rule on manual money movements: one
+// person asks, another approves, and both names are recorded. The library
+// can't tell who is really logged in, so take both from your own
+// authentication and approval flow, never from free text.
+func fourEyes(op, what, requestedBy, approvedBy string) error {
+	req, appr := strings.TrimSpace(requestedBy), strings.TrimSpace(approvedBy)
+	switch {
+	case req == "":
+		return &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("RequestedBy is required: who asked for this %s", what)}
+	case appr == "":
+		return &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("ApprovedBy is required: who approved this %s", what)}
+	case strings.EqualFold(req, appr):
+		return &OpError{Op: op, Kind: ErrApprovalRequired, Cause: fmt.Errorf("%s can't approve their own %s", req, what)}
+	}
+	return nil
+}

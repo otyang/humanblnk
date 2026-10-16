@@ -163,7 +163,7 @@ section('domain', 'What the domain layer adds', f'''
  ['Status', 'stored, not enforced', 'frozen, closed and frozen-ledger states refuse money on every movement'],
  ['Fees', 'none', 'every chargeable operation states its fee, or <code>Config.Fees</code> prices it'],
  ['Limits', 'none', 'per KYC tier and currency: per transaction, daily, monthly'],
- ['Approvals', 'none', 'closing an account and manual adjustments need an approver who isn’t the requester'],
+ ['Approvals', 'none', 'closing an account and manual adjustments need two people: <code>RequestedBy</code> and an <code>ApprovedBy</code> who is someone else'],
  ['Kinds of object', 'one balance type for everything', 'ledgers, customer accounts and house accounts are separate types; customer code and business operations are separate handles'],
  ['Chart of accounts', 'free-form <code>@</code> indicators', '<code>ledger.Chart</code>: each house account has a type and a normal side'],
  ['Previews', '<code>dry_run</code>', '<code>Quote*</code>: fee, total, balance after, and Blnk’s own yes/no'],
@@ -448,7 +448,7 @@ section('freeze', 'Freeze and close', f'''
 {code('freeze')}
 <p>A whole ledger can be frozen too. Then no money can leave any of its customer accounts, while deposits into them and postings to house accounts carry on:</p>
 {code('freezeledger')}
-<p><code>ops.CloseAccount</code> is final: a closed account is never reopened (open a new one). It needs a <code>Reason</code> and an <code>ApprovedBy</code> other than the requester, and refuses while anything is pending or scheduled, while a pot under the account is open, or while an escrow it pays into or out of still holds money. Then it moves any remaining balance to <code>SweepTo</code> and marks the account closed. A frozen account can still be closed, but nothing can be swept out of a frozen ledger, and a closed account can’t be frozen or unfrozen. Money sent to a closed account later (a late provider refund, say) is refused with <code>ErrAccountClosed</code>; hold it with <code>HoldInSuspense</code>, then claim it for the customer’s new account or return it to the provider.</p>
+<p><code>ops.CloseAccount</code> is final: a closed account is never reopened (open a new one). It needs a <code>Reason</code>, a <code>RequestedBy</code> and an <code>ApprovedBy</code> who is someone else, and refuses while anything is pending or scheduled, while a pot under the account is open, or while an escrow it pays into or out of still holds money. Then it moves any remaining balance to <code>SweepTo</code> and marks the account closed. A frozen account can still be closed, but nothing can be swept out of a frozen ledger, and a closed account can’t be frozen or unfrozen. Money sent to a closed account later (a late provider refund, say) is refused with <code>ErrAccountClosed</code>; hold it with <code>HoldInSuspense</code>, then claim it for the customer’s new account or return it to the provider.</p>
 <p>Each <code>Service</code> caches a ledger’s status for <code>Config.LedgerStatusTTL</code> (30 seconds by default), so a freeze made by another process applies within that time. Pending transactions created before the freeze can still be confirmed.</p>
 ''')
 

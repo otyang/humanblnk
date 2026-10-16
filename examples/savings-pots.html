@@ -207,7 +207,7 @@ fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.
 _, err = wallet.<span class="t">Cancel</span>(ctx, next.<span class="t">TransactionID</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;cancel a scheduled occurrence:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotPending</span>))
 
-_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead&quot;</span>,
+_, err = ops.<span class="t">CloseAccount</span>(ctx, adaNGN, ledger.<span class="t">CloseInput</span>{<span class="t">Reason</span>: <span class="s">&quot;customer request&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>, <span class="t">ApprovedBy</span>: <span class="s">&quot;ops_lead&quot;</span>,
 	<span class="t">SweepTo</span>: ledger.<span class="t">AccountID</span>(ledger.<span class="t">PayoutClearingAccount</span>)})
 fmt.<span class="t">Println</span>(<span class="s">&quot;close with a plan running:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrPendingActivity</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Schedule: ledger: invalid input: count must be between 1 and 120
