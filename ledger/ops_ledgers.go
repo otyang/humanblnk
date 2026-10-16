@@ -207,6 +207,9 @@ func (s opsAPI) ListLedgers(ctx context.Context, q LedgerQuery) (*LedgerPage, er
 // This module needs Blnk Core 0.15.4 or later.
 func (s *Service) Check(ctx context.Context) error {
 	const op = "ledger.Check"
+	if s.configErr != nil {
+		return &OpError{Op: op, Kind: ErrInvalidInput, Cause: s.configErr}
+	}
 	if _, err := s.c.Health(ctx); err != nil {
 		return &OpError{Op: op, Kind: ErrUnavailable, Cause: err}
 	}

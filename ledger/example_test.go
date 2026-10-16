@@ -105,7 +105,7 @@ func ExampleDisplayRule_Format() {
 	ngn, _ := ledger.ParseDecimal("100.5", "NGN", 100)
 	eth, _ := ledger.ParseDecimal("0.4567896", "ETH", 1_000_000_000_000_000_000)
 	fmt.Println(ledger.DisplayRule{Decimals: 2}.Format(ngn))
-	fmt.Println(ledger.BuiltinDisplay["ETH"].Format(eth))
+	fmt.Println(ledger.Currencies["ETH"].Display.Format(eth))
 	// Output:
 	// 100.50
 	// 0.456789

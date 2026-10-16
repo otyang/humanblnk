@@ -55,11 +55,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: stable
-      - name: Regenerate docs.html, CONTRACT.md and examples/
+      - name: Regenerate the currency list, docs.html, CONTRACT.md and examples/
         run: ./scripts/gendocs.sh
       - name: Check for changes
         run: |
-          if ! git diff --exit-code docs.html CONTRACT.md examples/ || [ -n "$(git status --porcelain examples/)" ]; then
+          if ! git diff --exit-code ledger/core_currency_data.go docs.html CONTRACT.md examples/ || [ -n "$(git status --porcelain examples/)" ]; then
             echo "Docs are stale. Run 'make docs' and commit the result."
             exit 1
           fi

@@ -16,16 +16,6 @@ type DisplayRule struct {
 	TrimZeros bool // drop trailing zeros instead of padding to Decimals
 }
 
-// BuiltinDisplay is used for currencies not in Config.Display. Currencies in
-// neither show every decimal place their precision has, padded (fiat style).
-var BuiltinDisplay = map[string]DisplayRule{
-	"BTC": {Decimals: 8, TrimZeros: true}, "LTC": {Decimals: 8, TrimZeros: true}, "BCH": {Decimals: 8, TrimZeros: true},
-	"ETH":  {Decimals: 6, TrimZeros: true},
-	"SOL":  {Decimals: 4, TrimZeros: true},
-	"TRX":  {Decimals: 6, TrimZeros: true},
-	"USDT": {Decimals: 2}, "USDC": {Decimals: 2}, // stablecoins read as money
-}
-
 // Format renders m by this rule. m must be resolved (PreciseAmount and
 // Precision set), as every Money the Service returns is.
 func (r DisplayRule) Format(m Money) string {
@@ -57,30 +47,6 @@ func (r DisplayRule) Format(m Money) string {
 		out = strings.TrimPrefix(out, "-") // no "-0.00"
 	}
 	return out
-}
-
-// DisplayRule returns the rule used for currency: Config.Display, then
-// BuiltinDisplay, then every decimal place of its precision, padded.
-func (s *Service) DisplayRule(currency string) DisplayRule {
-	cur := strings.ToUpper(currency)
-	if r, ok := s.cfg.Display[cur]; ok {
-		return r
-	}
-	if r, ok := BuiltinDisplay[cur]; ok {
-		return r
-	}
-	dp, _ := decimalPlaces(s.Precision(cur))
-	return DisplayRule{Decimals: dp}
-}
-
-// builtinRule is the display rule without a Service: BuiltinDisplay, then
-// every decimal place of the precision.
-func builtinRule(currency string, precision int64) DisplayRule {
-	if r, ok := BuiltinDisplay[currency]; ok {
-		return r
-	}
-	dp, _ := decimalPlaces(precision)
-	return DisplayRule{Decimals: dp}
 }
 
 // Display returns m formatted for people by its currency's rule.

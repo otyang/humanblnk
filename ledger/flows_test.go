@@ -734,7 +734,7 @@ func TestComputeFeeAndConvert(t *testing.T) {
 }
 
 func TestDisplay(t *testing.T) {
-	svc, _ := ledgertest.New(t, ledger.Config{Display: map[string]ledger.DisplayRule{"SOL": {Decimals: 2, TrimZeros: true}}})
+	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []ledger.Currency{{Code: "SOL", Display: ledger.DisplayRule{Decimals: 2, TrimZeros: true}}}})
 	for _, c := range []struct{ amount, cur, value, display string }{
 		{"100", "NGN", "100", "100.00"},
 		{"100.5", "USD", "100.5", "100.50"},
@@ -746,7 +746,7 @@ func TestDisplay(t *testing.T) {
 		{"0.456", "BTC", "0.456", "0.456"},
 		{"0.00000001", "BTC", "0.00000001", "0.00000001"},
 		{"0.0000009", "ETH", "0.0000009", "0"}, // below what is shown
-		{"3.999", "SOL", "3.999", "3.99"},      // Config.Display override
+		{"3.999", "SOL", "3.999", "3.99"},      // Config.Currencies override
 	} {
 		m, err := svc.Parse(c.amount, c.cur)
 		if err != nil {

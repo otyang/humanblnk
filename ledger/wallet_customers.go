@@ -39,6 +39,11 @@ func (s walletAPI) OpenCustomer(ctx context.Context, in CustomerInput) (*Custome
 	if len(in.Currencies) == 0 {
 		return nil, invalid(op, "at least one currency is required")
 	}
+	for _, cur := range in.Currencies {
+		if err := s.knownCurrency(op, cur); err != nil {
+			return nil, err // before the identity is created
+		}
+	}
 	typ := firstNonEmpty(in.Type, "individual")
 	if typ != "individual" && typ != "organization" {
 		return nil, invalid(op, "type must be individual or organization")

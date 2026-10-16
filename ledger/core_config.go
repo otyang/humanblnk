@@ -9,14 +9,19 @@ type Config struct {
 	// verifies it exists.
 	LedgerID LedgerID
 
-	// Display sets how amounts are shown to people per currency (Money.Display),
-	// e.g. {"ETH": {Decimals: 4, TrimZeros: true}}. Unlisted currencies use
-	// BuiltinDisplay, else every decimal place of their precision, padded.
-	Display map[string]DisplayRule
+	// Currencies changes built-in currencies (see Currencies) or adds new
+	// ones. Only the fields you set change: {Code: "ETH", Display:
+	// DisplayRule{Decimals: 4, TrimZeros: true}} keeps ETH's name, symbol and
+	// precision. A zero Display keeps the built-in one; for whole units only,
+	// use DisplayRule{Decimals: 0, TrimZeros: true}. A new code needs
+	// Precision; its Kind defaults to Fiat. Mistakes are reported by
+	// Service.Check.
+	Currencies []Currency
 
-	// Precisions maps currency → smallest-unit multiplier. Unlisted currencies use DefaultPrecision.
-	Precisions       map[string]int64
-	DefaultPrecision int64 // default 100
+	// UnknownCurrency says what happens to a code that is neither built in
+	// nor in Currencies. Default RefuseUnknown.
+	UnknownCurrency  UnknownCurrencyPolicy
+	DefaultPrecision int64 // precision for unknown codes under AllowUnknown; default 100
 
 	// House (GL) accounts. Defaults come from the chart of accounts in
 	// accounts.go. If you already have money on older indicators (e.g. "@Fees"),

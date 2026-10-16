@@ -69,6 +69,9 @@ type Service struct {
 	c   *blnk.Client
 	cfg Config
 
+	currencies map[string]Currency // built-in list merged with Config.Currencies, fixed at New
+	configErr  error               // mistakes in Config, reported by Check
+
 	ruleMu sync.Mutex
 	ruleID string // default reconciliation matching rule, created on first use
 
@@ -80,39 +83,18 @@ type Service struct {
 // New builds a Service. The client is shared and safe for concurrent use.
 func New(c *blnk.Client, cfg Config) *Service {
 	cfg.defaults()
-	return &Service{c: c, cfg: cfg}
-}
-
-// BuiltinPrecisions are used when Config.Precisions doesn't list a currency.
-// Fiat not listed here falls back to Config.DefaultPrecision (100 = 2 dp).
-//
-// Keep a currency's precision fixed once money has moved: Blnk sums
-// precise_amount on balances, so mixing precisions corrupts the totals.
-var BuiltinPrecisions = map[string]int64{
-	"BTC": 100_000_000, "LTC": 100_000_000, "BCH": 100_000_000,
-	"ETH":  1_000_000_000_000_000_000,
-	"SOL":  1_000_000_000,
-	"USDT": 1_000_000, "USDC": 1_000_000, "TRX": 1_000_000,
-	"JPY": 1, "KRW": 1, "XOF": 1, "XAF": 1, "UGX": 1, "RWF": 1,
-	"KWD": 1000, "BHD": 1000, "OMR": 1000, "TND": 1000,
-}
-
-// Precision returns the precision used for currency.
-func (s *Service) Precision(currency string) int64 {
-	cur := strings.ToUpper(currency)
-	if p, ok := s.cfg.Precisions[cur]; ok && p > 0 {
-		return p
-	}
-	if p, ok := BuiltinPrecisions[cur]; ok {
-		return p
-	}
-	return s.cfg.DefaultPrecision
+	s := &Service{c: c, cfg: cfg}
+	s.currencies, s.configErr = buildCurrencies(cfg.Currencies)
+	return s
 }
 
 // Parse converts a typed decimal ("0.456") to Money with both forms filled.
 func (s *Service) Parse(amount, currency string) (Money, error) {
 	if strings.TrimSpace(amount) == "" {
 		return Money{}, fmt.Errorf("%w: amount is required", ErrInvalidInput)
+	}
+	if err := s.knownCurrency("ledger.Parse", currency); err != nil {
+		return Money{}, err
 	}
 	m, err := Amount(amount, currency).resolve(s.Precision(currency))
 	if err != nil {
@@ -126,6 +108,11 @@ func (s *Service) Parse(amount, currency string) (Money, error) {
 // currency is used when m.Currency is empty (e.g. a fee written as Amount("1.50", "")).
 func (s *Service) resolve(op string, m Money, currency string) (Money, error) {
 	cur := strings.ToUpper(firstNonEmpty(m.Currency, currency))
+	if cur != "" {
+		if err := s.knownCurrency(op, cur); err != nil {
+			return Money{}, err
+		}
+	}
 	return s.resolveAt(op, m, cur, s.Precision(cur))
 }
 

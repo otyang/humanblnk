@@ -211,6 +211,9 @@ func (s *Service) openAccount(ctx context.Context, op string, in OpenAccountInpu
 	if strings.TrimSpace(in.Currency) == "" {
 		return nil, invalid(op, "currency is required")
 	}
+	if err := s.knownCurrency(op, in.Currency); err != nil {
+		return nil, err
+	}
 	if ledgerID == GeneralLedgerID {
 		return nil, &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf("%s holds house accounts; open customer accounts in your own ledger", ledgerID)}
 	}

@@ -12,8 +12,22 @@ change the API; such changes are listed under **Changed**.
   `ApprovedBy`, and the two must be different people. Before, leaving
   `RequestedBy` empty skipped the check, so one person could approve their
   own correction or closure.
+- Currencies are now a registry. `Config.Display`, `Config.Precisions`,
+  `BuiltinDisplay` and `BuiltinPrecisions` are replaced by `Config.Currencies`,
+  which changes built-in entries field by field or adds new codes, and the
+  built-in list `ledger.Currencies`. Precisions follow ISO 4217 minor units,
+  so codes that used to fall back to 100 now get their own: CLP, ISK, VND
+  and other zero-decimal currencies 1; IQD, JOD and LYD 1000.
+- Unknown currency codes are refused with `ErrInvalidInput` by `OpenAccount`,
+  `OpenCustomer`, `Parse` and every movement. Set
+  `Config.UnknownCurrency: ledger.AllowUnknown` for the old behaviour.
 
 ### Added
+- Built-in currencies: every current ISO 4217 code plus BTC, ETH, SOL, TRX,
+  LTC, BCH, XRP, ADA, DOGE, BNB, POL, USDT, USDC and DAI, each with a name,
+  symbol, kind, precision and display rule. Look them up with
+  `svc.Currency(code)` and list them with `svc.Currencies(kinds...)`.
+- `svc.Check` reports mistakes in `Config.Currencies`.
 - Example pages for every use case, in `examples/` and at
   https://otyang.github.io/humanblnk/examples/. Every sample on them runs in
   the test suite, and the output shown is what it printed.

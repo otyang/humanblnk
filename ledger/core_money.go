@@ -42,7 +42,7 @@ func Minor(precise int64, currency string) Money {
 
 // Precise builds a fully specified Money from a smallest-unit integer and
 // precision. Display follows the built-in rule for the currency; amounts the
-// Service returns use Config.Display instead.
+// Service returns follow Config.Currencies instead.
 func Precise(precise *big.Int, precision int64, currency string) Money {
 	m := Money{PreciseAmount: new(big.Int).Set(precise), Precision: precision, Currency: strings.ToUpper(currency)}
 	m.Value = formatDecimal(m.PreciseAmount, precision)

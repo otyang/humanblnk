@@ -1386,6 +1386,9 @@ type Service struct {
 	c   *blnk.Client
 	cfg Config
 
+	currencies map[string]Currency // built-in list merged with Config.Currencies, fixed at New
+	configErr  error               // mistakes in Config, reported by Check
+
 	ruleMu sync.Mutex
 	ruleID string // default reconciliation matching rule, created on first use
 
@@ -1401,14 +1404,19 @@ type Config struct {
 	// verifies it exists.
 	LedgerID LedgerID
 
-	// Display sets how amounts are shown to people per currency (Money.Display),
-	// e.g. {"ETH": {Decimals: 4, TrimZeros: true}}. Unlisted currencies use
-	// BuiltinDisplay, else every decimal place of their precision, padded.
-	Display map[string]DisplayRule
+	// Currencies changes built-in currencies (see Currencies) or adds new
+	// ones. Only the fields you set change: {Code: "ETH", Display:
+	// DisplayRule{Decimals: 4, TrimZeros: true}} keeps ETH's name, symbol and
+	// precision. A zero Display keeps the built-in one; for whole units only,
+	// use DisplayRule{Decimals: 0, TrimZeros: true}. A new code needs
+	// Precision; its Kind defaults to Fiat. Mistakes are reported by
+	// Service.Check.
+	Currencies []Currency
 
-	// Precisions maps currency → smallest-unit multiplier. Unlisted currencies use DefaultPrecision.
-	Precisions       map[string]int64
-	DefaultPrecision int64 // default 100
+	// UnknownCurrency says what happens to a code that is neither built in
+	// nor in Currencies. Default RefuseUnknown.
+	UnknownCurrency  UnknownCurrencyPolicy
+	DefaultPrecision int64 // precision for unknown codes under AllowUnknown; default 100
 
 	// House (GL) accounts. Defaults come from the chart of accounts in
 	// accounts.go. If you already have money on older indicators (e.g. "@Fees"),
@@ -1459,6 +1467,37 @@ type OpError struct {
 ## Other
 
 ```go
+// Currency is what humanblnk knows about a currency: its name and symbol for
+// people, its precision for Blnk and how its amounts are displayed.
+//
+// The built-in list is Currencies. Config.Currencies changes entries or adds
+// new ones; read the result with Service.Currency and Service.Currencies.
+type Currency struct {
+	Code   string       // "NGN", "BTC"
+	Name   string       // "Nigerian Naira"
+	Kind   CurrencyKind // Fiat, Crypto or Stablecoin
+	Symbol string       // "₦"; the code itself when there is no common symbol
+
+	// Precision is the smallest-unit multiplier, a power of ten: 100 for
+	// NGN (kobo), 100000000 for BTC (satoshi). Keep it fixed once money has
+	// moved: Blnk sums precise_amount on balances, so mixing precisions
+	// corrupts the totals.
+	Precision int64
+
+	// Display says how amounts are shown to people (Money.Display).
+	Display DisplayRule
+}
+
+// CurrencyKind groups currencies: fiat money, crypto currencies, and
+// stablecoins (crypto that tracks a fiat currency and reads like money).
+type CurrencyKind string
+
+const (
+	Fiat       CurrencyKind = "fiat"
+	Crypto     CurrencyKind = "crypto"
+	Stablecoin CurrencyKind = "stablecoin"
+)
+
 // ExchangeQuote previews Exchange: what is sold, bought and charged, and the
 // paying account's available balance after.
 type ExchangeQuote struct {
@@ -1475,6 +1514,20 @@ type ExchangeQuote struct {
 	Reason          error // why not, when !Allowed (ErrInsufficientFunds, ErrLimitExceeded, ErrAccountFrozen, ...)
 	CheckedByLedger bool  // true when Blnk dry-ran both legs
 }
+
+// UnknownCurrencyPolicy says what happens to a currency that is neither built
+// in nor in Config.Currencies.
+type UnknownCurrencyPolicy int
+
+const (
+	// RefuseUnknown (the default) refuses unknown currencies with
+	// ErrInvalidInput when opening accounts and parsing amounts, so a typo
+	// such as "NGM" can't open an account.
+	RefuseUnknown UnknownCurrencyPolicy = iota
+	// AllowUnknown accepts any code, with Config.DefaultPrecision and every
+	// decimal place of it shown, padded.
+	AllowUnknown
+)
 ```
 
 ## Constants
@@ -1585,16 +1638,10 @@ var (
 // owes you) unless listed here. Add your own indicators to it at start-up.
 var Chart = map[string]GLDef{
 
-// BuiltinDisplay is used for currencies not in Config.Display. Currencies in
-// neither show every decimal place their precision has, padded (fiat style).
-var BuiltinDisplay = map[string]DisplayRule{
-
-// BuiltinPrecisions are used when Config.Precisions doesn't list a currency.
-// Fiat not listed here falls back to Config.DefaultPrecision (100 = 2 dp).
-//
-// Keep a currency's precision fixed once money has moved: Blnk sums
-// precise_amount on balances, so mixing precisions corrupts the totals.
-var BuiltinPrecisions = map[string]int64{
+// Currencies lists every currency humanblnk knows without configuration:
+// every current ISO 4217 code, plus major crypto currencies and stablecoins.
+// Treat it as read-only; change or add currencies with Config.Currencies.
+var Currencies = map[string]Currency{
 
 // NoFee states that a transaction is deliberately free. Chargeable calls
 // (Deposit, Withdraw, Transfer, Exchange, Schedule, each Bulk item and the
@@ -1634,7 +1681,7 @@ func Minor(precise int64, currency string) Money
 
 // Precise builds a fully specified Money from a smallest-unit integer and
 // precision. Display follows the built-in rule for the currency; amounts the
-// Service returns use Config.Display instead.
+// Service returns follow Config.Currencies instead.
 func Precise(precise *big.Int, precision int64, currency string) Money
 
 // ParseDecimal resolves a decimal string against an explicit precision.

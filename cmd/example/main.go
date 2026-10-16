@@ -49,8 +49,7 @@ func main() {
 	}
 
 	service := ledger.New(client, ledger.Config{
-		LedgerID:   ledgerID,
-		Precisions: map[string]int64{"NGN": 100, "USD": 100, "BTC": 100_000_000},
+		LedgerID: ledgerID, // NGN, USD and BTC are built in; Config.Currencies adds others
 	})
 	must(service.Check(ctx))        // fails now if Config.LedgerID doesn't exist
 	var svc ledger.Ledger = service // depend on the interface; Service adds helpers like ComputeFee

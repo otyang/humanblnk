@@ -84,6 +84,8 @@ type (
 	Config                  = ledger.Config
 	ConfirmItem             = ledger.ConfirmItem
 	CreateLedgerInput       = ledger.CreateLedgerInput
+	Currency                = ledger.Currency
+	CurrencyKind            = ledger.CurrencyKind
 	Customer                = ledger.Customer
 	CustomerInput           = ledger.CustomerInput
 	DepositInput            = ledger.DepositInput
@@ -153,6 +155,7 @@ type (
 	SuspenseInput           = ledger.SuspenseInput
 	TransferInput           = ledger.TransferInput
 	TrialBalance            = ledger.TrialBalance
+	UnknownCurrencyPolicy   = ledger.UnknownCurrencyPolicy
 	Watch                   = ledger.Watch
 	WatchInput              = ledger.WatchInput
 	WebhookConfig           = ledger.WebhookConfig
@@ -199,13 +202,12 @@ var (
 
 // Values.
 var (
-	BuiltinDisplay    = ledger.BuiltinDisplay
-	BuiltinPrecisions = ledger.BuiltinPrecisions
-	Chart             = ledger.Chart
-	Daily             = ledger.Daily
-	Monthly           = ledger.Monthly
-	NoFee             = ledger.NoFee
-	Weekly            = ledger.Weekly
+	Chart      = ledger.Chart
+	Currencies = ledger.Currencies
+	Daily      = ledger.Daily
+	Monthly    = ledger.Monthly
+	NoFee      = ledger.NoFee
+	Weekly     = ledger.Weekly
 )
 
 // Constants: house accounts, kinds, statuses, events and options.
@@ -214,8 +216,10 @@ const (
 	AdjustDebit               = ledger.AdjustDebit
 	AdjustmentsAccount        = ledger.AdjustmentsAccount
 	All                       = ledger.All
+	AllowUnknown              = ledger.AllowUnknown
 	BankOperatingAccount      = ledger.BankOperatingAccount
 	CreditNormal              = ledger.CreditNormal
+	Crypto                    = ledger.Crypto
 	CustomerAccount           = ledger.CustomerAccount
 	DebitNormal               = ledger.DebitNormal
 	DepositClearingAccount    = ledger.DepositClearingAccount
@@ -243,6 +247,7 @@ const (
 	EventTransactionScheduled = ledger.EventTransactionScheduled
 	EventTransactionVoid      = ledger.EventTransactionVoid
 	FXPoolAccount             = ledger.FXPoolAccount
+	Fiat                      = ledger.Fiat
 	FeeDeposit                = ledger.FeeDeposit
 	FeeExchange               = ledger.FeeExchange
 	FeeIncomeAccount          = ledger.FeeIncomeAccount
@@ -261,10 +266,12 @@ const (
 	PayoutClearingAccount     = ledger.PayoutClearingAccount
 	PotAccount                = ledger.PotAccount
 	ProviderFeesAccount       = ledger.ProviderFeesAccount
+	RefuseUnknown             = ledger.RefuseUnknown
 	RoundDown                 = ledger.RoundDown
 	RoundHalfUp               = ledger.RoundHalfUp
 	RoundUp                   = ledger.RoundUp
 	SettlementCollection      = ledger.SettlementCollection
 	SettlementPayout          = ledger.SettlementPayout
+	Stablecoin                = ledger.Stablecoin
 	SuspenseAccount           = ledger.SuspenseAccount
 )

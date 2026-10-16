@@ -18,7 +18,7 @@
 <p class="crumb"><a href="index.html">Examples</a> · Setup and integration</p>
 <h1>Money and amounts</h1>
 <p class="lead">Pass amounts as the decimal the user typed. Every amount comes back exact, in both forms Blnk stores, with a display string for people.</p>
-<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#the-three-forms-of-an-amount">The three forms of an amount</a><a href="#which-one-to-use">Which one to use</a><a href="#amount-and-parse">Amount and Parse</a><a href="#integers-you-already-hold">Integers you already hold</a><a href="#rejected-amounts">Rejected amounts</a><a href="#fees-an-empty-currency">Fees: an empty currency</a><a href="#json">JSON</a><a href="#display">Display</a><a href="#precision-config-precisions">Precision: Config.Precisions</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#the-three-forms-of-an-amount">The three forms of an amount</a><a href="#which-one-to-use">Which one to use</a><a href="#amount-and-parse">Amount and Parse</a><a href="#integers-you-already-hold">Integers you already hold</a><a href="#rejected-amounts">Rejected amounts</a><a href="#fees-an-empty-currency">Fees: an empty currency</a><a href="#json">JSON</a><a href="#display">Display</a><a href="#currencies-svc-currency-and-svc-currencies">Currencies: svc.Currency and svc.Currencies</a><a href="#adding-and-changing-currencies-config-currencies">Adding and changing currencies: Config.Currencies</a><a href="#unknown-currencies">Unknown currencies</a><a href="#configuration-mistakes">Configuration mistakes</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
 
 <article>
 <h2 id="the-situation"><a href="#the-situation">The situation</a></h2>
@@ -78,7 +78,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;ParseDecimal:&quot;</sp
 <figure class="output"><figcaption>Output</figcaption><pre>Minor: 10500.75 10500.75
 Precise: 0.456 45600000 100000000 0.456
 ParseDecimal: 12.3456 123456 10000 12.3456</pre></figure>
-<p><code>Minor</code> leaves <code>Precision</code> and <code>Display</code> empty, and the call fills them from the currency. <code>Precise</code> and <code>ParseDecimal</code> set everything up front. Their <code>Display</code> follows the built-in rule for the currency, because they have no <code>Service</code> to read <code>Config.Display</code> from. A <code>Money</code> that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.</p>
+<p><code>Minor</code> leaves <code>Precision</code> and <code>Display</code> empty, and the call fills them from the currency. <code>Precise</code> and <code>ParseDecimal</code> set everything up front. Their <code>Display</code> follows the built-in rule for the currency, because they have no <code>Service</code> to read <code>Config.Currencies</code> from. A <code>Money</code> that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.</p>
 <h2 id="rejected-amounts"><a href="#rejected-amounts">Rejected amounts</a></h2>
 <figure class="code"><pre><code><span class="k">for</span> _, in := <span class="k">range</span> []<span class="b">string</span>{<span class="s">&quot;100.567&quot;</span>, <span class="s">&quot;1e3&quot;</span>, <span class="s">&quot;12abc&quot;</span>, <span class="s">&quot;&quot;</span>} {
 	_, err := svc.<span class="t">Parse</span>(in, <span class="s">&quot;NGN&quot;</span>)
@@ -145,13 +145,14 @@ posted: 0.1 10 100</pre></figure>
 <ul><li>On the way in, <code>amount</code> may be a string (<code>&quot;0.1&quot;</code>) or a bare number (<code>0.1</code>). A number is read from its literal text, never through <code>float64</code>.</li><li><code>currency</code> is upper-cased. <code>precise_amount</code> and <code>precision</code> are optional. When both <code>amount</code> and <code>precise_amount</code> are given, they must agree.</li><li><code>display</code> is ignored on the way in.</li></ul>
 <h2 id="display"><a href="#display">Display</a></h2>
 <p><code>Display</code> is cut, never rounded up, so a displayed balance can always be spent in full. The exact amount stays in <code>Value</code>.</p>
-<div class="tablewrap"><table><thead><tr><th>Currency</th><th>Rule</th><th>Example</th></tr></thead><tbody><tr><td>Fiat not listed below</td><td>every decimal place of its precision, padded</td><td><code>100.50</code> USD, <code>5000</code> JPY, <code>1.250</code> KWD</td></tr><tr><td><code>USDT</code>, <code>USDC</code></td><td>2 places, padded: stablecoins read as money</td><td><code>20.50</code></td></tr><tr><td><code>BTC</code>, <code>LTC</code>, <code>BCH</code></td><td>up to 8 places, trailing zeros dropped</td><td><code>0.5</code></td></tr><tr><td><code>ETH</code>, <code>TRX</code></td><td>up to 6 places, trailing zeros dropped</td><td><code>0.123456</code></td></tr><tr><td><code>SOL</code></td><td>up to 4 places, trailing zeros dropped</td><td><code>1.25</code></td></tr></tbody></table></div>
-<p>These are <code>ledger.BuiltinDisplay</code>. Change any currency with <code>Config.Display</code>, which takes a <code>DisplayRule</code> per currency.</p>
+<p>Every currency has a display rule. Fiat shows every decimal place its precision has, padded; crypto trims trailing zeros; stablecoins read as money:</p>
+<div class="tablewrap"><table><thead><tr><th>Currency</th><th>Rule</th><th>Example</th></tr></thead><tbody><tr><td>Fiat</td><td>every decimal place of its precision, padded</td><td><code>100.50</code> USD, <code>5000</code> JPY, <code>1.250</code> KWD</td></tr><tr><td><code>USDT</code>, <code>USDC</code>, <code>DAI</code></td><td>2 places, padded</td><td><code>20.50</code></td></tr><tr><td><code>BTC</code>, <code>LTC</code>, <code>BCH</code>, <code>DOGE</code></td><td>up to 8 places, trailing zeros dropped</td><td><code>0.5</code></td></tr><tr><td><code>ETH</code>, <code>BNB</code>, <code>POL</code>, <code>TRX</code>, <code>XRP</code>, <code>ADA</code></td><td>up to 6 places, trailing zeros dropped</td><td><code>0.123456</code></td></tr><tr><td><code>SOL</code></td><td>up to 4 places, trailing zeros dropped</td><td><code>1.25</code></td></tr></tbody></table></div>
+<p>Change any of them with <code>Config.Currencies</code>. Only the fields you set change, so <code>{Code: &quot;ETH&quot;, Display: ...}</code> keeps ETH's name, symbol and precision.</p>
 <figure class="code"><figcaption>Oja shows whole naira and 4 places of ETH</figcaption><pre><code>svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
 	<span class="t">LedgerID</span>: ledgerID,
-	<span class="t">Display</span>: <span class="k">map</span>[<span class="b">string</span>]ledger.<span class="t">DisplayRule</span>{
-		<span class="s">&quot;ETH&quot;</span>: {<span class="t">Decimals</span>: <span class="n">4</span>, <span class="t">TrimZeros</span>: <span class="b">true</span>}, <span class="c">// crypto style: cut to 4, drop trailing zeros</span>
-		<span class="s">&quot;NGN&quot;</span>: {<span class="t">Decimals</span>: <span class="n">0</span>},                  <span class="c">// whole naira on screen</span>
+	<span class="t">Currencies</span>: []ledger.<span class="t">Currency</span>{
+		{<span class="t">Code</span>: <span class="s">&quot;ETH&quot;</span>, <span class="t">Display</span>: ledger.<span class="t">DisplayRule</span>{<span class="t">Decimals</span>: <span class="n">4</span>, <span class="t">TrimZeros</span>: <span class="b">true</span>}}, <span class="c">// cut to 4, drop trailing zeros</span>
+		{<span class="t">Code</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">Display</span>: ledger.<span class="t">DisplayRule</span>{<span class="t">Decimals</span>: <span class="n">0</span>, <span class="t">TrimZeros</span>: <span class="b">true</span>}}, <span class="c">// whole naira on screen</span>
 	},
 })
 <span class="k">for</span> _, in := <span class="k">range</span> [][<span class="n">2</span>]<span class="b">string</span>{
@@ -172,35 +173,95 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;rule for ETH:&quot;</sp
 20.5         USDT Value=20.5         Display=20.50
 rule for ETH: {4 true} balance shows: 0</pre></figure>
 <div class="tablewrap"><table><thead><tr><th><code>DisplayRule</code> field</th><th>What it changes</th></tr></thead><tbody><tr><td><code>Decimals</code></td><td>the most decimal places shown, capped at the currency's precision</td></tr><tr><td><code>TrimZeros</code></td><td>drop trailing zeros instead of padding to <code>Decimals</code></td></tr></tbody></table></div>
-<p><code>svc.Display(m)</code> formats any resolved <code>Money</code>, and <code>svc.DisplayRule(currency)</code> says which rule applies: <code>Config.Display</code>, then <code>BuiltinDisplay</code>, then every decimal place, padded. A rule also works on its own:</p>
+<aside class="note">A zero <code>Display</code> means "keep the built-in rule". To show whole units only, write <code>DisplayRule{Decimals: 0, TrimZeros: true}</code>, as for NGN above.</aside>
+<p><code>svc.Display(m)</code> formats any resolved <code>Money</code>, and <code>svc.DisplayRule(currency)</code> says which rule applies. A rule also works on its own:</p>
 <figure class="code"><pre><code>eth, err := svc.<span class="t">Parse</span>(<span class="s">&quot;0.123456789&quot;</span>, <span class="s">&quot;ETH&quot;</span>)
 check(err)
 fiat := ledger.<span class="t">DisplayRule</span>{<span class="t">Decimals</span>: <span class="n">2</span>}
 crypto := ledger.<span class="t">DisplayRule</span>{<span class="t">Decimals</span>: <span class="n">6</span>, <span class="t">TrimZeros</span>: <span class="b">true</span>}
-fmt.<span class="t">Println</span>(fiat.<span class="t">Format</span>(eth), crypto.<span class="t">Format</span>(eth), ledger.<span class="t">BuiltinDisplay</span>[<span class="s">&quot;ETH&quot;</span>].<span class="t">Format</span>(eth))</code></pre></figure>
+fmt.<span class="t">Println</span>(fiat.<span class="t">Format</span>(eth), crypto.<span class="t">Format</span>(eth), ledger.<span class="t">Currencies</span>[<span class="s">&quot;ETH&quot;</span>].<span class="t">Display</span>.<span class="t">Format</span>(eth))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>0.12 0.123456 0.123456</pre></figure>
-<h2 id="precision-config-precisions"><a href="#precision-config-precisions">Precision: Config.Precisions</a></h2>
-<p>Each currency has a precision, the number of smallest units in one whole unit.</p>
-<div class="tablewrap"><table><thead><tr><th>Currencies</th><th>Precision</th></tr></thead><tbody><tr><td><code>BTC</code>, <code>LTC</code>, <code>BCH</code></td><td>100000000 (8 places)</td></tr><tr><td><code>ETH</code></td><td>1000000000000000000 (18 places)</td></tr><tr><td><code>SOL</code></td><td>1000000000 (9 places)</td></tr><tr><td><code>USDT</code>, <code>USDC</code>, <code>TRX</code></td><td>1000000 (6 places)</td></tr><tr><td><code>JPY</code>, <code>KRW</code>, <code>XOF</code>, <code>XAF</code>, <code>UGX</code>, <code>RWF</code></td><td>1 (no decimals)</td></tr><tr><td><code>KWD</code>, <code>BHD</code>, <code>OMR</code>, <code>TND</code></td><td>1000 (3 places)</td></tr><tr><td>everything else</td><td><code>Config.DefaultPrecision</code>, default 100</td></tr></tbody></table></div>
-<p>These are <code>ledger.BuiltinPrecisions</code>. Add or override currencies with <code>Config.Precisions</code>. Each value must be a power of 10.</p>
-<figure class="code"><figcaption>Oja adds its own loyalty points, OJA, at 4 places</figcaption><pre><code>svc := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
-	<span class="t">LedgerID</span>:         ledgerID,
-	<span class="t">Precisions</span>:       <span class="k">map</span>[<span class="b">string</span>]<span class="b">int64</span>{<span class="s">&quot;OJA&quot;</span>: <span class="n">10000</span>, <span class="s">&quot;NGN&quot;</span>: <span class="n">100</span>}, <span class="c">// your own points token</span>
-	<span class="t">DefaultPrecision</span>: <span class="n">100</span>,                                        <span class="c">// the default</span>
+<h2 id="currencies-svc-currency-and-svc-currencies"><a href="#currencies-svc-currency-and-svc-currencies">Currencies: svc.Currency and svc.Currencies</a></h2>
+<p>humanblnk knows 179 currencies without any configuration: every current ISO 4217 code, plus BTC, ETH, SOL, TRX, LTC, BCH, XRP, ADA, DOGE, BNB, POL and the stablecoins USDT, USDC and DAI. Each has a code, a name, a symbol, a kind (<code>ledger.Fiat</code>, <code>ledger.Crypto</code> or <code>ledger.Stablecoin</code>), a precision and a display rule. The built-in list is <code>ledger.Currencies</code>.</p>
+<p>Read them through the Service, which also sees what <code>Config.Currencies</code> changed. Use them to fill a currency picker, or to show a balance with its name and symbol.</p>
+<figure class="code"><figcaption>Look up naira and bitcoin, and list the stablecoins</figcaption><pre><code>ngn, ok := svc.<span class="t">Currency</span>(<span class="s">&quot;ngn&quot;</span>) <span class="c">// any case</span>
+fmt.<span class="t">Println</span>(ok, ngn.<span class="t">Code</span>, ngn.<span class="t">Name</span>, ngn.<span class="t">Symbol</span>, ngn.<span class="t">Kind</span>, ngn.<span class="t">Precision</span>, ngn.<span class="t">Display</span>)
+
+btc, _ := svc.<span class="t">Currency</span>(<span class="s">&quot;BTC&quot;</span>)
+fmt.<span class="t">Println</span>(btc.<span class="t">Name</span>, btc.<span class="t">Symbol</span>, btc.<span class="t">Kind</span>, btc.<span class="t">Precision</span>, btc.<span class="t">Display</span>)
+
+fmt.<span class="t">Println</span>(<span class="s">&quot;fiat:&quot;</span>, <span class="b">len</span>(svc.<span class="t">Currencies</span>(ledger.<span class="t">Fiat</span>)), <span class="s">&quot;all:&quot;</span>, <span class="b">len</span>(svc.<span class="t">Currencies</span>()))
+<span class="k">for</span> _, c := <span class="k">range</span> svc.<span class="t">Currencies</span>(ledger.<span class="t">Stablecoin</span>) {
+	fmt.<span class="t">Println</span>(<span class="s">&quot; &quot;</span>, c.<span class="t">Code</span>, c.<span class="t">Name</span>)
+}
+
+_, ok = svc.<span class="t">Currency</span>(<span class="s">&quot;NGM&quot;</span>) <span class="c">// a typo</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;NGM known:&quot;</span>, ok)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true NGN Nigerian Naira ₦ fiat 100 {2 false}
+Bitcoin ₿ crypto 100000000 {8 true}
+fiat: 165 all: 179
+  DAI Dai
+  USDC USD Coin
+  USDT Tether USD
+NGM known: false</pre></figure>
+<ul><li>Balances don't carry the name or symbol: look them up with <code>svc.Currency(acct.Currency)</code>.</li><li><code>svc.Currencies()</code> returns them all; pass kinds to filter. The list is sorted by code.</li><li>Fiat precisions are the ISO 4217 minor units: 100 for NGN and USD, 1 for JPY and XOF, 1000 for KWD. Crypto precisions are the chain's smallest unit: 100000000 for BTC (satoshi), 10¹⁸ for ETH (wei).</li></ul>
+<h2 id="adding-and-changing-currencies-config-currencies"><a href="#adding-and-changing-currencies-config-currencies">Adding and changing currencies: Config.Currencies</a></h2>
+<p>Each precision must be a power of 10. A new code needs <code>Precision</code>; its <code>Kind</code> defaults to <code>ledger.Fiat</code> and its display to every decimal place, padded.</p>
+<figure class="code"><figcaption>Oja adds its own loyalty points, OJA, at 4 places, and renames USDT</figcaption><pre><code>svc = ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
+	<span class="t">LedgerID</span>: ledgerID,
+	<span class="t">Currencies</span>: []ledger.<span class="t">Currency</span>{
+		<span class="c">// A new code: Precision is required, Kind defaults to Fiat.</span>
+		{<span class="t">Code</span>: <span class="s">&quot;OJA&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Oja Points&quot;</span>, <span class="t">Symbol</span>: <span class="s">&quot;pts&quot;</span>, <span class="t">Precision</span>: <span class="n">10000</span>},
+		<span class="c">// A built-in one: only the fields you set change.</span>
+		{<span class="t">Code</span>: <span class="s">&quot;USDT&quot;</span>, <span class="t">Name</span>: <span class="s">&quot;Tether&quot;</span>},
+	},
 })
-fmt.<span class="t">Println</span>(<span class="s">&quot;OJA:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;OJA&quot;</span>), <span class="s">&quot;BTC:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;BTC&quot;</span>),
-	<span class="s">&quot;JPY:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;JPY&quot;</span>), <span class="s">&quot;GHS:&quot;</span>, svc.<span class="t">Precision</span>(<span class="s">&quot;GHS&quot;</span>))
-fmt.<span class="t">Println</span>(<span class="s">&quot;built in for ETH:&quot;</span>, ledger.<span class="t">BuiltinPrecisions</span>[<span class="s">&quot;ETH&quot;</span>])
+oja, _ := svc.<span class="t">Currency</span>(<span class="s">&quot;OJA&quot;</span>)
+usdt, _ := svc.<span class="t">Currency</span>(<span class="s">&quot;USDT&quot;</span>)
+fmt.<span class="t">Println</span>(oja.<span class="t">Name</span>, oja.<span class="t">Kind</span>, oja.<span class="t">Precision</span>, oja.<span class="t">Display</span>)
+fmt.<span class="t">Println</span>(usdt.<span class="t">Name</span>, usdt.<span class="t">Precision</span>, usdt.<span class="t">Display</span>)
 
 pts, err := svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;OJA&quot;</span>})
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;account precision:&quot;</span>, pts.<span class="t">Precision</span>, <span class="s">&quot;shows:&quot;</span>, pts.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>OJA: 10000 BTC: 100000000 JPY: 1 GHS: 100
-built in for ETH: 1000000000000000000
+<figure class="output"><figcaption>Output</figcaption><pre>Oja Points fiat 10000 {4 false}
+Tether 1000000 {2 false}
 account precision: 10000 shows: 0.0000</pre></figure>
 <aside class="warn">Keep a currency's precision fixed once money has moved. Blnk sums <code>precise_amount</code> on balances, so mixing precisions corrupts the totals.</aside>
+<h2 id="unknown-currencies"><a href="#unknown-currencies">Unknown currencies</a></h2>
+<p>A code that is neither built in nor in <code>Config.Currencies</code> is refused with <code>ErrInvalidInput</code> when opening accounts and parsing amounts, so a typo can't open an account. Set <code>Config.UnknownCurrency: ledger.AllowUnknown</code> to accept any code at <code>Config.DefaultPrecision</code> (default 100).</p>
+<figure class="code"><pre><code>_, err = svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGM&quot;</span>})
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
+
+_, err = svc.<span class="t">Parse</span>(<span class="s">&quot;100&quot;</span>, <span class="s">&quot;NGM&quot;</span>)
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+
+open := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{<span class="t">LedgerID</span>: ledgerID, <span class="t">UnknownCurrency</span>: ledger.<span class="t">AllowUnknown</span>})
+acc, err := open.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGM&quot;</span>})
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;allowed:&quot;</span>, acc.<span class="t">Currency</span>, acc.<span class="t">Precision</span>) <span class="c">// Config.DefaultPrecision</span></code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.OpenAccount: ledger: invalid input: unknown currency &quot;NGM&quot;: add it to Config.Currencies
+true
+allowed: NGM 100</pre></figure>
+<h2 id="configuration-mistakes"><a href="#configuration-mistakes">Configuration mistakes</a></h2>
+<p>Mistakes in <code>Config.Currencies</code> don't stop <code>ledger.New</code>. The bad entries are left out and <code>svc.Check</code> reports all of them, so call it at start-up.</p>
+<figure class="code"><pre><code>bad := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
+	<span class="t">LedgerID</span>: ledgerID,
+	<span class="t">Currencies</span>: []ledger.<span class="t">Currency</span>{
+		{<span class="t">Code</span>: <span class="s">&quot;GEM&quot;</span>},                 <span class="c">// new, but no Precision</span>
+		{<span class="t">Code</span>: <span class="s">&quot;NGN&quot;</span>, <span class="t">Precision</span>: <span class="n">250</span>}, <span class="c">// not a power of ten</span>
+		{<span class="t">Code</span>: <span class="s">&quot;BTC&quot;</span>, <span class="t">Kind</span>: <span class="s">&quot;metal&quot;</span>},  <span class="c">// not a kind</span>
+	},
+})
+err = bad.<span class="t">Check</span>(ctx) <span class="c">// at start-up</span>
+fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>))
+fmt.<span class="t">Println</span>(err)</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true
+ledger.Check: ledger: invalid input: Config.Currencies[0] GEM: Precision is required for a currency that isn&#x27;t built in
+Config.Currencies[1] NGN: Precision 250 is not a power of ten
+Config.Currencies[2] BTC: unknown Kind &quot;metal&quot;</pre></figure>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
-<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>more decimals than the currency allows; exponent notation; not a number; a fee in another currency; a negative fee; a zero or negative amount; an empty amount, also in <code>svc.Parse</code> and <code>ParseDecimal</code>; <code>Value</code> and <code>PreciseAmount</code> disagree</td><td>show the user the allowed format, e.g. two decimal places for NGN</td></tr><tr><td><code>ErrInvalidInput</code></td><td>a precision that isn't a power of 10</td><td>fix <code>Config.Precisions</code> or the <code>Precise</code> / <code>ParseDecimal</code> call</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td>more decimals than the currency allows; exponent notation; not a number; a fee in another currency; a negative fee; a zero or negative amount; an empty amount, also in <code>svc.Parse</code> and <code>ParseDecimal</code>; <code>Value</code> and <code>PreciseAmount</code> disagree</td><td>show the user the allowed format, e.g. two decimal places for NGN</td></tr><tr><td><code>ErrInvalidInput</code></td><td>an unknown currency (see above)</td><td>add it to <code>Config.Currencies</code>, or fix the typo</td></tr><tr><td><code>ErrInvalidInput</code></td><td>a precision that isn't a power of 10</td><td>fix <code>Config.Currencies</code> or the <code>Precise</code> / <code>ParseDecimal</code> call</td></tr><tr><td><code>ErrInvalidInput</code> from <code>Check</code></td><td>a mistake in <code>Config.Currencies</code></td><td>fix the entries the message names</td></tr></tbody></table></div>
 <h2 id="related"><a href="#related">Related</a></h2>
 <ul><li><a href="fees.html">Fees</a>: price fees with <code>Config.Fees</code> and <code>ComputeFee</code>.</li><li><a href="currency-exchange.html">Currency exchange</a>: rates and rounding between currencies.</li><li><a href="setup.html">Install and connect</a>: every <code>Config</code> field.</li></ul>
 </article>

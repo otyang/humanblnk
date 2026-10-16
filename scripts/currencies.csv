@@ -1,0 +1,189 @@
+# Currencies built into humanblnk: scripts/gencurrencies.py turns this file into
+# ledger/core_currency_data.go (run `make docs`). Edit here, not there.
+#
+# Fiat: every current ISO 4217 code. decimals = ISO 4217 minor units
+# (github.com/bojanz/currency v1.5.0); name and symbol from Unicode CLDR 48.2
+# (en: the narrow symbol where there is one, else the standard symbol).
+# Crypto and stablecoins: decimals = the chain's smallest unit; display = how
+# many places people are shown (cut, never rounded up); trim drops trailing zeros.
+#
+# code,kind,decimals,display,trim,symbol,name
+AED,fiat,2,2,0,AED,United Arab Emirates Dirham
+AFN,fiat,2,2,0,؋,Afghan Afghani
+ALL,fiat,2,2,0,ALL,Albanian Lek
+AMD,fiat,2,2,0,֏,Armenian Dram
+AOA,fiat,2,2,0,Kz,Angolan Kwanza
+ARS,fiat,2,2,0,$,Argentine Peso
+AUD,fiat,2,2,0,$,Australian Dollar
+AWG,fiat,2,2,0,AWG,Aruban Florin
+AZN,fiat,2,2,0,₼,Azerbaijani Manat
+BAM,fiat,2,2,0,KM,Bosnia-Herzegovina Convertible Mark
+BBD,fiat,2,2,0,$,Barbadian Dollar
+BDT,fiat,2,2,0,৳,Bangladeshi Taka
+BHD,fiat,3,3,0,BHD,Bahraini Dinar
+BIF,fiat,0,0,0,BIF,Burundian Franc
+BMD,fiat,2,2,0,$,Bermudan Dollar
+BND,fiat,2,2,0,$,Brunei Dollar
+BOB,fiat,2,2,0,Bs,Bolivian Boliviano
+BOV,fiat,2,2,0,BOV,Bolivian Mvdol
+BRL,fiat,2,2,0,R$,Brazilian Real
+BSD,fiat,2,2,0,$,Bahamian Dollar
+BTN,fiat,2,2,0,BTN,Bhutanese Ngultrum
+BWP,fiat,2,2,0,P,Botswanan Pula
+BYN,fiat,2,2,0,BYN,Belarusian Ruble
+BZD,fiat,2,2,0,$,Belize Dollar
+CAD,fiat,2,2,0,$,Canadian Dollar
+CDF,fiat,2,2,0,CDF,Congolese Franc
+CHE,fiat,2,2,0,CHE,WIR Euro
+CHF,fiat,2,2,0,CHF,Swiss Franc
+CHW,fiat,2,2,0,CHW,WIR Franc
+CLF,fiat,4,4,0,CLF,Chilean Unit of Account (UF)
+CLP,fiat,0,0,0,$,Chilean Peso
+CNY,fiat,2,2,0,¥,Chinese Yuan
+COP,fiat,2,2,0,$,Colombian Peso
+COU,fiat,2,2,0,COU,Colombian Real Value Unit
+CRC,fiat,2,2,0,₡,Costa Rican Colón
+CUP,fiat,2,2,0,$,Cuban Peso
+CVE,fiat,2,2,0,CVE,Cape Verdean Escudo
+CZK,fiat,2,2,0,Kč,Czech Koruna
+DJF,fiat,0,0,0,DJF,Djiboutian Franc
+DKK,fiat,2,2,0,kr,Danish Krone
+DOP,fiat,2,2,0,$,Dominican Peso
+DZD,fiat,2,2,0,DZD,Algerian Dinar
+EGP,fiat,2,2,0,E£,Egyptian Pound
+ERN,fiat,2,2,0,ERN,Eritrean Nakfa
+ETB,fiat,2,2,0,ETB,Ethiopian Birr
+EUR,fiat,2,2,0,€,Euro
+FJD,fiat,2,2,0,$,Fijian Dollar
+FKP,fiat,2,2,0,£,Falkland Islands Pound
+GBP,fiat,2,2,0,£,British Pound
+GEL,fiat,2,2,0,₾,Georgian Lari
+GHS,fiat,2,2,0,GH₵,Ghanaian Cedi
+GIP,fiat,2,2,0,£,Gibraltar Pound
+GMD,fiat,2,2,0,GMD,Gambian Dalasi
+GNF,fiat,0,0,0,FG,Guinean Franc
+GTQ,fiat,2,2,0,Q,Guatemalan Quetzal
+GYD,fiat,2,2,0,$,Guyanaese Dollar
+HKD,fiat,2,2,0,$,Hong Kong Dollar
+HNL,fiat,2,2,0,L,Honduran Lempira
+HTG,fiat,2,2,0,HTG,Haitian Gourde
+HUF,fiat,2,2,0,Ft,Hungarian Forint
+IDR,fiat,2,2,0,Rp,Indonesian Rupiah
+ILS,fiat,2,2,0,₪,Israeli New Shekel
+INR,fiat,2,2,0,₹,Indian Rupee
+IQD,fiat,3,3,0,IQD,Iraqi Dinar
+IRR,fiat,2,2,0,IRR,Iranian Rial
+ISK,fiat,0,0,0,kr,Icelandic Króna
+JMD,fiat,2,2,0,$,Jamaican Dollar
+JOD,fiat,3,3,0,JOD,Jordanian Dinar
+JPY,fiat,0,0,0,¥,Japanese Yen
+KES,fiat,2,2,0,KES,Kenyan Shilling
+KGS,fiat,2,2,0,⃀,Kyrgyz Som
+KHR,fiat,2,2,0,៛,Cambodian Riel
+KMF,fiat,0,0,0,CF,Comorian Franc
+KPW,fiat,2,2,0,₩,North Korean Won
+KRW,fiat,0,0,0,₩,South Korean Won
+KWD,fiat,3,3,0,KWD,Kuwaiti Dinar
+KYD,fiat,2,2,0,$,Cayman Islands Dollar
+KZT,fiat,2,2,0,₸,Kazakhstani Tenge
+LAK,fiat,2,2,0,₭,Laotian Kip
+LBP,fiat,2,2,0,L£,Lebanese Pound
+LKR,fiat,2,2,0,Rs,Sri Lankan Rupee
+LRD,fiat,2,2,0,$,Liberian Dollar
+LSL,fiat,2,2,0,LSL,Lesotho Loti
+LYD,fiat,3,3,0,LYD,Libyan Dinar
+MAD,fiat,2,2,0,MAD,Moroccan Dirham
+MDL,fiat,2,2,0,MDL,Moldovan Leu
+MGA,fiat,2,2,0,Ar,Malagasy Ariary
+MKD,fiat,2,2,0,MKD,Macedonian Denar
+MMK,fiat,2,2,0,K,Myanmar Kyat
+MNT,fiat,2,2,0,₮,Mongolian Tugrik
+MOP,fiat,2,2,0,MOP,Macanese Pataca
+MRU,fiat,2,2,0,MRU,Mauritanian Ouguiya
+MUR,fiat,2,2,0,Rs,Mauritian Rupee
+MVR,fiat,2,2,0,MVR,Maldivian Rufiyaa
+MWK,fiat,2,2,0,MWK,Malawian Kwacha
+MXN,fiat,2,2,0,$,Mexican Peso
+MXV,fiat,2,2,0,MXV,Mexican Investment Unit
+MYR,fiat,2,2,0,RM,Malaysian Ringgit
+MZN,fiat,2,2,0,MZN,Mozambican Metical
+NAD,fiat,2,2,0,$,Namibian Dollar
+NGN,fiat,2,2,0,₦,Nigerian Naira
+NIO,fiat,2,2,0,C$,Nicaraguan Córdoba
+NOK,fiat,2,2,0,kr,Norwegian Krone
+NPR,fiat,2,2,0,Rs,Nepalese Rupee
+NZD,fiat,2,2,0,$,New Zealand Dollar
+OMR,fiat,3,3,0,OMR,Omani Rial
+PAB,fiat,2,2,0,PAB,Panamanian Balboa
+PEN,fiat,2,2,0,PEN,Peruvian Sol
+PGK,fiat,2,2,0,PGK,Papua New Guinean Kina
+PHP,fiat,2,2,0,₱,Philippine Peso
+PKR,fiat,2,2,0,Rs,Pakistani Rupee
+PLN,fiat,2,2,0,zł,Polish Zloty
+PYG,fiat,0,0,0,₲,Paraguayan Guarani
+QAR,fiat,2,2,0,QAR,Qatari Riyal
+RON,fiat,2,2,0,lei,Romanian Leu
+RSD,fiat,2,2,0,RSD,Serbian Dinar
+RUB,fiat,2,2,0,₽,Russian Ruble
+RWF,fiat,0,0,0,RF,Rwandan Franc
+SAR,fiat,2,2,0,SAR,Saudi Riyal
+SBD,fiat,2,2,0,$,Solomon Islands Dollar
+SCR,fiat,2,2,0,SCR,Seychellois Rupee
+SDG,fiat,2,2,0,SDG,Sudanese Pound
+SEK,fiat,2,2,0,kr,Swedish Krona
+SGD,fiat,2,2,0,$,Singapore Dollar
+SHP,fiat,2,2,0,£,St. Helena Pound
+SLE,fiat,2,2,0,SLE,Sierra Leonean Leone
+SOS,fiat,2,2,0,SOS,Somali Shilling
+SRD,fiat,2,2,0,$,Surinamese Dollar
+SSP,fiat,2,2,0,£,South Sudanese Pound
+STN,fiat,2,2,0,Db,São Tomé & Príncipe Dobra
+SVC,fiat,2,2,0,SVC,Salvadoran Colón
+SYP,fiat,2,2,0,£,Syrian Pound
+SZL,fiat,2,2,0,SZL,Swazi Lilangeni
+THB,fiat,2,2,0,฿,Thai Baht
+TJS,fiat,2,2,0,TJS,Tajikistani Somoni
+TMT,fiat,2,2,0,TMT,Turkmenistani Manat
+TND,fiat,3,3,0,TND,Tunisian Dinar
+TOP,fiat,2,2,0,T$,Tongan Paʻanga
+TRY,fiat,2,2,0,₺,Turkish Lira
+TTD,fiat,2,2,0,$,Trinidad & Tobago Dollar
+TWD,fiat,2,2,0,$,New Taiwan Dollar
+TZS,fiat,2,2,0,TZS,Tanzanian Shilling
+UAH,fiat,2,2,0,₴,Ukrainian Hryvnia
+UGX,fiat,0,0,0,UGX,Ugandan Shilling
+USD,fiat,2,2,0,$,US Dollar
+USN,fiat,2,2,0,USN,US Dollar (Next day)
+UYI,fiat,0,0,0,UYI,Uruguayan Peso (Indexed Units)
+UYU,fiat,2,2,0,$,Uruguayan Peso
+UYW,fiat,4,4,0,UYW,Uruguayan Nominal Wage Index Unit
+UZS,fiat,2,2,0,UZS,Uzbekistani Som
+VED,fiat,2,2,0,VED,Bolívar Soberano
+VES,fiat,2,2,0,VES,Venezuelan Bolívar
+VND,fiat,0,0,0,₫,Vietnamese Dong
+VUV,fiat,0,0,0,VUV,Vanuatu Vatu
+WST,fiat,2,2,0,WST,Samoan Tala
+XAD,fiat,2,2,0,XAD,Arab Accounting Dinar
+XAF,fiat,0,0,0,FCFA,Central African CFA Franc
+XCD,fiat,2,2,0,$,East Caribbean Dollar
+XCG,fiat,2,2,0,Cg.,Caribbean guilder
+XOF,fiat,0,0,0,F CFA,West African CFA Franc
+XPF,fiat,0,0,0,CFPF,CFP Franc
+YER,fiat,2,2,0,YER,Yemeni Rial
+ZAR,fiat,2,2,0,R,South African Rand
+ZMW,fiat,2,2,0,ZK,Zambian Kwacha
+ZWG,fiat,2,2,0,ZWG,Zimbabwean Gold
+BTC,crypto,8,8,1,₿,Bitcoin
+ETH,crypto,18,6,1,Ξ,Ether
+USDT,stablecoin,6,2,0,USDT,Tether USD
+USDC,stablecoin,6,2,0,USDC,USD Coin
+DAI,stablecoin,18,2,0,DAI,Dai
+SOL,crypto,9,4,1,SOL,Solana
+TRX,crypto,6,6,1,TRX,TRON
+LTC,crypto,8,8,1,LTC,Litecoin
+BCH,crypto,8,8,1,BCH,Bitcoin Cash
+XRP,crypto,6,6,1,XRP,XRP
+ADA,crypto,6,6,1,ADA,Cardano
+DOGE,crypto,8,8,1,DOGE,Dogecoin
+BNB,crypto,18,6,1,BNB,BNB
+POL,crypto,18,6,1,POL,Polygon

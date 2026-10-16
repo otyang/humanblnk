@@ -49,7 +49,7 @@ Only `precise_amount` and `precision` are sent to Blnk, never its float `amount`
 
 @sample other-forms
 
-`Minor` leaves `Precision` and `Display` empty, and the call fills them from the currency. `Precise` and `ParseDecimal` set everything up front. Their `Display` follows the built-in rule for the currency, because they have no `Service` to read `Config.Display` from. A `Money` that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.
+`Minor` leaves `Precision` and `Display` empty, and the call fills them from the currency. `Precise` and `ParseDecimal` set everything up front. Their `Display` follows the built-in rule for the currency, because they have no `Service` to read `Config.Currencies` from. A `Money` that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.
 
 ## Rejected amounts
 
@@ -89,15 +89,17 @@ A fee is always in the transaction's currency. Write it with an empty currency a
 
 `Display` is cut, never rounded up, so a displayed balance can always be spent in full. The exact amount stays in `Value`.
 
+Every currency has a display rule. Fiat shows every decimal place its precision has, padded; crypto trims trailing zeros; stablecoins read as money:
+
 | Currency | Rule | Example |
 |---|---|---|
-| Fiat not listed below | every decimal place of its precision, padded | `100.50` USD, `5000` JPY, `1.250` KWD |
-| `USDT`, `USDC` | 2 places, padded: stablecoins read as money | `20.50` |
-| `BTC`, `LTC`, `BCH` | up to 8 places, trailing zeros dropped | `0.5` |
-| `ETH`, `TRX` | up to 6 places, trailing zeros dropped | `0.123456` |
+| Fiat | every decimal place of its precision, padded | `100.50` USD, `5000` JPY, `1.250` KWD |
+| `USDT`, `USDC`, `DAI` | 2 places, padded | `20.50` |
+| `BTC`, `LTC`, `BCH`, `DOGE` | up to 8 places, trailing zeros dropped | `0.5` |
+| `ETH`, `BNB`, `POL`, `TRX`, `XRP`, `ADA` | up to 6 places, trailing zeros dropped | `0.123456` |
 | `SOL` | up to 4 places, trailing zeros dropped | `1.25` |
 
-These are `ledger.BuiltinDisplay`. Change any currency with `Config.Display`, which takes a `DisplayRule` per currency.
+Change any of them with `Config.Currencies`. Only the fields you set change, so `{Code: "ETH", Display: ...}` keeps ETH's name, symbol and precision.
 
 @sample display | Oja shows whole naira and 4 places of ETH
 
@@ -106,36 +108,52 @@ These are `ledger.BuiltinDisplay`. Change any currency with `Config.Display`, wh
 | `Decimals` | the most decimal places shown, capped at the currency's precision |
 | `TrimZeros` | drop trailing zeros instead of padding to `Decimals` |
 
-`svc.Display(m)` formats any resolved `Money`, and `svc.DisplayRule(currency)` says which rule applies: `Config.Display`, then `BuiltinDisplay`, then every decimal place, padded. A rule also works on its own:
+> note: A zero `Display` means "keep the built-in rule". To show whole units only, write `DisplayRule{Decimals: 0, TrimZeros: true}`, as for NGN above.
+
+`svc.Display(m)` formats any resolved `Money`, and `svc.DisplayRule(currency)` says which rule applies. A rule also works on its own:
 
 @sample format
 
-## Precision: Config.Precisions
+## Currencies: svc.Currency and svc.Currencies
 
-Each currency has a precision, the number of smallest units in one whole unit.
+humanblnk knows 179 currencies without any configuration: every current ISO 4217 code, plus BTC, ETH, SOL, TRX, LTC, BCH, XRP, ADA, DOGE, BNB, POL and the stablecoins USDT, USDC and DAI. Each has a code, a name, a symbol, a kind (`ledger.Fiat`, `ledger.Crypto` or `ledger.Stablecoin`), a precision and a display rule. The built-in list is `ledger.Currencies`.
 
-| Currencies | Precision |
-|---|---|
-| `BTC`, `LTC`, `BCH` | 100000000 (8 places) |
-| `ETH` | 1000000000000000000 (18 places) |
-| `SOL` | 1000000000 (9 places) |
-| `USDT`, `USDC`, `TRX` | 1000000 (6 places) |
-| `JPY`, `KRW`, `XOF`, `XAF`, `UGX`, `RWF` | 1 (no decimals) |
-| `KWD`, `BHD`, `OMR`, `TND` | 1000 (3 places) |
-| everything else | `Config.DefaultPrecision`, default 100 |
+Read them through the Service, which also sees what `Config.Currencies` changed. Use them to fill a currency picker, or to show a balance with its name and symbol.
 
-These are `ledger.BuiltinPrecisions`. Add or override currencies with `Config.Precisions`. Each value must be a power of 10.
+@sample lookup | Look up naira and bitcoin, and list the stablecoins
 
-@sample precisions | Oja adds its own loyalty points, OJA, at 4 places
+- Balances don't carry the name or symbol: look them up with `svc.Currency(acct.Currency)`.
+- `svc.Currencies()` returns them all; pass kinds to filter. The list is sorted by code.
+- Fiat precisions are the ISO 4217 minor units: 100 for NGN and USD, 1 for JPY and XOF, 1000 for KWD. Crypto precisions are the chain's smallest unit: 100000000 for BTC (satoshi), 10¹⁸ for ETH (wei).
+
+## Adding and changing currencies: Config.Currencies
+
+Each precision must be a power of 10. A new code needs `Precision`; its `Kind` defaults to `ledger.Fiat` and its display to every decimal place, padded.
+
+@sample precisions | Oja adds its own loyalty points, OJA, at 4 places, and renames USDT
 
 > warn: Keep a currency's precision fixed once money has moved. Blnk sums `precise_amount` on balances, so mixing precisions corrupts the totals.
+
+## Unknown currencies
+
+A code that is neither built in nor in `Config.Currencies` is refused with `ErrInvalidInput` when opening accounts and parsing amounts, so a typo can't open an account. Set `Config.UnknownCurrency: ledger.AllowUnknown` to accept any code at `Config.DefaultPrecision` (default 100).
+
+@sample unknown
+
+## Configuration mistakes
+
+Mistakes in `Config.Currencies` don't stop `ledger.New`. The bad entries are left out and `svc.Check` reports all of them, so call it at start-up.
+
+@sample config-errors
 
 ## Errors
 
 | Error | When | What to do |
 |---|---|---|
 | `ErrInvalidInput` | more decimals than the currency allows; exponent notation; not a number; a fee in another currency; a negative fee; a zero or negative amount; an empty amount, also in `svc.Parse` and `ParseDecimal`; `Value` and `PreciseAmount` disagree | show the user the allowed format, e.g. two decimal places for NGN |
-| `ErrInvalidInput` | a precision that isn't a power of 10 | fix `Config.Precisions` or the `Precise` / `ParseDecimal` call |
+| `ErrInvalidInput` | an unknown currency (see above) | add it to `Config.Currencies`, or fix the typo |
+| `ErrInvalidInput` | a precision that isn't a power of 10 | fix `Config.Currencies` or the `Precise` / `ParseDecimal` call |
+| `ErrInvalidInput` from `Check` | a mistake in `Config.Currencies` | fix the entries the message names |
 
 ## Related
 

@@ -241,8 +241,8 @@ You pass amounts as the decimal the user typed. Every `Receipt`, balance and fee
 - `Money` marshals to JSON as `{"amount":"0.456","display":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}` and unmarshals from `"0.456"` or a bare `0.456`, read from its literal text.
 - More decimals than the currency allows, and exponents (`1e3`), are rejected before anything is sent.
 - A fee written as `Amount("0.56", "")` takes the main amount's currency. `ledger.Minor(10056, "USD")` works if you already hold the integer.
-- **`Display`** is for people: fiat and stablecoins padded (`"100.50"`), crypto trimmed and cut, never rounded up (`"0.456789"` for ETH), so a displayed balance can always be spent in full. Change it per currency with `Config.Display`.
-- **Precision** is built in for BTC/LTC/BCH (1e8), ETH (1e18), SOL (1e9), USDT/USDC/TRX (1e6), zero-decimal fiat (JPY, XOF, …) and 3-decimal fiat (KWD, …); everything else is 100. Override with `Config.Precisions`, and never change a currency's precision once money has moved.
+- **`Display`** is for people: fiat and stablecoins padded (`"100.50"`), crypto trimmed and cut, never rounded up (`"0.456789"` for ETH), so a displayed balance can always be spent in full. Change it per currency with `Config.Currencies`.
+- **Currencies** are built in: every ISO 4217 code (precision from its minor units: NGN 100, JPY 1, KWD 1000) and major crypto (BTC 1e8, ETH 1e18, SOL 1e9, USDT/USDC 1e6, …), each with a name, symbol and display rule. `svc.Currency("NGN")` returns `{Name: "Nigerian Naira", Symbol: "₦", Kind: Fiat, Precision: 100, …}` and `svc.Currencies(ledger.Crypto)` lists them. Change or add currencies with `Config.Currencies`; unknown codes are refused unless `Config.UnknownCurrency` is `ledger.AllowUnknown`. Never change a currency's precision once money has moved.
 
 ## Wallet domain
 

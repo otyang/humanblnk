@@ -128,9 +128,9 @@ func TestMoneyDisplay(t *testing.T) {
 	// sample: money/display
 	svc := ledger.New(client, ledger.Config{
 		LedgerID: ledgerID,
-		Display: map[string]ledger.DisplayRule{
-			"ETH": {Decimals: 4, TrimZeros: true}, // crypto style: cut to 4, drop trailing zeros
-			"NGN": {Decimals: 0},                  // whole naira on screen
+		Currencies: []ledger.Currency{
+			{Code: "ETH", Display: ledger.DisplayRule{Decimals: 4, TrimZeros: true}}, // cut to 4, drop trailing zeros
+			{Code: "NGN", Display: ledger.DisplayRule{Decimals: 0, TrimZeros: true}}, // whole naira on screen
 		},
 	})
 	for _, in := range [][2]string{
@@ -153,29 +153,84 @@ func TestMoneyDisplay(t *testing.T) {
 	check(err)
 	fiat := ledger.DisplayRule{Decimals: 2}
 	crypto := ledger.DisplayRule{Decimals: 6, TrimZeros: true}
-	fmt.Println(fiat.Format(eth), crypto.Format(eth), ledger.BuiltinDisplay["ETH"].Format(eth))
+	fmt.Println(fiat.Format(eth), crypto.Format(eth), ledger.Currencies["ETH"].Display.Format(eth))
 	// end
 	end()
 }
 
-func TestMoneyPrecisions(t *testing.T) {
+func TestMoneyCurrencies(t *testing.T) {
 	_, core, _, _ := setup(t, ledger.Config{})
 	client, ledgerID := core.Client(), ledger.LedgerID(core.CreateLedger("Oja Nigeria"))
+	svc := ledger.New(client, ledger.Config{LedgerID: ledgerID})
+
+	begin("money/lookup")
+	// sample: money/lookup
+	ngn, ok := svc.Currency("ngn") // any case
+	fmt.Println(ok, ngn.Code, ngn.Name, ngn.Symbol, ngn.Kind, ngn.Precision, ngn.Display)
+
+	btc, _ := svc.Currency("BTC")
+	fmt.Println(btc.Name, btc.Symbol, btc.Kind, btc.Precision, btc.Display)
+
+	fmt.Println("fiat:", len(svc.Currencies(ledger.Fiat)), "all:", len(svc.Currencies()))
+	for _, c := range svc.Currencies(ledger.Stablecoin) {
+		fmt.Println(" ", c.Code, c.Name)
+	}
+
+	_, ok = svc.Currency("NGM") // a typo
+	fmt.Println("NGM known:", ok)
+	// end
+	end()
 
 	begin("money/precisions")
 	// sample: money/precisions
-	svc := ledger.New(client, ledger.Config{
-		LedgerID:         ledgerID,
-		Precisions:       map[string]int64{"OJA": 10000, "NGN": 100}, // your own points token
-		DefaultPrecision: 100,                                        // the default
+	svc = ledger.New(client, ledger.Config{
+		LedgerID: ledgerID,
+		Currencies: []ledger.Currency{
+			// A new code: Precision is required, Kind defaults to Fiat.
+			{Code: "OJA", Name: "Oja Points", Symbol: "pts", Precision: 10000},
+			// A built-in one: only the fields you set change.
+			{Code: "USDT", Name: "Tether"},
+		},
 	})
-	fmt.Println("OJA:", svc.Precision("OJA"), "BTC:", svc.Precision("BTC"),
-		"JPY:", svc.Precision("JPY"), "GHS:", svc.Precision("GHS"))
-	fmt.Println("built in for ETH:", ledger.BuiltinPrecisions["ETH"])
+	oja, _ := svc.Currency("OJA")
+	usdt, _ := svc.Currency("USDT")
+	fmt.Println(oja.Name, oja.Kind, oja.Precision, oja.Display)
+	fmt.Println(usdt.Name, usdt.Precision, usdt.Display)
 
 	pts, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "OJA"})
 	check(err)
 	fmt.Println("account precision:", pts.Precision, "shows:", pts.Balance.Display)
+	// end
+	end()
+
+	begin("money/unknown")
+	// sample: money/unknown
+	_, err = svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGM"})
+	fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
+
+	_, err = svc.Parse("100", "NGM")
+	fmt.Println(errors.Is(err, ledger.ErrInvalidInput))
+
+	open := ledger.New(client, ledger.Config{LedgerID: ledgerID, UnknownCurrency: ledger.AllowUnknown})
+	acc, err := open.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGM"})
+	check(err)
+	fmt.Println("allowed:", acc.Currency, acc.Precision) // Config.DefaultPrecision
+	// end
+	end()
+
+	begin("money/config-errors")
+	// sample: money/config-errors
+	bad := ledger.New(client, ledger.Config{
+		LedgerID: ledgerID,
+		Currencies: []ledger.Currency{
+			{Code: "GEM"},                 // new, but no Precision
+			{Code: "NGN", Precision: 250}, // not a power of ten
+			{Code: "BTC", Kind: "metal"},  // not a kind
+		},
+	})
+	err = bad.Check(ctx) // at start-up
+	fmt.Println(errors.Is(err, ledger.ErrInvalidInput))
+	fmt.Println(err)
 	// end
 	end()
 }
