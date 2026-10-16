@@ -1,0 +1,76 @@
+package ledgertest
+
+import (
+	"encoding/json"
+	"fmt"
+	"math/big"
+
+	"github.com/otyang/humanblnk/blnk"
+)
+
+// state is a deep copy of everything a failed atomic batch must roll back.
+type state struct {
+	seq        int
+	balances   map[string]*balance
+	indicators map[string]string
+	txns       map[string]*txn
+	order      []string
+	refs       map[string]string
+	splitRefs  map[string]bool
+	splits     map[string][]string
+	events     []Event
+}
+
+func (s *Server) save() state {
+	st := state{
+		seq: s.seq, balances: map[string]*balance{}, indicators: map[string]string{},
+		txns: map[string]*txn{}, order: append([]string(nil), s.order...),
+		refs: map[string]string{}, events: append([]Event(nil), s.events...),
+		splitRefs: map[string]bool{}, splits: map[string][]string{},
+	}
+	for k, v := range s.splitRefs {
+		st.splitRefs[k] = v
+	}
+	for k, v := range s.splits {
+		st.splits[k] = v
+	}
+	for k, b := range s.balances {
+		c := &balance{Balance: b.view(), history: append([]snapshot(nil), b.history...)}
+		c.Balance.Balance = blnk.BigInt{}
+		c.Balance.Balance.Set(&b.Balance.Balance.Int)
+		for _, p := range []struct{ dst, src *blnk.BigInt }{
+			{&c.CreditBalance, &b.CreditBalance}, {&c.DebitBalance, &b.DebitBalance},
+			{&c.InflightBalance, &b.InflightBalance}, {&c.InflightCreditBalance, &b.InflightCreditBalance},
+			{&c.InflightDebitBalance, &b.InflightDebitBalance},
+		} {
+			*p.dst = blnk.BigInt{}
+			p.dst.Set(&p.src.Int)
+		}
+		st.balances[k] = c
+	}
+	for k, v := range s.indicators {
+		st.indicators[k] = v
+	}
+	for k, t := range s.txns {
+		c := *t
+		c.precise = big.Int{}
+		c.precise.Set(&t.precise)
+		c.committed = big.Int{}
+		c.committed.Set(&t.committed)
+		st.txns[k] = &c
+	}
+	for k, v := range s.refs {
+		st.refs[k] = v
+	}
+	return st
+}
+
+func (s *Server) restore(st state) {
+	s.seq, s.balances, s.indicators = st.seq, st.balances, st.indicators
+	s.txns, s.order, s.refs, s.events = st.txns, st.order, st.refs, st.events
+	s.splitRefs, s.splits = st.splitRefs, st.splits
+}
+
+func jsonNum(v int64) json.Number { return json.Number(fmt.Sprint(v)) }
+
+func jsonNumber(s string) json.Number { return json.Number(s) }

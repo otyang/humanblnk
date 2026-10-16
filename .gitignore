@@ -1,0 +1,6 @@
+.DS_Store
+coverage.out
+*.test
+.vscode/
+.idea/
+dump.rdb

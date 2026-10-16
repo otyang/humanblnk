@@ -1,0 +1,114 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Test (Go ${{ matrix.go }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ["1.27.x", "stable"] # minimum in go.mod, and latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Build
+        run: go build ./...
+      - name: Test
+        run: go test -race -count=1 -coverprofile=coverage.out ./...
+      - name: Coverage
+        run: go tool cover -func=coverage.out | tail -1
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then echo "Run gofmt on:"; echo "$unformatted"; exit 1; fi
+      - name: go vet
+        run: go vet ./...
+      - name: staticcheck
+        run: go run honnef.co/go/tools/cmd/staticcheck@latest ./...
+      - name: go.mod is tidy
+        run: go mod tidy -diff
+
+  docs:
+    name: Docs are up to date
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Regenerate docs.html and CONTRACT.md
+        run: ./scripts/gendocs.sh
+      - name: Check for changes
+        run: |
+          if ! git diff --exit-code docs.html CONTRACT.md; then
+            echo "Docs are stale. Run 'make docs' and commit the result."
+            exit 1
+          fi
+
+  live:
+    name: Live (Blnk Core ${{ matrix.core }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        core: ["v0.15.4", "v0.15.6"] # minimum supported, and the version this release is tested on
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: blnk
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - name: Build Blnk Core ${{ matrix.core }} from source
+        run: |
+          GOBIN="$RUNNER_TEMP" go install github.com/blnkfinance/blnk/cmd@${{ matrix.core }}
+          mv "$RUNNER_TEMP/cmd" "$RUNNER_TEMP/blnk"
+      - name: Start Blnk Core
+        working-directory: ${{ runner.temp }}
+        run: |
+          cat > blnk.json <<'JSON'
+          {
+            "project_name": "Blnk",
+            "data_source": { "dns": "postgres://postgres:password@localhost:5432/blnk?sslmode=disable" },
+            "redis": { "dns": "localhost:6379" },
+            "server": { "port": "5001" }
+          }
+          JSON
+          ./blnk migrate up
+          nohup ./blnk start > server.log 2>&1 &
+          nohup ./blnk workers > workers.log 2>&1 &
+          for i in $(seq 1 30); do curl -fsS http://localhost:5001/health && exit 0; sleep 2; done
+          cat server.log; exit 1
+      - name: Live tests
+        run: go test ./ledger -run TestLiveCore -count=1 -v
+        env:
+          BLNK_LIVE_URL: http://localhost:5001
