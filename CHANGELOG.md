@@ -12,10 +12,11 @@ change the API; such changes are listed under **Changed**.
   `ApprovedBy`, and the two must be different people. Before, leaving
   `RequestedBy` empty skipped the check, so one person could approve their
   own correction or closure.
-- Currencies are now a registry. `Config.Display`, `Config.Precisions`,
-  `BuiltinDisplay` and `BuiltinPrecisions` are replaced by `Config.Currencies`,
-  which changes built-in entries field by field or adds new codes, and the
-  built-in list `ledger.Currencies`. Precisions follow ISO 4217 minor units,
+- Currencies moved to the new package `currency`. `Config.Display`,
+  `Config.Precisions`, `BuiltinDisplay`, `BuiltinPrecisions` and
+  `ledger.DisplayRule` are replaced by `Config.Currencies` (each entry a whole
+  `currency.Currency`, replacing the built-in one) and `currency.Display`.
+  `DisplayRule.Format(m)` is now `m.Format(rule)`. Precisions follow ISO 4217 minor units,
   so codes that used to fall back to 100 now get their own: CLP, ISK, VND
   and other zero-decimal currencies 1; IQD, JOD and LYD 1000.
 - Unknown currency codes are refused with `ErrInvalidInput` by `OpenAccount`,
@@ -23,10 +24,12 @@ change the API; such changes are listed under **Changed**.
   `Config.UnknownCurrency: ledger.AllowUnknown` for the old behaviour.
 
 ### Added
-- Built-in currencies: every current ISO 4217 code plus BTC, ETH, SOL, TRX,
-  LTC, BCH, XRP, ADA, DOGE, BNB, POL, USDT, USDC and DAI, each with a name,
-  symbol, kind, precision and display rule. Look them up with
-  `svc.Currency(code)` and list them with `svc.Currencies(kinds...)`.
+- Package `currency`: every current ISO 4217 code plus BTC, ETH, SOL, TRX,
+  LTC, BCH, XRP, ADA, DOGE, BNB, POL, USDT, USDC and DAI, each a constant
+  (`currency.NGN`) with a name, symbol, kind, precision and display rule
+  (`currency.Get`, `currency.All`). Symbols are unique (`A$`, `CA$`, `$`).
+  `currency.New` defines your own. `svc.Currency(code)` and
+  `svc.Currencies(kinds...)` return what a Service uses, overrides included.
 - `svc.Check` reports mistakes in `Config.Currencies`.
 - Example pages for every use case, in `examples/` and at
   https://otyang.github.io/humanblnk/examples/. Every sample on them runs in

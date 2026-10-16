@@ -25,7 +25,7 @@ type Money struct {
 
 	// Display is the amount for people to read, set on every Money the
 	// Service returns: fiat padded to its decimals ("100.00"), crypto trimmed
-	// and rounded down ("0.456789"). See DisplayRule. Never compute with it.
+	// and rounded down ("0.456789"). See currency.Display. Never compute with it.
 	Display string
 }
 
@@ -46,7 +46,7 @@ func Minor(precise int64, currency string) Money {
 func Precise(precise *big.Int, precision int64, currency string) Money {
 	m := Money{PreciseAmount: new(big.Int).Set(precise), Precision: precision, Currency: strings.ToUpper(currency)}
 	m.Value = formatDecimal(m.PreciseAmount, precision)
-	m.Display = builtinRule(m.Currency, precision).Format(m)
+	m.Display = m.Format(builtinRule(m.Currency, precision))
 	return m
 }
 
@@ -59,7 +59,7 @@ func ParseDecimal(value, currency string, precision int64) (Money, error) {
 	if err != nil {
 		return Money{}, err
 	}
-	m.Display = builtinRule(m.Currency, m.Precision).Format(m)
+	m.Display = m.Format(builtinRule(m.Currency, m.Precision))
 	return m, nil
 }
 

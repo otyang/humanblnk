@@ -84,13 +84,10 @@ type (
 	Config                  = ledger.Config
 	ConfirmItem             = ledger.ConfirmItem
 	CreateLedgerInput       = ledger.CreateLedgerInput
-	Currency                = ledger.Currency
-	CurrencyKind            = ledger.CurrencyKind
 	Customer                = ledger.Customer
 	CustomerInput           = ledger.CustomerInput
 	DepositInput            = ledger.DepositInput
 	Direction               = ledger.Direction
-	DisplayRule             = ledger.DisplayRule
 	DisputeInput            = ledger.DisputeInput
 	DisputeOutcome          = ledger.DisputeOutcome
 	EntryStatus             = ledger.EntryStatus
@@ -202,12 +199,11 @@ var (
 
 // Values.
 var (
-	Chart      = ledger.Chart
-	Currencies = ledger.Currencies
-	Daily      = ledger.Daily
-	Monthly    = ledger.Monthly
-	NoFee      = ledger.NoFee
-	Weekly     = ledger.Weekly
+	Chart   = ledger.Chart
+	Daily   = ledger.Daily
+	Monthly = ledger.Monthly
+	NoFee   = ledger.NoFee
+	Weekly  = ledger.Weekly
 )
 
 // Constants: house accounts, kinds, statuses, events and options.
@@ -219,7 +215,6 @@ const (
 	AllowUnknown              = ledger.AllowUnknown
 	BankOperatingAccount      = ledger.BankOperatingAccount
 	CreditNormal              = ledger.CreditNormal
-	Crypto                    = ledger.Crypto
 	CustomerAccount           = ledger.CustomerAccount
 	DebitNormal               = ledger.DebitNormal
 	DepositClearingAccount    = ledger.DepositClearingAccount
@@ -247,7 +242,6 @@ const (
 	EventTransactionScheduled = ledger.EventTransactionScheduled
 	EventTransactionVoid      = ledger.EventTransactionVoid
 	FXPoolAccount             = ledger.FXPoolAccount
-	Fiat                      = ledger.Fiat
 	FeeDeposit                = ledger.FeeDeposit
 	FeeExchange               = ledger.FeeExchange
 	FeeIncomeAccount          = ledger.FeeIncomeAccount
@@ -272,6 +266,5 @@ const (
 	RoundUp                   = ledger.RoundUp
 	SettlementCollection      = ledger.SettlementCollection
 	SettlementPayout          = ledger.SettlementPayout
-	Stablecoin                = ledger.Stablecoin
 	SuspenseAccount           = ledger.SuspenseAccount
 )

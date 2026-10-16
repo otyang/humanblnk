@@ -85,11 +85,40 @@ A fee is always in the transaction's currency. Write it with an empty currency a
 - `currency` is upper-cased. `precise_amount` and `precision` are optional. When both `amount` and `precise_amount` are given, they must agree.
 - `display` is ignored on the way in.
 
+## Currencies: package currency
+
+humanblnk knows 179 currencies without any configuration: every current ISO 4217 code, plus BTC, ETH, SOL, TRX, LTC, BCH, XRP, ADA, DOGE, BNB, POL and the stablecoins USDT, USDC and DAI. They live in package `currency`, one constant per code:
+
+```go
+import "github.com/otyang/humanblnk/currency"
+
+currency.NGN // "NGN": Nigerian Naira · ₦ · 2 decimals
+currency.BTC // "BTC": Bitcoin · ₿ · 8 decimals
+currency.ETH // "ETH": Ether · Ξ · 18 decimals, shown to 6
+```
+
+The constants are plain strings, so they go anywhere humanblnk takes a currency (`ledger.Amount("500", currency.NGN)`), and a typo such as `currency.NGM` is a compile error. `currency.Get` returns the details:
+
+@sample package | Naira and bitcoin, and the stablecoins
+
+| `currency.Currency` field | What it is |
+|---|---|
+| `Code` | `"NGN"` |
+| `Name` | `"Nigerian Naira"` |
+| `Kind` | `currency.Fiat`, `currency.Crypto` or `currency.Stablecoin` |
+| `Symbol` | `"₦"`. Every symbol is unique: AUD is `A$`, CAD `CA$`; a currency with no symbol of its own uses its code |
+| `Precision` | smallest units per whole unit: 100 for NGN, 1 for JPY, 100000000 for BTC. `Decimals()` gives the places: 2, 0, 8 |
+| `Display` | how amounts are shown (below) |
+
+- Fiat precisions are the ISO 4217 minor units. Crypto precisions are the chain's smallest unit: satoshi for BTC, wei (10¹⁸) for ETH.
+- `Get` and `All` return copies, so nothing can change the built-in list.
+- The fields have JSON tags, ready for an API that lists currencies:
+
+@sample currency-json
+
 ## Display
 
 `Display` is cut, never rounded up, so a displayed balance can always be spent in full. The exact amount stays in `Value`.
-
-Every currency has a display rule. Fiat shows every decimal place its precision has, padded; crypto trims trailing zeros; stablecoins read as money:
 
 | Currency | Rule | Example |
 |---|---|---|
@@ -99,44 +128,36 @@ Every currency has a display rule. Fiat shows every decimal place its precision 
 | `ETH`, `BNB`, `POL`, `TRX`, `XRP`, `ADA` | up to 6 places, trailing zeros dropped | `0.123456` |
 | `SOL` | up to 4 places, trailing zeros dropped | `1.25` |
 
-Change any of them with `Config.Currencies`. Only the fields you set change, so `{Code: "ETH", Display: ...}` keeps ETH's name, symbol and precision.
+Change any of them with `Config.Currencies`. Each entry replaces the whole currency, so start from the built-in one with `currency.MustGet` and change what you need with `WithDisplay`, `WithName` or `WithSymbol`:
 
 @sample display | Oja shows whole naira and 4 places of ETH
 
-| `DisplayRule` field | What it changes |
+| `currency.Display` field | What it changes |
 |---|---|
 | `Decimals` | the most decimal places shown, capped at the currency's precision |
 | `TrimZeros` | drop trailing zeros instead of padding to `Decimals` |
 
-> note: A zero `Display` means "keep the built-in rule". To show whole units only, write `DisplayRule{Decimals: 0, TrimZeros: true}`, as for NGN above.
-
-`svc.Display(m)` formats any resolved `Money`, and `svc.DisplayRule(currency)` says which rule applies. A rule also works on its own:
+`svc.Display(m)` formats any resolved `Money` by its currency's rule, and `svc.DisplayRule(code)` says which rule applies. `m.Format(rule)` uses any rule you like, and a rule also formats smallest units on their own:
 
 @sample format
 
-## Currencies: svc.Currency and svc.Currencies
+## Adding your own: Config.Currencies
 
-humanblnk knows 179 currencies without any configuration: every current ISO 4217 code, plus BTC, ETH, SOL, TRX, LTC, BCH, XRP, ADA, DOGE, BNB, POL and the stablecoins USDT, USDC and DAI. Each has a code, a name, a symbol, a kind (`ledger.Fiat`, `ledger.Crypto` or `ledger.Stablecoin`), a precision and a display rule. The built-in list is `ledger.Currencies`.
-
-Read them through the Service, which also sees what `Config.Currencies` changed. Use them to fill a currency picker, or to show a balance with its name and symbol.
-
-@sample lookup | Look up naira and bitcoin, and list the stablecoins
-
-- Balances don't carry the name or symbol: look them up with `svc.Currency(acct.Currency)`.
-- `svc.Currencies()` returns them all; pass kinds to filter. The list is sorted by code.
-- Fiat precisions are the ISO 4217 minor units: 100 for NGN and USD, 1 for JPY and XOF, 1000 for KWD. Crypto precisions are the chain's smallest unit: 100000000 for BTC (satoshi), 10¹⁸ for ETH (wei).
-
-## Adding and changing currencies: Config.Currencies
-
-Each precision must be a power of 10. A new code needs `Precision`; its `Kind` defaults to `ledger.Fiat` and its display to every decimal place, padded.
+`currency.New` builds a currency that isn't built in, from its code, name, kind, symbol and precision. The precision must be a power of 10. It is shown with every decimal place, padded for fiat and trimmed otherwise.
 
 @sample precisions | Oja adds its own loyalty points, OJA, at 4 places, and renames USDT
 
 > warn: Keep a currency's precision fixed once money has moved. Blnk sums `precise_amount` on balances, so mixing precisions corrupts the totals.
 
+## What your service uses: svc.Currency
+
+`currency.Get` is the built-in list. `svc.Currency` and `svc.Currencies` are what your service actually uses, with `Config.Currencies` applied. Read names, symbols and rules from the Service when you show balances, so your overrides are respected. Balances don't carry the name or symbol: look them up by `acct.Currency`.
+
+@sample lookup | Show a balance with its symbol and name
+
 ## Unknown currencies
 
-A code that is neither built in nor in `Config.Currencies` is refused with `ErrInvalidInput` when opening accounts and parsing amounts, so a typo can't open an account. Set `Config.UnknownCurrency: ledger.AllowUnknown` to accept any code at `Config.DefaultPrecision` (default 100).
+A code that is neither built in nor in `Config.Currencies` is refused with `ErrInvalidInput` when opening accounts, parsing amounts and moving money, so a typo can't open an account. Set `Config.UnknownCurrency: ledger.AllowUnknown` to accept any code at `Config.DefaultPrecision` (default 100).
 
 @sample unknown
 

@@ -124,7 +124,7 @@ The error starts with `Config.LedgerID:` so the log says which setting is wrong.
 | `Fees` | a `FeeFunc` that prices every chargeable call with no explicit `Fee`. See [Fees](fees.html) | none: each call must set `Fee` (`ledger.NoFee` for free) |
 | `Limits` | per-tier, per-currency caps on money leaving customer accounts. See [Limits](limits.html) | no limits |
 | `Location` | where days and months start, for daily and monthly limits | UTC |
-| `Currencies` | change built-in currencies (name, symbol, kind, precision, display) or add your own. See [Money](money.html) | `ledger.Currencies`: every ISO 4217 code and major crypto |
+| `Currencies` | change built-in currencies (name, symbol, kind, precision, display) or add your own. See [Money](money.html) | package `currency`: every ISO 4217 code and major crypto |
 | `UnknownCurrency` | `ledger.RefuseUnknown` or `ledger.AllowUnknown` for codes in neither list | `RefuseUnknown` |
 | `DefaultPrecision` | precision for unknown codes under `AllowUnknown` | 100 |
 | `FeeIncomeAccount` | where fees are credited | `@FeeIncome` |

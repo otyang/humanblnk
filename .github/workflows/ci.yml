@@ -59,7 +59,7 @@ jobs:
         run: ./scripts/gendocs.sh
       - name: Check for changes
         run: |
-          if ! git diff --exit-code ledger/core_currency_data.go docs.html CONTRACT.md examples/ || [ -n "$(git status --porcelain examples/)" ]; then
+          if ! git diff --exit-code currency/list.go docs.html CONTRACT.md examples/ || [ -n "$(git status --porcelain examples/)" ]; then
             echo "Docs are stale. Run 'make docs' and commit the result."
             exit 1
           fi

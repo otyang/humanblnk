@@ -414,19 +414,8 @@ type Money struct {
 
 	// Display is the amount for people to read, set on every Money the
 	// Service returns: fiat padded to its decimals ("100.00"), crypto trimmed
-	// and rounded down ("0.456789"). See DisplayRule. Never compute with it.
+	// and rounded down ("0.456789"). See currency.Display. Never compute with it.
 	Display string
-}
-
-// DisplayRule says how a currency's amounts are shown to people. Amounts are
-// cut (never rounded up) to Decimals, so a displayed balance can always be
-// spent in full; the exact amount stays in Money.Value.
-//
-// Fiat style pads to a fixed number of places ("100.00"); crypto style trims
-// trailing zeros ("0.5", "0.456789").
-type DisplayRule struct {
-	Decimals  int  // most decimal places shown; capped at the currency's precision
-	TrimZeros bool // drop trailing zeros instead of padding to Decimals
 }
 
 // Rounding decides what happens to a fraction of the smallest unit.
@@ -436,6 +425,20 @@ const (
 	RoundHalfUp Rounding = iota // 0.5 and above rounds up (default)
 	RoundUp                     // any fraction rounds up (in the house's favour for fees)
 	RoundDown                   // fractions are dropped (in the customer's favour for fees)
+)
+
+// UnknownCurrencyPolicy says what happens to a currency that is neither built
+// in (see package currency) nor in Config.Currencies.
+type UnknownCurrencyPolicy int
+
+const (
+	// RefuseUnknown (the default) refuses unknown currencies with
+	// ErrInvalidInput when opening accounts, parsing amounts and moving
+	// money, so a typo such as "NGM" can't open an account.
+	RefuseUnknown UnknownCurrencyPolicy = iota
+	// AllowUnknown accepts any code, with Config.DefaultPrecision and every
+	// decimal place of it shown, padded.
+	AllowUnknown
 )
 ```
 
@@ -1386,8 +1389,8 @@ type Service struct {
 	c   *blnk.Client
 	cfg Config
 
-	currencies map[string]Currency // built-in list merged with Config.Currencies, fixed at New
-	configErr  error               // mistakes in Config, reported by Check
+	currencies map[string]currency.Currency // built-in list merged with Config.Currencies, fixed at New
+	configErr  error                        // mistakes in Config, reported by Check
 
 	ruleMu sync.Mutex
 	ruleID string // default reconciliation matching rule, created on first use
@@ -1404,14 +1407,15 @@ type Config struct {
 	// verifies it exists.
 	LedgerID LedgerID
 
-	// Currencies changes built-in currencies (see Currencies) or adds new
-	// ones. Only the fields you set change: {Code: "ETH", Display:
-	// DisplayRule{Decimals: 4, TrimZeros: true}} keeps ETH's name, symbol and
-	// precision. A zero Display keeps the built-in one; for whole units only,
-	// use DisplayRule{Decimals: 0, TrimZeros: true}. A new code needs
-	// Precision; its Kind defaults to Fiat. Mistakes are reported by
-	// Service.Check.
-	Currencies []Currency
+	// Currencies changes built-in currencies (see package currency) or adds
+	// your own. Each entry replaces the whole currency, so start a change
+	// from the built-in one:
+	//
+	//	currency.MustGet(currency.ETH).WithDisplay(currency.Display{Decimals: 4, TrimZeros: true})
+	//	currency.New("OJA", "Oja Points", currency.Fiat, "pts", 100)
+	//
+	// Mistakes are reported by Service.Check.
+	Currencies []currency.Currency
 
 	// UnknownCurrency says what happens to a code that is neither built in
 	// nor in Currencies. Default RefuseUnknown.
@@ -1467,37 +1471,6 @@ type OpError struct {
 ## Other
 
 ```go
-// Currency is what humanblnk knows about a currency: its name and symbol for
-// people, its precision for Blnk and how its amounts are displayed.
-//
-// The built-in list is Currencies. Config.Currencies changes entries or adds
-// new ones; read the result with Service.Currency and Service.Currencies.
-type Currency struct {
-	Code   string       // "NGN", "BTC"
-	Name   string       // "Nigerian Naira"
-	Kind   CurrencyKind // Fiat, Crypto or Stablecoin
-	Symbol string       // "₦"; the code itself when there is no common symbol
-
-	// Precision is the smallest-unit multiplier, a power of ten: 100 for
-	// NGN (kobo), 100000000 for BTC (satoshi). Keep it fixed once money has
-	// moved: Blnk sums precise_amount on balances, so mixing precisions
-	// corrupts the totals.
-	Precision int64
-
-	// Display says how amounts are shown to people (Money.Display).
-	Display DisplayRule
-}
-
-// CurrencyKind groups currencies: fiat money, crypto currencies, and
-// stablecoins (crypto that tracks a fiat currency and reads like money).
-type CurrencyKind string
-
-const (
-	Fiat       CurrencyKind = "fiat"
-	Crypto     CurrencyKind = "crypto"
-	Stablecoin CurrencyKind = "stablecoin"
-)
-
 // ExchangeQuote previews Exchange: what is sold, bought and charged, and the
 // paying account's available balance after.
 type ExchangeQuote struct {
@@ -1514,20 +1487,6 @@ type ExchangeQuote struct {
 	Reason          error // why not, when !Allowed (ErrInsufficientFunds, ErrLimitExceeded, ErrAccountFrozen, ...)
 	CheckedByLedger bool  // true when Blnk dry-ran both legs
 }
-
-// UnknownCurrencyPolicy says what happens to a currency that is neither built
-// in nor in Config.Currencies.
-type UnknownCurrencyPolicy int
-
-const (
-	// RefuseUnknown (the default) refuses unknown currencies with
-	// ErrInvalidInput when opening accounts and parsing amounts, so a typo
-	// such as "NGM" can't open an account.
-	RefuseUnknown UnknownCurrencyPolicy = iota
-	// AllowUnknown accepts any code, with Config.DefaultPrecision and every
-	// decimal place of it shown, padded.
-	AllowUnknown
-)
 ```
 
 ## Constants
@@ -1638,11 +1597,6 @@ var (
 // owes you) unless listed here. Add your own indicators to it at start-up.
 var Chart = map[string]GLDef{
 
-// Currencies lists every currency humanblnk knows without configuration:
-// every current ISO 4217 code, plus major crypto currencies and stablecoins.
-// Treat it as read-only; change or add currencies with Config.Currencies.
-var Currencies = map[string]Currency{
-
 // NoFee states that a transaction is deliberately free. Chargeable calls
 // (Deposit, Withdraw, Transfer, Exchange, Schedule, each Bulk item and the
 // quotes) must say what they charge: set Fee, or set Config.Fees to price
@@ -1698,5 +1652,87 @@ func New(c *blnk.Client, cfg Config) *Service
 // precision. Use Service.ComputeFee for an amount as typed.
 func ComputeFee(rule FeeRule, amount Money) (Money, error)
 ```
+
+## Package currency
+
+`import "github.com/otyang/humanblnk/currency"`
+
+```go
+// Currency is what humanblnk knows about a currency.
+type Currency struct {
+	Code   string `json:"code"`   // "NGN"
+	Name   string `json:"name"`   // "Nigerian Naira"
+	Kind   Kind   `json:"kind"`   // Fiat, Crypto or Stablecoin
+	Symbol string `json:"symbol"` // "₦"; the code when there is no symbol of its own
+
+	// Precision is the number of smallest units in one whole unit, a power
+	// of ten: 100 for NGN (kobo), 1 for JPY, 100000000 for BTC (satoshi).
+	// Blnk stores amounts as integers of this unit. Keep it fixed once money
+	// has moved: Blnk sums precise_amount on balances, so mixing precisions
+	// corrupts the totals.
+	Precision int64 `json:"precision"`
+
+	// Display says how amounts are shown to people.
+	Display Display `json:"display"`
+}
+
+// Kind groups currencies: fiat money, crypto currencies, and stablecoins
+// (crypto that tracks a fiat currency and reads like money).
+type Kind string
+
+// Display says how amounts are shown to people. Amounts are cut (never
+// rounded up) to Decimals places, so a displayed balance can always be spent
+// in full.
+//
+// Fiat style pads to a fixed number of places ("100.00"); crypto style trims
+// trailing zeros ("0.5", "0.456789").
+type Display struct {
+	Decimals  int  `json:"decimals"`   // most decimal places shown; capped at the precision's
+	TrimZeros bool `json:"trim_zeros"` // drop trailing zeros instead of padding to Decimals
+}
+
+const (
+	Fiat       Kind = "fiat"
+	Crypto     Kind = "crypto"
+	Stablecoin Kind = "stablecoin"
+)
+
+// New builds a currency that isn't built in. It is shown with every decimal
+// place its precision has, padded for Fiat and trimmed otherwise. Change
+// that with WithDisplay.
+func New(code, name string, kind Kind, symbol string, precision int64) Currency
+
+// Decimals is the number of decimal places in the smallest unit (ISO 4217
+// "minor units"): NGN 2, JPY 0, KWD 3, BTC 8, ETH 18. It is 0 when Precision
+// isn't a power of ten.
+func (c Currency) Decimals() int
+
+// WithName returns a copy of c with Name set.
+func (c Currency) WithName(name string) Currency
+
+// WithSymbol returns a copy of c with Symbol set.
+func (c Currency) WithSymbol(symbol string) Currency
+
+// WithDisplay returns a copy of c with Display set.
+func (c Currency) WithDisplay(d Display) Currency
+
+// Get returns a copy of the built-in currency for code, in any case.
+func Get(code string) (Currency, bool)
+
+// MustGet is Get for codes known to be built in, such as the constants in
+// this package. It panics for any other code.
+func MustGet(code string) Currency
+
+// All returns the built-in currencies of the given kinds (all of them when
+// none are given), sorted by code.
+func All(kinds ...Kind) []Currency
+
+// Format renders an amount of units (smallest units at precision, e.g. kobo
+// at 100) by this rule: Format(1050075, 100) is "10500.75" for Decimals 2.
+// A precision that isn't a power of ten shows the plain integer.
+func (d Display) Format(units *big.Int, precision int64) string
+```
+
+One untyped string constant per built-in code (179), e.g. `currency.NGN = "NGN"`: `AED`, `AFN`, `ALL`, `AMD`, `AOA`, `ARS`, `AUD`, `AWG`, `AZN`, `BAM`, `BBD`, `BDT`, `BHD`, `BIF`, `BMD`, `BND`, `BOB`, `BOV`, `BRL`, `BSD`, `BTN`, `BWP`, `BYN`, `BZD`, `CAD`, `CDF`, `CHE`, `CHF`, `CHW`, `CLF`, `CLP`, `CNY`, `COP`, `COU`, `CRC`, `CUP`, `CVE`, `CZK`, `DJF`, `DKK`, `DOP`, `DZD`, `EGP`, `ERN`, `ETB`, `EUR`, `FJD`, `FKP`, `GBP`, `GEL`, `GHS`, `GIP`, `GMD`, `GNF`, `GTQ`, `GYD`, `HKD`, `HNL`, `HTG`, `HUF`, `IDR`, `ILS`, `INR`, `IQD`, `IRR`, `ISK`, `JMD`, `JOD`, `JPY`, `KES`, `KGS`, `KHR`, `KMF`, `KPW`, `KRW`, `KWD`, `KYD`, `KZT`, `LAK`, `LBP`, `LKR`, `LRD`, `LSL`, `LYD`, `MAD`, `MDL`, `MGA`, `MKD`, `MMK`, `MNT`, `MOP`, `MRU`, `MUR`, `MVR`, `MWK`, `MXN`, `MXV`, `MYR`, `MZN`, `NAD`, `NGN`, `NIO`, `NOK`, `NPR`, `NZD`, `OMR`, `PAB`, `PEN`, `PGK`, `PHP`, `PKR`, `PLN`, `PYG`, `QAR`, `RON`, `RSD`, `RUB`, `RWF`, `SAR`, `SBD`, `SCR`, `SDG`, `SEK`, `SGD`, `SHP`, `SLE`, `SOS`, `SRD`, `SSP`, `STN`, `SVC`, `SYP`, `SZL`, `THB`, `TJS`, `TMT`, `TND`, `TOP`, `TRY`, `TTD`, `TWD`, `TZS`, `UAH`, `UGX`, `USD`, `USN`, `UYI`, `UYU`, `UYW`, `UZS`, `VED`, `VES`, `VND`, `VUV`, `WST`, `XAD`, `XAF`, `XCD`, `XCG`, `XOF`, `XPF`, `YER`, `ZAR`, `ZMW`, `ZWG`, `ADA`, `BCH`, `BNB`, `BTC`, `DOGE`, `ETH`, `LTC`, `POL`, `SOL`, `TRX`, `XRP`, `DAI`, `USDC`, `USDT`.
 
 Every money-movement method requires `Reference`. Resending the same reference returns the original with `Replayed: true` instead of posting twice.

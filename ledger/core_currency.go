@@ -5,132 +5,88 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/otyang/humanblnk/currency"
 )
-
-// CurrencyKind groups currencies: fiat money, crypto currencies, and
-// stablecoins (crypto that tracks a fiat currency and reads like money).
-type CurrencyKind string
-
-const (
-	Fiat       CurrencyKind = "fiat"
-	Crypto     CurrencyKind = "crypto"
-	Stablecoin CurrencyKind = "stablecoin"
-)
-
-// Currency is what humanblnk knows about a currency: its name and symbol for
-// people, its precision for Blnk and how its amounts are displayed.
-//
-// The built-in list is Currencies. Config.Currencies changes entries or adds
-// new ones; read the result with Service.Currency and Service.Currencies.
-type Currency struct {
-	Code   string       // "NGN", "BTC"
-	Name   string       // "Nigerian Naira"
-	Kind   CurrencyKind // Fiat, Crypto or Stablecoin
-	Symbol string       // "₦"; the code itself when there is no common symbol
-
-	// Precision is the smallest-unit multiplier, a power of ten: 100 for
-	// NGN (kobo), 100000000 for BTC (satoshi). Keep it fixed once money has
-	// moved: Blnk sums precise_amount on balances, so mixing precisions
-	// corrupts the totals.
-	Precision int64
-
-	// Display says how amounts are shown to people (Money.Display).
-	Display DisplayRule
-}
 
 // UnknownCurrencyPolicy says what happens to a currency that is neither built
-// in nor in Config.Currencies.
+// in (see package currency) nor in Config.Currencies.
 type UnknownCurrencyPolicy int
 
 const (
 	// RefuseUnknown (the default) refuses unknown currencies with
-	// ErrInvalidInput when opening accounts and parsing amounts, so a typo
-	// such as "NGM" can't open an account.
+	// ErrInvalidInput when opening accounts, parsing amounts and moving
+	// money, so a typo such as "NGM" can't open an account.
 	RefuseUnknown UnknownCurrencyPolicy = iota
 	// AllowUnknown accepts any code, with Config.DefaultPrecision and every
 	// decimal place of it shown, padded.
 	AllowUnknown
 )
 
-// buildCurrencies merges cfg.Currencies onto the built-in list. Entries with
-// mistakes are skipped and reported in the error, which Service.Check returns.
-func buildCurrencies(cfg []Currency) (map[string]Currency, error) {
-	out := make(map[string]Currency, len(Currencies)+len(cfg))
-	for k, c := range Currencies {
-		out[k] = c
+// buildCurrencies puts cfg.Currencies over the built-in list; each entry
+// replaces the whole currency. Entries with mistakes are left out and
+// reported in the error, which Service.Check returns.
+func buildCurrencies(cfg []currency.Currency) (map[string]currency.Currency, error) {
+	all := currency.All()
+	out := make(map[string]currency.Currency, len(all)+len(cfg))
+	for _, c := range all {
+		out[c.Code] = c
 	}
 	var errs []error
+	seen := map[string]bool{}
 	for i, c := range cfg {
-		code := strings.ToUpper(strings.TrimSpace(c.Code))
+		c.Code = strings.ToUpper(strings.TrimSpace(c.Code))
 		bad := func(format string, a ...any) {
-			errs = append(errs, fmt.Errorf("Config.Currencies[%d] %s: "+format, append([]any{i, code}, a...)...))
+			errs = append(errs, fmt.Errorf("Config.Currencies[%d] %s: "+format, append([]any{i, c.Code}, a...)...))
 		}
-		if code == "" {
+		switch _, pow10 := decimalPlaces(c.Precision); {
+		case c.Code == "":
 			bad("Code is required")
 			continue
-		}
-		cur, known := out[code]
-		if !known {
-			cur = Currency{Code: code, Name: code, Kind: Fiat, Symbol: code}
-		}
-		switch {
-		case c.Precision < 0:
-			bad("Precision %d is negative", c.Precision)
+		case seen[c.Code]:
+			bad("listed twice")
 			continue
-		case c.Precision == 0 && !known:
-			bad("Precision is required for a currency that isn't built in")
+		case c.Precision <= 0:
+			bad("Precision is required (100 for 2 decimal places)")
 			continue
-		case c.Precision > 0:
-			if _, ok := decimalPlaces(c.Precision); !ok {
-				bad("Precision %d is not a power of ten", c.Precision)
-				continue
-			}
+		case !pow10:
+			bad("Precision %d is not a power of ten", c.Precision)
+			continue
+		case c.Display.Decimals < 0:
+			bad("Display.Decimals %d is negative", c.Display.Decimals)
+			continue
 		}
 		switch c.Kind {
-		case "", Fiat, Crypto, Stablecoin:
+		case "":
+			c.Kind = currency.Fiat
+		case currency.Fiat, currency.Crypto, currency.Stablecoin:
 		default:
 			bad("unknown Kind %q", c.Kind)
 			continue
 		}
-		if c.Display.Decimals < 0 {
-			bad("Display.Decimals %d is negative", c.Display.Decimals)
-			continue
+		if c.Name == "" {
+			c.Name = c.Code
 		}
-		if c.Name != "" {
-			cur.Name = c.Name
+		if c.Symbol == "" {
+			c.Symbol = c.Code
 		}
-		if c.Kind != "" {
-			cur.Kind = c.Kind
-		}
-		if c.Symbol != "" {
-			cur.Symbol = c.Symbol
-		}
-		if c.Precision > 0 {
-			cur.Precision = c.Precision
-		}
-		switch {
-		case c.Display != (DisplayRule{}):
-			cur.Display = c.Display
-		case !known:
-			dp, _ := decimalPlaces(cur.Precision)
-			cur.Display = DisplayRule{Decimals: dp}
-		}
-		out[code] = cur
+		seen[c.Code] = true
+		out[c.Code] = c
 	}
 	return out, errors.Join(errs...)
 }
 
 // Currency returns the currency for code (any case): built in, or as changed
 // or added by Config.Currencies. ok is false for an unknown code.
-func (s *Service) Currency(code string) (Currency, bool) {
+func (s *Service) Currency(code string) (currency.Currency, bool) {
 	c, ok := s.currencies[strings.ToUpper(strings.TrimSpace(code))]
 	return c, ok
 }
 
-// Currencies returns the known currencies of the given kinds (all of them
-// when none are given), sorted by code.
-func (s *Service) Currencies(kinds ...CurrencyKind) []Currency {
-	out := make([]Currency, 0, len(s.currencies))
+// Currencies returns the currencies this Service knows, of the given kinds
+// (all of them when none are given), sorted by code.
+func (s *Service) Currencies(kinds ...currency.Kind) []currency.Currency {
+	out := make([]currency.Currency, 0, len(s.currencies))
 	for _, c := range s.currencies {
 		if len(kinds) == 0 || containsKind(kinds, c.Kind) {
 			out = append(out, c)
@@ -140,7 +96,7 @@ func (s *Service) Currencies(kinds ...CurrencyKind) []Currency {
 	return out
 }
 
-func containsKind(kinds []CurrencyKind, k CurrencyKind) bool {
+func containsKind(kinds []currency.Kind, k currency.Kind) bool {
 	for _, x := range kinds {
 		if x == k {
 			return true
@@ -151,8 +107,8 @@ func containsKind(kinds []CurrencyKind, k CurrencyKind) bool {
 
 // Precision returns the precision used for currency: its registry entry, or
 // Config.DefaultPrecision for an unknown code.
-func (s *Service) Precision(currency string) int64 {
-	if c, ok := s.Currency(currency); ok {
+func (s *Service) Precision(code string) int64 {
+	if c, ok := s.Currency(code); ok {
 		return c.Precision
 	}
 	return s.cfg.DefaultPrecision
@@ -160,32 +116,32 @@ func (s *Service) Precision(currency string) int64 {
 
 // DisplayRule returns the rule used for currency: its registry entry, or every
 // decimal place of its precision, padded, for an unknown code.
-func (s *Service) DisplayRule(currency string) DisplayRule {
-	if c, ok := s.Currency(currency); ok {
+func (s *Service) DisplayRule(code string) currency.Display {
+	if c, ok := s.Currency(code); ok {
 		return c.Display
 	}
 	dp, _ := decimalPlaces(s.cfg.DefaultPrecision)
-	return DisplayRule{Decimals: dp}
+	return currency.Display{Decimals: dp}
 }
 
 // knownCurrency refuses an unknown currency unless Config.UnknownCurrency is
 // AllowUnknown.
-func (s *Service) knownCurrency(op, currency string) error {
+func (s *Service) knownCurrency(op, code string) error {
 	if s.cfg.UnknownCurrency == AllowUnknown {
 		return nil
 	}
-	if _, ok := s.Currency(currency); ok {
+	if _, ok := s.Currency(code); ok {
 		return nil
 	}
-	return invalid(op, "unknown currency %q: add it to Config.Currencies", strings.ToUpper(strings.TrimSpace(currency)))
+	return invalid(op, "unknown currency %q: add it to Config.Currencies", strings.ToUpper(strings.TrimSpace(code)))
 }
 
-// builtinRule is the display rule without a Service: the built-in entry,
-// then every decimal place of the precision.
-func builtinRule(currency string, precision int64) DisplayRule {
-	if c, ok := Currencies[currency]; ok {
+// builtinRule is the display rule without a Service: the built-in one,
+// else every decimal place of the precision, padded.
+func builtinRule(code string, precision int64) currency.Display {
+	if c, ok := currency.Get(code); ok {
 		return c.Display
 	}
 	dp, _ := decimalPlaces(precision)
-	return DisplayRule{Decimals: dp}
+	return currency.Display{Decimals: dp}
 }

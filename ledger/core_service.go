@@ -62,6 +62,7 @@ import (
 	"time"
 
 	"github.com/otyang/humanblnk/blnk"
+	"github.com/otyang/humanblnk/currency"
 )
 
 // Service implements Ledger on top of a Blnk Core instance.
@@ -69,8 +70,8 @@ type Service struct {
 	c   *blnk.Client
 	cfg Config
 
-	currencies map[string]Currency // built-in list merged with Config.Currencies, fixed at New
-	configErr  error               // mistakes in Config, reported by Check
+	currencies map[string]currency.Currency // built-in list merged with Config.Currencies, fixed at New
+	configErr  error                        // mistakes in Config, reported by Check
 
 	ruleMu sync.Mutex
 	ruleID string // default reconciliation matching rule, created on first use

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
@@ -734,7 +735,7 @@ func TestComputeFeeAndConvert(t *testing.T) {
 }
 
 func TestDisplay(t *testing.T) {
-	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []ledger.Currency{{Code: "SOL", Display: ledger.DisplayRule{Decimals: 2, TrimZeros: true}}}})
+	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []currency.Currency{currency.MustGet(currency.SOL).WithDisplay(currency.Display{Decimals: 2, TrimZeros: true})}})
 	for _, c := range []struct{ amount, cur, value, display string }{
 		{"100", "NGN", "100", "100.00"},
 		{"100.5", "USD", "100.5", "100.50"},
@@ -757,7 +758,7 @@ func TestDisplay(t *testing.T) {
 			t.Errorf("%s %s: value=%s display=%s, want %s / %s", c.amount, c.cur, m.Value, m.Display, c.value, c.display)
 		}
 	}
-	if got := (ledger.DisplayRule{Decimals: 2}).Format(ledger.Precise(bigInt("-5"), 100, "NGN")); got != "-0.05" {
+	if got := ledger.Precise(bigInt("-5"), 100, "NGN").Format(currency.Display{Decimals: 2}); got != "-0.05" {
 		t.Errorf("negative: %s", got)
 	}
 

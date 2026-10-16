@@ -47,7 +47,7 @@ ns = open(f'{root}/ledger/core_interface.go').read()
 interface = ns[ns.index('// Ledger is the domain interface'):ns.index('\ntype (\n\twalletAPI')].rstrip() + '\n'
 
 groups = [
-    ('Money and display', ['Money', 'DisplayRule', 'Rounding']),
+    ('Money and display', ['Money', 'Rounding', 'UnknownCurrencyPolicy']),
     ('Ids', ['AccountID', 'LedgerID', 'HouseRef']),
     ('Ledgers', ['CreateLedgerInput', 'LedgerInfo', 'LedgerQuery', 'LedgerPage']),
     ('Accounts and customers', ['OpenAccountInput', 'Account', 'Balances', 'AccountKind', 'AccountQuery', 'AccountPage',
@@ -144,6 +144,19 @@ funcs = []
 for m in re.finditer(r'^func ([A-Z]\w*)\((.*?)\) ?([^{\n]*)\{', src, re.M):
     funcs.append((with_doc(src, m.start()) + f'func {m.group(1)}({m.group(2)}) {m.group(3).strip()}').rstrip())
 out.append('\n## Functions\n\n```go\n' + '\n\n'.join(funcs) + '\n```\n')
+
+# Package currency: its types and functions; the per-code constants are listed by name only.
+cur_src = open(f'{root}/currency/currency.go').read()
+cur_parts = []
+for n in ('Currency', 'Kind', 'Display'):
+    cur_parts.append(type_block(n, cur_src).rstrip('\n'))
+for m in re.finditer(r'^const \(\n(.*?)^\)\n', cur_src, re.M | re.S):
+    cur_parts.append((with_doc(cur_src, m.start()) + m.group(0)).rstrip('\n'))
+for m in re.finditer(r'^func (\([^)]*\) )?([A-Z]\w*)\((.*?)\) ?([^{\n]*)\{', cur_src, re.M):
+    cur_parts.append((with_doc(cur_src, m.start()) + f'func {m.group(1) or ""}{m.group(2)}({m.group(3)}) {m.group(4).strip()}').rstrip())
+codes = re.findall(r'^\t([A-Z]+) += "', open(f'{root}/currency/list.go').read(), re.M)
+out.append('\n## Package currency\n\n`import "github.com/otyang/humanblnk/currency"`\n\n```go\n' + '\n\n'.join(cur_parts) + '\n```\n')
+out.append(f'\nOne untyped string constant per built-in code ({len(codes)}), e.g. `currency.NGN = "NGN"`: ' + ', '.join(f'`{c}`' for c in codes) + '.\n')
 
 out.append('\nEvery money-movement method requires `Reference`. Resending the same reference returns the original with `Replayed: true` instead of posting twice.\n')
 open(f'{root}/CONTRACT.md', 'w').write(''.join(out))

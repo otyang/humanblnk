@@ -237,7 +237,8 @@ ledger.Minor(125050, "NGN")       // if you already hold the integer""", 'go')}
  ['BTC (up to 8)', '<code>0.456</code>', '<code>0.456</code>'],
  ['ETH (up to 6)', '<code>0.4567896</code>', '<code>0.456789</code>'],
 ])}
-{note('Typing more decimals than a currency has (<code>"100.567"</code> NGN) is rejected before anything reaches Blnk, as are exponents like <code>1e3</code>. Currency symbols and thousands separators belong in your front end, which knows the user’s locale.')}
+<p>Every built-in currency (every ISO 4217 code and major crypto) has a constant in package <code>currency</code>, so <code>ledger.Amount("500", currency.NGN)</code> works and a typo doesn’t compile. <code>currency.MustGet(currency.NGN)</code> gives its name, symbol, kind, precision and display rule; <code>Config.Currencies</code> changes them or adds your own.</p>
+{note('Typing more decimals than a currency has (<code>"100.567"</code> NGN) is rejected before anything reaches Blnk, as are exponents like <code>1e3</code>, and so are unknown currency codes. Thousands separators and the user’s locale belong in your front end.')}
 ''')
 
 section('references', 'References and retries', f'''

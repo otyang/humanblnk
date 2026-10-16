@@ -105,6 +105,7 @@ Blnk gives you primitives and leaves the rules to you. humanblnk is where those 
 |---|---|
 | [`humanblnk`](https://pkg.go.dev/github.com/otyang/humanblnk) | the front door: `humanblnk.New(url, cfg)` and everything from `ledger`, re-exported |
 | [`ledger`](https://pkg.go.dev/github.com/otyang/humanblnk/ledger) | the domain layer: the `Ledger` interface and `Service`, its Blnk implementation |
+| [`currency`](https://pkg.go.dev/github.com/otyang/humanblnk/currency) | every built-in currency: a constant per code (`currency.NGN`) with its name, symbol, kind, precision and display rule |
 | [`blnk`](https://pkg.go.dev/github.com/otyang/humanblnk/blnk) | typed HTTP client for Blnk Core: `context` on every call, safe retries, structured errors, Blnk Cloud |
 | [`ledgertest`](https://pkg.go.dev/github.com/otyang/humanblnk/ledgertest) | in-memory Blnk Core for your tests |
 | `cmd/example` | end-to-end walkthrough (`make example`) |
@@ -242,7 +243,21 @@ You pass amounts as the decimal the user typed. Every `Receipt`, balance and fee
 - More decimals than the currency allows, and exponents (`1e3`), are rejected before anything is sent.
 - A fee written as `Amount("0.56", "")` takes the main amount's currency. `ledger.Minor(10056, "USD")` works if you already hold the integer.
 - **`Display`** is for people: fiat and stablecoins padded (`"100.50"`), crypto trimmed and cut, never rounded up (`"0.456789"` for ETH), so a displayed balance can always be spent in full. Change it per currency with `Config.Currencies`.
-- **Currencies** are built in: every ISO 4217 code (precision from its minor units: NGN 100, JPY 1, KWD 1000) and major crypto (BTC 1e8, ETH 1e18, SOL 1e9, USDT/USDC 1e6, …), each with a name, symbol and display rule. `svc.Currency("NGN")` returns `{Name: "Nigerian Naira", Symbol: "₦", Kind: Fiat, Precision: 100, …}` and `svc.Currencies(ledger.Crypto)` lists them. Change or add currencies with `Config.Currencies`; unknown codes are refused unless `Config.UnknownCurrency` is `ledger.AllowUnknown`. Never change a currency's precision once money has moved.
+- **Currencies** are built in, in package `currency`: every ISO 4217 code (precision from its minor units: NGN 100, JPY 1, KWD 1000) and major crypto (BTC 1e8, ETH 1e18, SOL 1e9, USDT/USDC 1e6, …), one constant per code. Unknown codes are refused unless `Config.UnknownCurrency` is `ledger.AllowUnknown`. Never change a currency's precision once money has moved.
+
+```go
+import "github.com/otyang/humanblnk/currency"
+
+ledger.Amount("5000", currency.NGN)   // a typo such as currency.NGM doesn't compile
+ngn := currency.MustGet(currency.NGN) // {Code: "NGN", Name: "Nigerian Naira", Kind: "fiat", Symbol: "₦", Precision: 100, Display: {2, false}}
+currency.All(currency.Crypto)         // BTC, ETH, SOL, …
+
+svc := humanblnk.New(blnkURL, humanblnk.Config{Currencies: []currency.Currency{
+	currency.MustGet(currency.ETH).WithDisplay(currency.Display{Decimals: 4, TrimZeros: true}),
+	currency.New("OJA", "Oja Points", currency.Fiat, "pts", 100), // your own
+}})
+c, _ := svc.Currency(acct.Currency) // what this service uses, overrides included
+```
 
 ## Wallet domain
 

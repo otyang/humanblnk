@@ -1,6 +1,10 @@
 package ledger
 
-import "time"
+import (
+	"time"
+
+	"github.com/otyang/humanblnk/currency"
+)
 
 // Config controls how the Service maps domain operations onto Blnk.
 type Config struct {
@@ -9,14 +13,15 @@ type Config struct {
 	// verifies it exists.
 	LedgerID LedgerID
 
-	// Currencies changes built-in currencies (see Currencies) or adds new
-	// ones. Only the fields you set change: {Code: "ETH", Display:
-	// DisplayRule{Decimals: 4, TrimZeros: true}} keeps ETH's name, symbol and
-	// precision. A zero Display keeps the built-in one; for whole units only,
-	// use DisplayRule{Decimals: 0, TrimZeros: true}. A new code needs
-	// Precision; its Kind defaults to Fiat. Mistakes are reported by
-	// Service.Check.
-	Currencies []Currency
+	// Currencies changes built-in currencies (see package currency) or adds
+	// your own. Each entry replaces the whole currency, so start a change
+	// from the built-in one:
+	//
+	//	currency.MustGet(currency.ETH).WithDisplay(currency.Display{Decimals: 4, TrimZeros: true})
+	//	currency.New("OJA", "Oja Points", currency.Fiat, "pts", 100)
+	//
+	// Mistakes are reported by Service.Check.
+	Currencies []currency.Currency
 
 	// UnknownCurrency says what happens to a code that is neither built in
 	// nor in Currencies. Default RefuseUnknown.

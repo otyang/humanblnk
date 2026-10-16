@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 )
 
@@ -128,32 +129,37 @@ func TestMoneyDisplay(t *testing.T) {
 	// sample: money/display
 	svc := ledger.New(client, ledger.Config{
 		LedgerID: ledgerID,
-		Currencies: []ledger.Currency{
-			{Code: "ETH", Display: ledger.DisplayRule{Decimals: 4, TrimZeros: true}}, // cut to 4, drop trailing zeros
-			{Code: "NGN", Display: ledger.DisplayRule{Decimals: 0, TrimZeros: true}}, // whole naira on screen
+		Currencies: []currency.Currency{
+			// Start from the built-in currency and change what you need.
+			currency.MustGet(currency.ETH).WithDisplay(currency.Display{Decimals: 4, TrimZeros: true}),
+			currency.MustGet(currency.NGN).WithDisplay(currency.Display{Decimals: 0}), // whole naira on screen
 		},
 	})
 	for _, in := range [][2]string{
-		{"1250.75", "NGN"}, {"100.5", "USD"}, {"0.123456789", "ETH"}, {"0.5", "BTC"}, {"20.5", "USDT"},
+		{"1250.75", currency.NGN}, {"100.5", currency.USD}, {"0.123456789", currency.ETH},
+		{"0.5", currency.BTC}, {"20.5", currency.USDT},
 	} {
 		m, err := svc.Parse(in[0], in[1])
 		check(err)
-		fmt.Printf("%-12s %-4s Value=%-12s Display=%s\n", in[0], in[1], m.Value, svc.Display(m))
+		fmt.Printf("%-12s %-4s Value=%-12s Display=%s\n", in[0], in[1], m.Value, m.Display)
 	}
 
-	acct, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "ETH"})
+	acct, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.ETH})
 	check(err)
-	fmt.Println("rule for ETH:", svc.DisplayRule("ETH"), "balance shows:", acct.Balance.Display)
+	fmt.Println("rule for ETH:", svc.DisplayRule(currency.ETH), "balance shows:", acct.Balance.Display)
 	// end
 	end()
 
 	begin("money/format")
 	// sample: money/format
-	eth, err := svc.Parse("0.123456789", "ETH")
+	eth, err := svc.Parse("0.123456789", currency.ETH)
 	check(err)
-	fiat := ledger.DisplayRule{Decimals: 2}
-	crypto := ledger.DisplayRule{Decimals: 6, TrimZeros: true}
-	fmt.Println(fiat.Format(eth), crypto.Format(eth), ledger.Currencies["ETH"].Display.Format(eth))
+	fiat := currency.Display{Decimals: 2}
+	crypto := currency.Display{Decimals: 6, TrimZeros: true}
+	fmt.Println(eth.Format(fiat), eth.Format(crypto), eth.Format(currency.MustGet(currency.ETH).Display))
+
+	// Without a Money: smallest units and their precision.
+	fmt.Println(fiat.Format(big.NewInt(1050075), 100))
 	// end
 	end()
 }
@@ -161,45 +167,67 @@ func TestMoneyDisplay(t *testing.T) {
 func TestMoneyCurrencies(t *testing.T) {
 	_, core, _, _ := setup(t, ledger.Config{})
 	client, ledgerID := core.Client(), ledger.LedgerID(core.CreateLedger("Oja Nigeria"))
-	svc := ledger.New(client, ledger.Config{LedgerID: ledgerID})
 
-	begin("money/lookup")
-	// sample: money/lookup
-	ngn, ok := svc.Currency("ngn") // any case
-	fmt.Println(ok, ngn.Code, ngn.Name, ngn.Symbol, ngn.Kind, ngn.Precision, ngn.Display)
+	begin("money/package")
+	// sample: money/package
+	ngn := currency.MustGet(currency.NGN) // a copy: the built-in list can't be changed
+	fmt.Println(ngn.Code, ngn.Name, ngn.Symbol, ngn.Kind, ngn.Precision, ngn.Decimals(), ngn.Display)
 
-	btc, _ := svc.Currency("BTC")
-	fmt.Println(btc.Name, btc.Symbol, btc.Kind, btc.Precision, btc.Display)
+	btc, ok := currency.Get("btc") // any case
+	fmt.Println(ok, btc.Name, btc.Symbol, btc.Kind, btc.Precision, btc.Decimals(), btc.Display)
 
-	fmt.Println("fiat:", len(svc.Currencies(ledger.Fiat)), "all:", len(svc.Currencies()))
-	for _, c := range svc.Currencies(ledger.Stablecoin) {
+	fmt.Println("fiat:", len(currency.All(currency.Fiat)), "all:", len(currency.All()))
+	for _, c := range currency.All(currency.Stablecoin) {
 		fmt.Println(" ", c.Code, c.Name)
 	}
 
-	_, ok = svc.Currency("NGM") // a typo
-	fmt.Println("NGM known:", ok)
+	_, ok = currency.Get("NGM") // a typo; currency.NGM would not compile
+	fmt.Println("NGM built in:", ok)
+	// end
+	end()
+
+	begin("money/currency-json")
+	// sample: money/currency-json
+	b, err := json.Marshal(currency.MustGet(currency.NGN))
+	check(err)
+	fmt.Println(string(b))
 	// end
 	end()
 
 	begin("money/precisions")
 	// sample: money/precisions
-	svc = ledger.New(client, ledger.Config{
+	svc := ledger.New(client, ledger.Config{
 		LedgerID: ledgerID,
-		Currencies: []ledger.Currency{
-			// A new code: Precision is required, Kind defaults to Fiat.
-			{Code: "OJA", Name: "Oja Points", Symbol: "pts", Precision: 10000},
-			// A built-in one: only the fields you set change.
-			{Code: "USDT", Name: "Tether"},
+		Currencies: []currency.Currency{
+			// Your own: code, name, kind, symbol, precision.
+			currency.New("OJA", "Oja Points", currency.Fiat, "pts", 10000),
+			// A built-in one, renamed.
+			currency.MustGet(currency.USDT).WithName("Tether"),
 		},
 	})
 	oja, _ := svc.Currency("OJA")
-	usdt, _ := svc.Currency("USDT")
+	usdt, _ := svc.Currency(currency.USDT)
 	fmt.Println(oja.Name, oja.Kind, oja.Precision, oja.Display)
 	fmt.Println(usdt.Name, usdt.Precision, usdt.Display)
+	fmt.Println("built in is unchanged:", currency.MustGet(currency.USDT).Name)
 
 	pts, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "OJA"})
 	check(err)
 	fmt.Println("account precision:", pts.Precision, "shows:", pts.Balance.Display)
+	// end
+	end()
+
+	adaNGN, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: currency.NGN})
+	check(err)
+	fund(svc.Wallet(), adaNGN.ID, "15250.50", currency.NGN, "paystack_T1")
+
+	begin("money/lookup")
+	// sample: money/lookup
+	acct, err := svc.Wallet().GetAccount(ctx, adaNGN.ID)
+	check(err)
+	c, _ := svc.Currency(acct.Currency) // what this service uses, overrides included
+	fmt.Printf("%s%s (%s)\n", c.Symbol, acct.Balance.Display, c.Name)
+	fmt.Println("currencies this service knows:", len(svc.Currencies()))
 	// end
 	end()
 
@@ -222,10 +250,11 @@ func TestMoneyCurrencies(t *testing.T) {
 	// sample: money/config-errors
 	bad := ledger.New(client, ledger.Config{
 		LedgerID: ledgerID,
-		Currencies: []ledger.Currency{
-			{Code: "GEM"},                 // new, but no Precision
-			{Code: "NGN", Precision: 250}, // not a power of ten
-			{Code: "BTC", Kind: "metal"},  // not a kind
+		Currencies: []currency.Currency{
+			{Code: "GEM", Name: "Gem"},                               // no Precision
+			currency.New("PTS", "Points", currency.Fiat, "pts", 250), // not a power of ten
+			currency.MustGet(currency.BTC),
+			currency.MustGet(currency.BTC), // listed twice
 		},
 	})
 	err = bad.Check(ctx) // at start-up

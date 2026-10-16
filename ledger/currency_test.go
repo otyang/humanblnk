@@ -6,48 +6,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
 
-func TestBuiltinCurrencies(t *testing.T) {
+func TestServiceCurrencies(t *testing.T) {
 	svc, _ := ledgertest.New(t, ledger.Config{})
-	for code, want := range map[string]struct {
-		precision int64
-		kind      ledger.CurrencyKind
-		shown     string // 1.23456789 cut by the display rule
-	}{
-		"NGN": {100, ledger.Fiat, "1.23"}, "JPY": {1, ledger.Fiat, "1"}, "KWD": {1000, ledger.Fiat, "1.234"},
-		"IDR": {100, ledger.Fiat, "1.23"}, "XOF": {1, ledger.Fiat, "1"},
-		"BTC": {1e8, ledger.Crypto, "1.23456789"}, "ETH": {1e18, ledger.Crypto, "1.234567"},
-		"SOL": {1e9, ledger.Crypto, "1.2345"}, "USDT": {1e6, ledger.Stablecoin, "1.23"},
-	} {
-		c, ok := svc.Currency(strings.ToLower(code))
-		if !ok || c.Code != code || c.Precision != want.precision || c.Kind != want.kind || c.Name == "" || c.Symbol == "" {
-			t.Errorf("%s: %+v %v", code, c, ok)
-			continue
-		}
-		m, err := ledger.ParseDecimal("1.23456789", code, 1e18)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := c.Display.Format(m); got != want.shown {
-			t.Errorf("%s shows %s, want %s", code, got, want.shown)
-		}
+	if got, want := len(svc.Currencies()), len(currency.All()); got != want {
+		t.Fatalf("Currencies() = %d, want %d", got, want)
 	}
-	all := svc.Currencies()
-	if len(all) != len(ledger.Currencies) {
-		t.Fatalf("Currencies() = %d, want %d", len(all), len(ledger.Currencies))
+	if got := svc.Currencies(currency.Stablecoin); len(got) != 3 || got[0].Code != currency.DAI {
+		t.Errorf("stablecoins: %+v", got)
 	}
-	for i := 1; i < len(all); i++ {
-		if all[i-1].Code >= all[i].Code {
-			t.Fatalf("not sorted at %s", all[i].Code)
-		}
-	}
-	for _, c := range svc.Currencies(ledger.Crypto, ledger.Stablecoin) {
-		if c.Kind == ledger.Fiat {
-			t.Errorf("%s in the crypto filter", c.Code)
-		}
+	if c, ok := svc.Currency("ngn"); !ok || c != currency.MustGet(currency.NGN) {
+		t.Errorf("NGN: %+v %v", c, ok)
 	}
 	if err := svc.Check(ctx); err != nil {
 		t.Fatalf("Check: %v", err)
@@ -55,32 +28,33 @@ func TestBuiltinCurrencies(t *testing.T) {
 }
 
 func TestConfigCurrencies(t *testing.T) {
-	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []ledger.Currency{
-		{Code: "eth", Display: ledger.DisplayRule{Decimals: 2, TrimZeros: true}},
-		{Code: "NGN", Name: "Naira"},
-		{Code: "OJA", Precision: 1000, Symbol: "pts"},
-		{Code: "JPY", Display: ledger.DisplayRule{Decimals: 0, TrimZeros: true}},
+	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []currency.Currency{
+		currency.MustGet(currency.ETH).WithDisplay(currency.Display{Decimals: 2, TrimZeros: true}),
+		currency.MustGet(currency.NGN).WithName("Naira").WithDisplay(currency.Display{Decimals: 0}),
+		currency.New("oja", "Oja Points", currency.Fiat, "pts", 1000),
+		{Code: "GEM", Precision: 100}, // a bare literal: Name, Symbol and Kind are filled in
 	}})
-	eth, _ := svc.Currency("ETH")
-	if eth.Precision != 1e18 || eth.Name != "Ether" || eth.Display != (ledger.DisplayRule{Decimals: 2, TrimZeros: true}) {
-		t.Errorf("ETH override changed more than Display: %+v", eth)
+	eth, _ := svc.Currency(currency.ETH)
+	if eth.Precision != 1e18 || eth.Name != "Ether" || eth.Display != (currency.Display{Decimals: 2, TrimZeros: true}) {
+		t.Errorf("ETH: %+v", eth)
 	}
-	ngn, _ := svc.Currency("NGN")
-	if ngn.Name != "Naira" || ngn.Symbol != "₦" || ngn.Display != (ledger.DisplayRule{Decimals: 2}) {
+	if ngn, _ := svc.Currency(currency.NGN); ngn.Name != "Naira" || ngn.Symbol != "₦" {
 		t.Errorf("NGN: %+v", ngn)
 	}
-	oja, ok := svc.Currency("OJA")
-	if !ok || oja.Kind != ledger.Fiat || oja.Name != "OJA" || oja.Symbol != "pts" || oja.Display != (ledger.DisplayRule{Decimals: 3}) {
-		t.Errorf("OJA: %+v %v", oja, ok)
+	if gem, ok := svc.Currency("GEM"); !ok || gem.Name != "GEM" || gem.Symbol != "GEM" || gem.Kind != currency.Fiat {
+		t.Errorf("GEM: %+v %v", gem, ok)
 	}
-	if ledger.Currencies["NGN"].Name != "Nigerian Naira" || ledger.Currencies["OJA"].Code != "" {
+	if currency.MustGet(currency.NGN).Name != "Nigerian Naira" {
 		t.Error("Config.Currencies changed the built-in list")
 	}
-	m, err := svc.Parse("0.1234", "ETH")
-	if err != nil || m.Display != "0.12" {
+	if m, err := svc.Parse("1250.75", currency.NGN); err != nil || m.Display != "1250" {
+		t.Errorf("whole naira: %q %v", m.Display, err)
+	}
+	if m, err := svc.Parse("0.1234", currency.ETH); err != nil || m.Display != "0.12" {
 		t.Errorf("ETH display: %q %v", m.Display, err)
 	}
-	if acct, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "oja"}); err != nil || acct.Precision != 1000 || acct.Balance.Display != "0.000" {
+	acct, err := svc.Wallet().OpenAccount(ctx, ledger.OpenAccountInput{Currency: "oja"})
+	if err != nil || acct.Precision != 1000 || acct.Balance.Display != "0.000" {
 		t.Errorf("OJA account: %+v %v", acct, err)
 	}
 	if err := svc.Check(ctx); err != nil {
@@ -94,7 +68,7 @@ func TestUnknownCurrency(t *testing.T) {
 	if _, err := w.OpenAccount(ctx, ledger.OpenAccountInput{Currency: "NGM"}); !errors.Is(err, ledger.ErrInvalidInput) || !strings.Contains(err.Error(), `"NGM"`) {
 		t.Errorf("OpenAccount: %v", err)
 	}
-	if _, err := w.OpenCustomer(ctx, ledger.CustomerInput{FirstName: "Ada", Currencies: []string{"NGN", "NGM"}, ExternalID: "u1"}); !errors.Is(err, ledger.ErrInvalidInput) {
+	if _, err := w.OpenCustomer(ctx, ledger.CustomerInput{FirstName: "Ada", Currencies: []string{currency.NGN, "NGM"}, ExternalID: "u1"}); !errors.Is(err, ledger.ErrInvalidInput) {
 		t.Errorf("OpenCustomer: %v", err)
 	}
 	if page, err := w.FindAccounts(ctx, ledger.AccountQuery{MetaData: map[string]string{"external_id": "u1"}}); err != nil || page.Total != 0 {
@@ -103,7 +77,7 @@ func TestUnknownCurrency(t *testing.T) {
 	if _, err := svc.Parse("1", "NGM"); !errors.Is(err, ledger.ErrInvalidInput) {
 		t.Errorf("Parse: %v", err)
 	}
-	ada := open(t, svc, "NGN")
+	ada := open(t, svc, currency.NGN)
 	if _, err := w.Deposit(ctx, ledger.DepositInput{AccountID: ada.ID, Amount: ledger.Amount("1", "NGM"), Fee: ledger.NoFee, Reference: "d1"}); !errors.Is(err, ledger.ErrInvalidInput) {
 		t.Errorf("Deposit: %v", err)
 	}
@@ -116,33 +90,33 @@ func TestUnknownCurrency(t *testing.T) {
 }
 
 func TestCurrencyConfigMistakes(t *testing.T) {
-	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []ledger.Currency{
-		{Code: " "},
-		{Code: "GEM"},
+	svc, _ := ledgertest.New(t, ledger.Config{Currencies: []currency.Currency{
+		{Code: " ", Precision: 100},
+		{Code: "GEM"}, // no precision
 		{Code: "NGN", Precision: 250},
-		{Code: "USD", Precision: -100},
-		{Code: "BTC", Kind: "metal"},
-		{Code: "ETH", Display: ledger.DisplayRule{Decimals: -1}},
-		{Code: "SOL", Display: ledger.DisplayRule{Decimals: 2}}, // fine
+		{Code: "BTC", Precision: 1e8, Kind: "metal"},
+		{Code: "ETH", Precision: 1e18, Display: currency.Display{Decimals: -1}},
+		currency.MustGet(currency.SOL).WithDisplay(currency.Display{Decimals: 2}), // fine
+		currency.MustGet(currency.SOL),                                            // twice
 	}})
 	err := svc.Check(ctx)
 	if !errors.Is(err, ledger.ErrInvalidInput) {
 		t.Fatalf("Check: %v", err)
 	}
-	for _, want := range []string{"[0]", "GEM", "NGN", "USD", "BTC", "ETH"} {
+	for _, want := range []string{"[0]", "GEM", "NGN", "BTC", "ETH", "[6] SOL: listed twice"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("Check doesn't name %s: %v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "SOL") {
+	if strings.Contains(err.Error(), "[5]") {
 		t.Errorf("Check names a good entry: %v", err)
 	}
 	// Bad entries are left out; good ones apply.
 	if _, ok := svc.Currency("GEM"); ok {
 		t.Error("GEM was added without a precision")
 	}
-	if svc.Precision("NGN") != 100 || svc.DisplayRule("SOL") != (ledger.DisplayRule{Decimals: 2}) {
-		t.Errorf("NGN %d, SOL %+v", svc.Precision("NGN"), svc.DisplayRule("SOL"))
+	if svc.Precision(currency.NGN) != 100 || svc.DisplayRule(currency.SOL) != (currency.Display{Decimals: 2}) {
+		t.Errorf("NGN %d, SOL %+v", svc.Precision(currency.NGN), svc.DisplayRule(currency.SOL))
 	}
 }
 
@@ -151,7 +125,10 @@ func TestPreciseUsesBuiltinDisplay(t *testing.T) {
 	if got := ledger.Precise(big.NewInt(150_000_000), 100_000_000, "btc").Display; got != "1.5" {
 		t.Errorf("BTC: %q", got)
 	}
-	if got := ledger.Precise(big.NewInt(150), 100, "NGN").Display; got != "1.50" {
+	if got := ledger.Precise(big.NewInt(150), 100, currency.NGN).Display; got != "1.50" {
 		t.Errorf("NGN: %q", got)
+	}
+	if got := ledger.Precise(big.NewInt(150), 100, currency.NGN).Format(currency.Display{Decimals: 1}); got != "1.5" {
+		t.Errorf("Money.Format: %q", got)
 	}
 }

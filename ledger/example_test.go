@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/otyang/humanblnk/currency"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/ledgertest"
 )
@@ -101,11 +102,11 @@ func ExampleComputeFee() {
 }
 
 // Display: fiat padded, crypto trimmed and cut so a balance can always be spent.
-func ExampleDisplayRule_Format() {
-	ngn, _ := ledger.ParseDecimal("100.5", "NGN", 100)
-	eth, _ := ledger.ParseDecimal("0.4567896", "ETH", 1_000_000_000_000_000_000)
-	fmt.Println(ledger.DisplayRule{Decimals: 2}.Format(ngn))
-	fmt.Println(ledger.Currencies["ETH"].Display.Format(eth))
+func ExampleMoney_Format() {
+	ngn, _ := ledger.ParseDecimal("100.5", currency.NGN, 100)
+	eth, _ := ledger.ParseDecimal("0.4567896", currency.ETH, 1_000_000_000_000_000_000)
+	fmt.Println(ngn.Format(currency.Display{Decimals: 2}))
+	fmt.Println(eth.Format(currency.MustGet(currency.ETH).Display))
 	// Output:
 	// 100.50
 	// 0.456789
