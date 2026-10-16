@@ -41,6 +41,7 @@ func (s walletAPI) QuoteExchange(ctx context.Context, in ExchangeInput) (*Exchan
 	}
 	m := func(v *big.Int) Money { return s.money(v, p.sell.Precision, p.sell.Currency) }
 	debit := p.sell.add(p.fee)
+	debit.Display = s.Display(debit)
 	before := p.from.Available()
 	after := new(big.Int).Sub(before, debit.PreciseAmount)
 	q := &ExchangeQuote{

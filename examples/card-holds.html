@@ -106,6 +106,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores pending in
 <figure class="output"><figcaption>Output</figcaption><pre>Chidi Stores pending in: 10000.00 balance: 0.00
 Chidi Stores pending in: 0.00 balance: 10000.00</pre></figure>
 <p>When <code>Destination</code> is a customer account, the merchant sees the money as <code>PendingIn</code> until capture, and in its <code>Balance</code> after.</p>
+<p>The merchant's account must be active. A hold paying a frozen or closed account is refused, and so is a capture into one that was frozen or closed after the hold was placed. Releasing the hold with <code>Cancel</code> still works. See the errors sample below and <a href="freeze.html">Freeze and unfreeze</a>.</p>
 <h2 id="timers-expiresat-and-captureat"><a href="#timers-expiresat-and-captureat">Timers: ExpiresAt and CaptureAt</a></h2>
 <figure class="code"><figcaption>A hotel hold that lapses and a subscription that captures itself</figcaption><pre><code><span class="c">// A hotel holds ₦5,000; if it never captures, the hold lapses after 3 days.</span>
 _, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{
@@ -199,14 +200,30 @@ _, err = wallet.<span class="t">Confirm</span>(ctx, small.<span class="t">Transa
 fmt.<span class="t">Println</span>(<span class="s">&quot;capture after release:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAlreadyFinalized</span>))
 
 _, err = wallet.<span class="t">Confirm</span>(ctx, c.<span class="t">TransactionID</span>, <span class="b">nil</span>) <span class="c">// the capture record, not a hold</span>
-fmt.<span class="t">Println</span>(<span class="s">&quot;not a hold:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotPending</span>))</code></pre></figure>
+fmt.<span class="t">Println</span>(<span class="s">&quot;not a hold:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotPending</span>))
+
+<span class="c">// A merchant under review: no new hold pays it, and an open one can&#x27;t be captured into it.</span>
+held, err := wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: chidiNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;2000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e5&quot;</span>})
+check(err)
+check(ops.<span class="t">FreezeAccount</span>(ctx, chidiNGN, <span class="s">&quot;merchant review&quot;</span>))
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN, <span class="t">Destination</span>: chidiNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;e6&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;hold paying a frozen merchant:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+_, err = wallet.<span class="t">Confirm</span>(ctx, held.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;capture into a frozen merchant:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+_, err = wallet.<span class="t">Cancel</span>(ctx, held.<span class="t">TransactionID</span>) <span class="c">// releasing it gives Ada her money back</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;release:&quot;</span>, err == <span class="b">nil</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
 CaptureAt after ExpiresAt: true
 no destination: true
 capture more than held: true
 capture after release: true
-not a hold: true</pre></figure>
-<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td>the available balance is less than the hold</td><td>decline the authorisation</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the hold is over the account's limit</td><td>decline; see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Destination</code> or <code>Reference</code>; <code>CaptureAt</code> not before <code>ExpiresAt</code></td><td>fix the call</td></tr><tr><td><code>ErrAmountExceeded</code></td><td>capturing more than is still held</td><td>capture at most what is left</td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td>capturing or releasing a hold already released, expired or fully captured</td><td>treat as done</td></tr><tr><td><code>ErrNotPending</code></td><td>the id is not a pending transaction, e.g. a capture's own id</td><td>pass the hold's <code>TransactionID</code></td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code> / <code>ErrLedgerFrozen</code></td><td>the paying account, or its ledger, can't send money</td><td>decline</td></tr></tbody></table></div>
+not a hold: true
+hold paying a frozen merchant: true
+capture into a frozen merchant: true
+release: true</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInsufficientFunds</code></td><td>the available balance is less than the hold</td><td>decline the authorisation</td></tr><tr><td><code>ErrLimitExceeded</code></td><td>the hold is over the account's limit</td><td>decline; see <a href="limits.html">Limits</a></td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Destination</code> or <code>Reference</code>; <code>CaptureAt</code> not before <code>ExpiresAt</code></td><td>fix the call</td></tr><tr><td><code>ErrAmountExceeded</code></td><td>capturing more than is still held</td><td>capture at most what is left</td></tr><tr><td><code>ErrAlreadyFinalized</code></td><td>capturing or releasing a hold already released, expired or fully captured</td><td>treat as done</td></tr><tr><td><code>ErrNotPending</code></td><td>the id is not a pending transaction, e.g. a capture's own id</td><td>pass the hold's <code>TransactionID</code></td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code> / <code>ErrLedgerFrozen</code></td><td>the paying account, or its ledger, can't send money</td><td>decline</td></tr><tr><td><code>ErrAccountFrozen</code> / <code>ErrAccountClosed</code></td><td><code>Destination</code> is a frozen or closed customer account, on <code>Hold</code> or on <code>Confirm</code></td><td>decline the hold; release an open one with <code>Cancel</code></td></tr></tbody></table></div>
 <h2 id="related"><a href="#related">Related</a></h2>
 <ul><li><a href="withdrawals.html">Withdrawals and payouts</a>: the same confirm and cancel calls, with <code>ConfirmMany</code> and <code>CancelMany</code> for batches.</li><li><a href="disputes.html">Disputes</a>: hold money that has already been paid.</li><li><a href="house-accounts.html">House accounts</a>: <code>@MerchantPayable</code> and the rest of the chart.</li></ul>
 </article>

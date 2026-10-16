@@ -49,6 +49,8 @@ The money leaves Ada's `Balance` and is posted to `@MerchantPayable`, where it w
 
 When `Destination` is a customer account, the merchant sees the money as `PendingIn` until capture, and in its `Balance` after.
 
+The merchant's account must be active. A hold paying a frozen or closed account is refused, and so is a capture into one that was frozen or closed after the hold was placed. Releasing the hold with `Cancel` still works. See the errors sample below and [Freeze and unfreeze](freeze.html).
+
 ## Timers: ExpiresAt and CaptureAt
 
 @sample timers | A hotel hold that lapses and a subscription that captures itself
@@ -106,6 +108,7 @@ Each capture or release is recorded by Blnk as its own child transaction of the 
 | `ErrAlreadyFinalized` | capturing or releasing a hold already released, expired or fully captured | treat as done |
 | `ErrNotPending` | the id is not a pending transaction, e.g. a capture's own id | pass the hold's `TransactionID` |
 | `ErrAccountFrozen` / `ErrAccountClosed` / `ErrLedgerFrozen` | the paying account, or its ledger, can't send money | decline |
+| `ErrAccountFrozen` / `ErrAccountClosed` | `Destination` is a frozen or closed customer account, on `Hold` or on `Confirm` | decline the hold; release an open one with `Cancel` |
 
 ## Related
 

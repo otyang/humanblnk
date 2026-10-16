@@ -33,10 +33,21 @@ func (s walletAPI) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]Batc
 	if len(items) == 0 || len(items) > maxInflightBatch {
 		return nil, invalid(op, "between 1 and %d transactions per call", maxInflightBatch)
 	}
+	// An item whose receiver is frozen or closed fails on its own; the rest go
+	// to Blnk. Results come back in the order of items.
+	out := make([]BatchResult, len(items))
 	req := blnk.BulkCommitInflightRequest{SkipQueue: !s.cfg.UseQueue}
+	var sent []int
 	for i, it := range items {
 		if it.TransactionID == "" {
 			return nil, invalid(op, "item %d: transaction id is required", i)
+		}
+		if err := s.checkReceivers(ctx, op, it.TransactionID); err != nil {
+			if !refusal(err) {
+				return nil, fmt.Errorf("item %d: %w", i, err)
+			}
+			out[i] = BatchResult{TransactionID: it.TransactionID, Err: err}
+			continue
 		}
 		ci := blnk.BulkCommitItem{TransactionID: it.TransactionID}
 		if it.Partial != nil && it.Partial.isSet() {
@@ -47,12 +58,29 @@ func (s walletAPI) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]Batc
 			ci.PreciseAmount = blnk.BigFrom(amt.PreciseAmount)
 		}
 		req.Transactions = append(req.Transactions, ci)
+		sent = append(sent, i)
+	}
+	if len(sent) == 0 {
+		return out, nil
 	}
 	resp, err := s.c.BulkCommitInflight(ctx, req)
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
-	return batchResults(op, resp), nil
+	got := batchResults(op, resp)
+	byID := make(map[string]BatchResult, len(got))
+	for _, r := range got {
+		byID[r.TransactionID] = r
+	}
+	for _, i := range sent {
+		if r, ok := byID[items[i].TransactionID]; ok {
+			out[i] = r
+		} else {
+			out[i] = BatchResult{TransactionID: items[i].TransactionID, Err: &OpError{Op: op, Kind: ErrUnavailable,
+				Cause: fmt.Errorf("no result from Blnk for %s", items[i].TransactionID)}}
+		}
+	}
+	return out, nil
 }
 
 // CancelMany cancels up to 100 independent pending transactions in one call.
@@ -145,7 +173,13 @@ func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string
 	if !in.CaptureAt.IsZero() && !in.ExpiresAt.IsZero() && !in.CaptureAt.Before(in.ExpiresAt) {
 		return nil, invalid(op, "CaptureAt must be before ExpiresAt or the hold is released first")
 	}
-	if err := s.checkActive(ctx, op, []AccountID{in.AccountID}); err != nil {
+	// A dispute hold points back at the payer, who may be frozen for the very
+	// reason the payment is disputed; ring-fencing the money must still work.
+	var to []AccountID
+	if kind != "dispute" {
+		to = append(to, in.Destination)
+	}
+	if err := s.checkActive(ctx, op, []AccountID{in.AccountID}, to...); err != nil {
 		return nil, err
 	}
 	if limited(kind) {
@@ -175,6 +209,9 @@ func (s walletAPI) Confirm(ctx context.Context, txID string, partial *Money) (*R
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
+	if err := s.checkReceivers(ctx, op, txID); err != nil {
+		return nil, err
+	}
 	req := blnk.UpdateInflightRequest{Status: blnk.ActionCommit, SkipQueue: !s.cfg.UseQueue}
 	if partial != nil && partial.isSet() {
 		amt, err := s.partialAmount(ctx, op, txID, *partial)
@@ -188,6 +225,34 @@ func (s walletAPI) Confirm(ctx context.Context, txID string, partial *Money) (*R
 		return nil, mapErr(op, err)
 	}
 	return s.inflightReceipt(txID, resp), nil
+}
+
+// checkReceivers refuses to settle a pending transaction into a customer
+// account that has been frozen or closed since it was created. Money already
+// on its way out (a withdrawal the provider has paid) is not held back: only
+// the receiving accounts are checked. A transaction Blnk doesn't know is left
+// for the commit itself to report.
+func (s *Service) checkReceivers(ctx context.Context, op, txID string) error {
+	held, err := s.byID(ctx, txID)
+	if blnk.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return mapErr(op, err)
+	}
+	if kind, _ := held.MetaData["txn_type"].(string); kind == "dispute" {
+		return nil // a dispute's outcome must post even to a frozen payer
+	}
+	var to []AccountID
+	if held.Destination != "" {
+		to = append(to, AccountID(held.Destination))
+	}
+	for _, d := range held.Destinations {
+		if d.Identifier != "" {
+			to = append(to, AccountID(d.Identifier))
+		}
+	}
+	return s.checkActive(ctx, op, nil, to...)
 }
 
 // Cancel releases whatever is still held on an INFLIGHT transaction.

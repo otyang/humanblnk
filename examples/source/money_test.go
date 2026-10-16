@@ -22,7 +22,7 @@ func TestMoney(t *testing.T) {
 
 	m, err := svc.Parse("0.456", "BTC") // fills both forms from the currency's precision
 	check(err)
-	fmt.Println("Value:", m.Value, "PreciseAmount:", m.PreciseAmount, "Precision:", m.Precision)
+	fmt.Println("Value:", m.Value, "PreciseAmount:", m.PreciseAmount, "Precision:", m.Precision, "Display:", m.Display)
 	fmt.Println("String:", m.String(), "Fixed:", m.Fixed())
 	// end
 	end()
@@ -52,18 +52,18 @@ func TestMoney(t *testing.T) {
 
 	// You hold the integer and the precision:
 	p := ledger.Precise(big.NewInt(45600000), 100000000, "BTC")
-	fmt.Println("Precise:", p.Value, p.PreciseAmount, p.Precision)
+	fmt.Println("Precise:", p.Value, p.PreciseAmount, p.Precision, p.Display)
 
 	// A decimal against a precision you choose, without a Service:
 	d, err := ledger.ParseDecimal("12.3456", "OJA", 10000)
 	check(err)
-	fmt.Println("ParseDecimal:", d.Value, d.PreciseAmount, d.Precision)
+	fmt.Println("ParseDecimal:", d.Value, d.PreciseAmount, d.Precision, d.Display)
 	// end
 	end()
 
 	begin("money/rejected")
 	// sample: money/rejected
-	for _, in := range []string{"100.567", "1e3", "12abc"} {
+	for _, in := range []string{"100.567", "1e3", "12abc", ""} {
 		_, err := svc.Parse(in, "NGN")
 		fmt.Println(errors.Is(err, ledger.ErrInvalidInput), err)
 	}

@@ -73,6 +73,16 @@ func (s *Service) DisplayRule(currency string) DisplayRule {
 	return DisplayRule{Decimals: dp}
 }
 
+// builtinRule is the display rule without a Service: BuiltinDisplay, then
+// every decimal place of the precision.
+func builtinRule(currency string, precision int64) DisplayRule {
+	if r, ok := BuiltinDisplay[currency]; ok {
+		return r
+	}
+	dp, _ := decimalPlaces(precision)
+	return DisplayRule{Decimals: dp}
+}
+
 // Display returns m formatted for people by its currency's rule.
 func (s *Service) Display(m Money) string { return s.DisplayRule(m.Currency).Format(m) }
 

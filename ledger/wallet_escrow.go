@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/otyang/humanblnk/blnk"
 )
@@ -74,28 +75,58 @@ func (s walletAPI) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, err
 	if err != nil {
 		return nil, err
 	}
-	acct, err := s.c.CreateBalance(ctx, blnk.CreateBalanceRequest{
-		LedgerID: payer.LedgerID, Currency: payer.Currency, IdentityID: payer.IdentityID,
-		MetaData: blnk.MetaData{
-			metaKind: string(EscrowAccount), "status": "active",
-			"escrow_payer": string(in.Payer), "escrow_beneficiary": string(in.Beneficiary),
-			"escrow_reference": in.Reference, "escrow_amount": amount.PreciseAmount.String(),
-		},
-	})
-	if err != nil {
-		return nil, mapErr(op, err)
+	// Check what the funding transfer would check before opening the escrow
+	// account, so a refused escrow doesn't leave an empty account behind.
+	if err := s.checkActiveWith(ctx, op, map[AccountID]*blnk.Balance{in.Payer: payer}, []AccountID{in.Payer}, in.Beneficiary); err != nil {
+		return nil, err
 	}
-	md := map[string]any{"escrow_id": acct.BalanceID, "escrow_beneficiary": string(in.Beneficiary)}
+	if err := s.checkLimits(ctx, op, in.Payer, amount.PreciseAmount); err != nil {
+		return nil, err
+	}
+	if payer.Available().Cmp(amount.PreciseAmount) < 0 {
+		return nil, &OpError{Op: op, Kind: ErrInsufficientFunds, Cause: fmt.Errorf(
+			"account %s has %s available, escrow needs %s", in.Payer, s.money(payer.Available(), amount.Precision, amount.Currency), amount.Display)}
+	}
+	// A retry after a failed funding reuses the account opened for this reference.
+	var escrowID string
+	if prev, err := s.findOne(ctx, AccountQuery{Kind: EscrowAccount, MetaData: map[string]string{"escrow_reference": in.Reference}}); err != nil {
+		return nil, err
+	} else if prev != nil {
+		// Reuse it only for the same escrow: release and refund pay whoever
+		// its metadata names.
+		if str(prev.MetaData["escrow_payer"]) != string(in.Payer) ||
+			str(prev.MetaData["escrow_beneficiary"]) != string(in.Beneficiary) ||
+			str(prev.MetaData["escrow_amount"]) != amount.PreciseAmount.String() ||
+			!strings.EqualFold(prev.Currency, amount.Currency) {
+			return nil, &OpError{Op: op, Kind: ErrDuplicateReference,
+				Cause: fmt.Errorf("reference %q belongs to another escrow", in.Reference)}
+		}
+		escrowID = string(prev.ID)
+	} else {
+		acct, err := s.c.CreateBalance(ctx, blnk.CreateBalanceRequest{
+			LedgerID: payer.LedgerID, Currency: payer.Currency, IdentityID: payer.IdentityID,
+			MetaData: blnk.MetaData{
+				metaKind: string(EscrowAccount), "status": "active",
+				"escrow_payer": string(in.Payer), "escrow_beneficiary": string(in.Beneficiary),
+				"escrow_reference": in.Reference, "escrow_amount": amount.PreciseAmount.String(),
+			},
+		})
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		escrowID = acct.BalanceID
+	}
+	md := map[string]any{"escrow_id": escrowID, "escrow_beneficiary": string(in.Beneficiary)}
 	for k, v := range in.MetaData {
 		md[k] = v
 	}
 	if _, err := s.move(ctx, op, TransferInput{
-		From: in.Payer, To: AccountID(acct.BalanceID), Amount: amount, Reference: in.Reference,
+		From: in.Payer, To: AccountID(escrowID), Amount: amount, Reference: in.Reference,
 		Description: firstNonEmpty(in.Description, "Escrow"), MetaData: md,
 	}, "escrow_fund"); err != nil {
 		return nil, err
 	}
-	return s.Wallet().GetEscrow(ctx, AccountID(acct.BalanceID))
+	return s.Wallet().GetEscrow(ctx, AccountID(escrowID))
 }
 
 // GetEscrow returns an escrow and how much of it is still held.

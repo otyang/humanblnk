@@ -74,7 +74,7 @@ Blnk stores a split only as its legs, one transaction per destination, each poin
 
 @sample lookup | Look the payment up again, and find the leg that paid the seller
 
-Keep each leg's transaction id. A [refund](refunds.html) or a [dispute](disputes.html) of a split that paid several people must name the leg it is about.
+Keep each leg's transaction id. A full [refund](refunds.html) works with the parent id and reverses every leg. A partial refund or a [dispute](disputes.html) of a split that paid several people must name the leg it is about.
 
 > tip: Find a leg by its `Account`, not by its position. Blnk doesn't keep legs in the order you sent them. After a lookup, a house account shows as its Blnk balance id rather than `@FeeIncome`.
 

@@ -100,7 +100,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;ErrLedgerNotFound:&quot
 wrongKind := humanblnk.<span class="t">New</span>(blnkURL, humanblnk.<span class="t">Config</span>{<span class="t">LedgerID</span>: <span class="s">&quot;bln_000123&quot;</span>}) <span class="c">// a balance id, not a ledger id</span>
 err = wrongKind.<span class="t">Check</span>(ctx)
 fmt.<span class="t">Println</span>(<span class="s">&quot;ErrWrongKind:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrWrongKind</span>))</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>Config.LedgerID: ledger.Check: ledger: ledger not found: ledger: not found: ledger ldg_typo does not exist
+<figure class="output"><figcaption>Output</figcaption><pre>Config.LedgerID: ledger.Check: ledger: ledger not found: ledger ldg_typo does not exist
 ErrLedgerNotFound: true ErrNotFound: true
 ErrWrongKind: true</pre></figure>
 <p>The error starts with <code>Config.LedgerID:</code> so the log says which setting is wrong. <code>ErrLedgerNotFound</code> also matches <code>ErrNotFound</code>, and <code>ErrWrongKind</code> also matches <code>ErrInvalidInput</code>.</p>

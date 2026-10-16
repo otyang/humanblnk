@@ -111,7 +111,15 @@ func (s *Service) Precision(currency string) int64 {
 
 // Parse converts a typed decimal ("0.456") to Money with both forms filled.
 func (s *Service) Parse(amount, currency string) (Money, error) {
-	return Amount(amount, currency).resolve(s.Precision(currency))
+	if strings.TrimSpace(amount) == "" {
+		return Money{}, fmt.Errorf("%w: amount is required", ErrInvalidInput)
+	}
+	m, err := Amount(amount, currency).resolve(s.Precision(currency))
+	if err != nil {
+		return Money{}, err
+	}
+	m.Display = s.Display(m)
+	return m, nil
 }
 
 // resolve fills PreciseAmount/Precision (or Value) using the currency's precision.
@@ -193,10 +201,12 @@ func (s *Service) validateMove(op string, account AccountID, ref string) error {
 // derives and stores amount / amount_string from these, so the typed "0.456"
 // round-trips exactly — Blnk's float `amount` request field is never used.
 func (s *Service) baseReq(amount Money, ref, desc string, md map[string]any, kind string) blnk.CreateTransactionRequest {
-	meta := blnk.MetaData{"txn_type": kind}
+	meta := blnk.MetaData{}
 	for k, v := range md {
 		meta[k] = v
 	}
+	// Set after the caller's metadata: limits and refunds rely on the kind.
+	meta["txn_type"] = kind
 	return blnk.CreateTransactionRequest{
 		PreciseAmount: blnk.BigFrom(amount.PreciseAmount),
 		Precision:     amount.Precision,
@@ -329,11 +339,4 @@ func firstNonEmpty(v ...string) string {
 		}
 	}
 	return ""
-}
-
-func nilIfEmpty(m blnk.MetaData) blnk.MetaData {
-	if len(m) == 0 {
-		return nil
-	}
-	return m
 }

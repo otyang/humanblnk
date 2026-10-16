@@ -2,8 +2,10 @@ package ledger
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/otyang/humanblnk/blnk"
@@ -25,28 +27,103 @@ func (s walletAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Re
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
 	}
-	if orig, err := s.c.GetTransaction(ctx, txID); err == nil {
-		done, err := s.refundedSoFar(ctx, orig, "")
+	// A payment with a fee, or a split, is stored by Blnk only as its legs:
+	// reverse each leg. Anything Blnk stored as one transaction (including a
+	// queued split's parent) is reversed in one call.
+	t, err := s.c.GetTransaction(ctx, txID)
+	stored := err == nil
+	if blnk.IsNotFound(err) {
+		t, err = s.byID(ctx, txID)
+	}
+	if err != nil {
+		return nil, mapErr(op, err)
+	}
+	var legs []refundLeg
+	if stored {
+		legs = []refundLeg{{id: txID, tx: t, owed: owedTo(t)}}
+	} else {
+		for _, d := range t.Destinations {
+			amt, ok := new(big.Int).SetString(d.PreciseDistribution, 10)
+			if !ok || d.TransactionID == "" {
+				return nil, &OpError{Op: op, Kind: ErrUnavailable, Cause: fmt.Errorf("transaction %s: leg %q can't be read", txID, d.Identifier)}
+			}
+			legs = append(legs, refundLeg{id: d.TransactionID, owed: map[AccountID]*big.Int{AccountID(d.Identifier): amt}})
+		}
+	}
+
+	// Check everything before reversing anything. A leg already reversed (by
+	// an earlier Refund, even one whose answer was lost) is skipped.
+	var todo []refundLeg
+	for _, l := range legs {
+		if l.tx == nil {
+			if l.tx, err = s.c.GetTransaction(ctx, l.id); err != nil {
+				return nil, mapErr(op, err)
+			}
+		}
+		reversed, err := s.reversed(ctx, l.tx)
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		if reversed {
+			continue
+		}
+		done, err := s.refundedSoFar(ctx, l.tx, "")
 		if err != nil {
 			return nil, mapErr(op, err)
 		}
 		if done.Sign() > 0 {
 			return nil, &OpError{Op: op, Kind: ErrAlreadyFinalized, Cause: fmt.Errorf(
-				"transaction %s already has partial refunds (%s); refund the rest with RefundPartial", txID, s.money(done, s.txPrecision(orig), orig.Currency))}
+				"transaction %s already has partial refunds (%s); refund the rest with RefundPartial", l.id, s.money(done, s.txPrecision(l.tx), l.tx.Currency))}
 		}
-	} else if !blnk.IsNotFound(err) {
-		return nil, mapErr(op, err)
+		todo = append(todo, l)
 	}
-	// Blnk reverses it directly, so check the accounts here like any other
-	// movement: money leaves the original's recipients and returns to its payer.
-	if t, err := s.byID(ctx, txID); err == nil {
-		from, to := refundSides(t)
-		if err := s.checkActive(ctx, op, from, to...); err != nil {
-			return nil, err
+	if len(todo) == 0 {
+		return nil, &OpError{Op: op, Kind: ErrAlreadyFinalized, Cause: fmt.Errorf("transaction %s has already been refunded", txID)}
+	}
+	// Largest first, so the payee's leg comes before the fee and the order is
+	// the same on every run.
+	sort.SliceStable(todo, func(i, j int) bool {
+		if c := todo[i].total().Cmp(todo[j].total()); c != 0 {
+			return c > 0
 		}
-	} else if !blnk.IsNotFound(err) {
-		return nil, mapErr(op, err)
+		return todo[i].id < todo[j].id
+	})
+	// Money leaves the original's recipients and returns to its payer.
+	from, to := refundSides(t)
+	if err := s.checkActive(ctx, op, from, to...); err != nil {
+		return nil, err
 	}
+	// Blnk reverses with overdraft allowed, so make sure no customer account
+	// is taken below zero: each must still hold what it received. This is
+	// checked just before reversing; a payment the recipient makes at the
+	// same moment can still get in first.
+	owed := map[AccountID]*big.Int{}
+	for _, l := range todo {
+		for id, amt := range l.owed {
+			if id == "" || id.isIndicator() {
+				continue
+			}
+			if owed[id] == nil {
+				owed[id] = new(big.Int)
+			}
+			owed[id].Add(owed[id], amt)
+		}
+	}
+	for id, amt := range owed {
+		b, err := s.c.GetBalance(ctx, string(id))
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		if strings.HasPrefix(b.Indicator, "@") {
+			continue // a house account given by its balance id
+		}
+		if b.Available().Cmp(amt) < 0 {
+			return nil, &OpError{Op: op, Kind: ErrInsufficientFunds, Cause: fmt.Errorf(
+				"account %s has %s %s available but must return %s", id, s.money(b.Available(), s.Precision(b.Currency), b.Currency).Display,
+				strings.ToUpper(b.Currency), s.money(amt, s.Precision(b.Currency), b.Currency).Display)}
+		}
+	}
+
 	md := blnk.MetaData{}
 	for k, v := range in.MetaData {
 		md[k] = v
@@ -54,15 +131,96 @@ func (s walletAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Re
 	if in.Reason != "" {
 		md["refund_reason"] = in.Reason
 	}
-	t, err := s.c.Refund(ctx, txID, &blnk.RefundRequest{
-		SkipQueue:   !s.cfg.UseQueue,
-		Description: in.Description,
-		MetaData:    nilIfEmpty(md),
-	})
-	if err != nil {
-		return nil, mapErr(op, err)
+	md["txn_type"] = "refund" // so limit usage doesn't count the reversal
+	var receipts []*Receipt
+	for _, l := range todo {
+		r, err := s.c.Refund(ctx, l.id, &blnk.RefundRequest{
+			SkipQueue:   !s.cfg.UseQueue,
+			Description: in.Description,
+			MetaData:    md,
+		})
+		if err != nil {
+			e := mapErr(op, err)
+			if errors.Is(e, ErrAlreadyFinalized) {
+				_, _ = s.c.UpdateMetadata(ctx, l.id, blnk.MetaData{metaRefundedBy: "unknown"})
+				continue // reversed meanwhile: carry on with the rest
+			}
+			if len(receipts) > 0 {
+				return nil, fmt.Errorf("%w (legs reversed so far: %d of %d; call Refund again to finish)", e, len(receipts), len(todo))
+			}
+			return nil, e
+		}
+		// Mark the leg so a retry skips it without asking Blnk again.
+		_, _ = s.c.UpdateMetadata(ctx, l.id, blnk.MetaData{metaRefundedBy: r.GetID()})
+		receipts = append(receipts, s.toReceipt(r))
 	}
-	return s.toReceipt(t), nil
+	if len(receipts) == 0 {
+		return nil, &OpError{Op: op, Kind: ErrAlreadyFinalized, Cause: fmt.Errorf("transaction %s has already been refunded", txID)}
+	}
+	out := receipts[0]
+	if len(legs) > 1 {
+		// The receipt is the first reversal's, with the total refunded by
+		// this call as its Amount and every reversal listed in Legs.
+		total := new(big.Int)
+		for _, r := range receipts {
+			total.Add(total, r.Amount.PreciseAmount)
+			out.Legs = append(out.Legs, Leg{Account: r.Source, Amount: r.Amount, TransactionID: r.TransactionID, Narration: r.Description})
+		}
+		out.Amount = s.money(total, out.Amount.Precision, out.Amount.Currency)
+	}
+	return out, nil
+}
+
+// reversed reports whether Refund has already reversed t: it carries the
+// refunded_by mark, or Blnk has its reversal (reference "<id>_refund").
+func (s *Service) reversed(ctx context.Context, t *blnk.Transaction) (bool, error) {
+	if str(t.MetaData[metaRefundedBy]) != "" {
+		return true, nil
+	}
+	_, err := s.c.GetTransactionByReference(ctx, t.GetID()+"_refund")
+	if err == nil {
+		return true, nil
+	}
+	if blnk.IsNotFound(err) {
+		return false, nil
+	}
+	return false, err
+}
+
+// owedTo is what each recipient of a stored transaction received, and must
+// hold to give it back. A stored split (a queued parent) names its recipients
+// in Destinations; a distribution that isn't an exact amount is skipped.
+func owedTo(t *blnk.Transaction) map[AccountID]*big.Int {
+	out := map[AccountID]*big.Int{}
+	if t.Destination != "" {
+		out[AccountID(t.Destination)] = new(big.Int).Set(&t.PreciseAmount.Int)
+		return out
+	}
+	for _, d := range t.Destinations {
+		if amt, ok := new(big.Int).SetString(d.PreciseDistribution, 10); ok {
+			out[AccountID(d.Identifier)] = amt
+		}
+	}
+	return out
+}
+
+// metaRefundedBy marks a transaction Refund has reversed, with the reversal's id.
+const metaRefundedBy = "refunded_by"
+
+// refundLeg is one transaction a full refund reverses, and what each of its
+// recipients must pay back.
+type refundLeg struct {
+	id   string
+	tx   *blnk.Transaction
+	owed map[AccountID]*big.Int
+}
+
+func (l refundLeg) total() *big.Int {
+	sum := new(big.Int)
+	for _, v := range l.owed {
+		sum.Add(sum, v)
+	}
+	return sum
 }
 
 // refundSides returns the accounts a reversal of t takes money from (t's

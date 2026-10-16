@@ -84,8 +84,8 @@ fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.
 _, err = wallet.<span class="t">Withdraw</span>(ctx, ledger.<span class="t">WithdrawInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;49990&quot;</span>, <span class="s">&quot;NGN&quot;</span>),
 	<span class="t">Fee</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;50&quot;</span>, <span class="s">&quot;&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;payout_31002&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;flutterwave&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>), err)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Transfer: ledger: transaction limit exceeded: per-transaction limit 50000 NGN: already used 0, this needs 60000
-true ledger.Wallet.Withdraw: ledger: transaction limit exceeded: per-transaction limit 50000 NGN: already used 0, this needs 50040</pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Transfer: ledger: transaction limit exceeded: per-transaction limit 50000 NGN: this needs 60000.00
+true ledger.Wallet.Withdraw: ledger: transaction limit exceeded: per-transaction limit 50000 NGN: this needs 50040.00</pre></figure>
 <ul><li>The check uses the full amount leaving the account: for a withdrawal or transfer, <code>Amount</code> plus <code>Fee</code>.</li><li>The call is refused before anything is written, with <code>ErrLimitExceeded</code>. The message says which cap and by how much.</li></ul>
 <h2 id="daily-and-monthly-caps-and-limitusage"><a href="#daily-and-monthly-caps-and-limitusage">Daily and monthly caps, and LimitUsage</a></h2>
 <p><code>wallet.LimitUsage</code> reports what the account has used and has left. Use it for the "you can send X more today" line in your app.</p>
@@ -102,9 +102,9 @@ _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">Tran
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;25000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5105&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>), err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>Tunde: used today 180000.00 left today 20000.00 | used this month 180000.00 left 820000.00
-true ledger.Wallet.Transfer: ledger: transaction limit exceeded: daily limit 200000 NGN: already used 180000, this needs 25000</pre></figure>
+true ledger.Wallet.Transfer: ledger: transaction limit exceeded: daily limit 200000 NGN: already used 180000.00, this needs 25000.00</pre></figure>
 <p><code>LimitUsage</code> fields:</p>
-<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>Limit</code></td><td>the <code>*Limit</code> that applies; nil when none does</td></tr><tr><td><code>DailyUsed</code></td><td>what has left the account since midnight in <code>Config.Location</code></td></tr><tr><td><code>MonthlyUsed</code></td><td>what has left since the 1st of the month</td></tr><tr><td><code>DailyLeft</code></td><td><code>Daily</code> minus <code>DailyUsed</code>; nil when there is no daily cap</td></tr><tr><td><code>MonthlyLeft</code></td><td><code>Monthly</code> minus <code>MonthlyUsed</code>; nil when there is no monthly cap</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it holds</th></tr></thead><tbody><tr><td><code>Limit</code></td><td>the <code>*Limit</code> that applies; nil when none does</td></tr><tr><td><code>DailyUsed</code></td><td>what has left the account since midnight in <code>Config.Location</code></td></tr><tr><td><code>MonthlyUsed</code></td><td>what has left since the 1st of the month</td></tr><tr><td><code>DailyLeft</code></td><td><code>Daily</code> minus <code>DailyUsed</code>, never below zero; nil when there is no daily cap</td></tr><tr><td><code>MonthlyLeft</code></td><td><code>Monthly</code> minus <code>MonthlyUsed</code>, never below zero; nil when there is no monthly cap</td></tr></tbody></table></div>
 <ul><li>With neither a daily nor a monthly cap, <code>DailyUsed</code> and <code>MonthlyUsed</code> stay zero: usage isn't read.</li><li>Reading usage lists the account's outgoing transactions for the period, so a daily or monthly check costs a Blnk query on every limited payment.</li><li>Usage is read before the payment posts. Two payments racing each other can both pass the check.</li></ul>
 <h2 id="holds-count-while-they-are-held"><a href="#holds-count-while-they-are-held">Holds count while they are held</a></h2>
 <p>A card authorisation reserves money, so it counts against the limit at once. Cancelling it gives the allowance back; a partial capture keeps only what was captured.</p>
@@ -158,14 +158,35 @@ _, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTran
 fmt.<span class="t">Println</span>(<span class="s">&quot;bulk over the limit:&quot;</span>, err == <span class="b">nil</span>)
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN) <span class="c">// but it counts in usage afterwards</span>
 check(err)
-limitsShow(<span class="s">&quot;Tunde:&quot;</span>, u)</code></pre></figure>
+limitsShow(<span class="s">&quot;Tunde:&quot;</span>, u)
+
+<span class="c">// Back-office flows don&#x27;t use up an allowance: a correction that debits Tunde,</span>
+_, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{<span class="t">AccountID</span>: tundeNGN, <span class="t">Type</span>: ledger.<span class="t">AdjustDebit</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reason</span>: <span class="s">&quot;duplicate top-up&quot;</span>, <span class="t">RequestedBy</span>: <span class="s">&quot;ops.kemi&quot;</span>,
+	<span class="t">ApprovedBy</span>: <span class="s">&quot;lead.femi&quot;</span>, <span class="t">Reference</span>: <span class="s">&quot;adj_31006&quot;</span>})
+check(err)
+u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
+check(err)
+limitsShow(<span class="s">&quot;after a correction:&quot;</span>, u)
+
+<span class="c">// or a ₦20,000 refund Chidi Stores pays, though its own cap is ₦10,000 at a time.</span>
+order, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;order_5101&quot;</span>)
+check(err)
+_, err = wallet.<span class="t">RefundPartial</span>(ctx, order.<span class="t">TransactionID</span>, ledger.<span class="t">PartialRefundInput</span>{
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;refund_5101_1&quot;</span>})
+check(err)
+u, err = wallet.<span class="t">LimitUsage</span>(ctx, chidiNGN)
+check(err)
+limitsShow(<span class="s">&quot;Chidi Stores:&quot;</span>, u)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>deposit: true
 into the pot: true
 bulk over the limit: true
-Tunde: used today 240000.00 left today -40000.00 | used this month 240000.00 left 760000.00</pre></figure>
-<div class="tablewrap"><table><thead><tr><th>Movement</th><th>Checked before it posts</th><th>Counts in usage</th></tr></thead><tbody><tr><td><code>Withdraw</code>, <code>Transfer</code></td><td>yes, <code>Amount</code> plus <code>Fee</code></td><td>yes</td></tr><tr><td><code>Hold</code></td><td>yes</td><td>yes, while held, then what was captured</td></tr><tr><td><code>Split</code>, <code>Exchange</code>, <code>OpenEscrow</code></td><td>yes</td><td>yes</td></tr><tr><td><code>Schedule</code>, <code>Transfer</code> with <code>ScheduledFor</code></td><td>yes, when you create it, against that day's usage</td><td>see the note below</td></tr><tr><td><code>Bulk</code></td><td>no</td><td>yes</td></tr><tr><td><code>Deposit</code> and other money coming in</td><td>no</td><td>no</td></tr><tr><td>A refund the account pays, an <code>ops.Adjust</code> debit</td><td>no</td><td>yes</td></tr><tr><td>Money leaving a pot or an escrow account</td><td>no limit applies</td><td>no</td></tr><tr><td>House accounts</td><td>no limit applies</td><td>no</td></tr></tbody></table></div>
-<ul><li>Moving money into one of the customer's own pots is a transfer from their account, so it is checked and it counts.</li><li><code>Bulk</code> batches are never checked. Check payroll and other batches yourself before you send them. Usage still counts them afterwards, so <code>DailyLeft</code> can go below zero, as in the sample; show zero in your app when it does.</li><li>Usage counts every movement out of the account, whichever call made it. A refund Chidi Stores pays a customer, or a correction that debits an account, uses up that account's allowance even though neither is checked.</li></ul>
-<aside class="note">Scheduled transfers don't count in usage while they wait, and usage counts a transfer by the day it was created. A transfer scheduled in August that posts in September counts in neither month's usage.</aside>
+Tunde: used today 240000.00 left today 0.00 | used this month 240000.00 left 760000.00
+after a correction: used today 240000.00 left today 0.00 | used this month 240000.00 left 760000.00
+Chidi Stores: used today 0.00 left today 30000.00 | used this month 0.00 left no cap</pre></figure>
+<div class="tablewrap"><table><thead><tr><th>Movement</th><th>Checked before it posts</th><th>Counts in usage</th></tr></thead><tbody><tr><td><code>Withdraw</code>, <code>Transfer</code></td><td>yes, <code>Amount</code> plus <code>Fee</code></td><td>yes</td></tr><tr><td><code>Hold</code></td><td>yes</td><td>yes, while held, then what was captured</td></tr><tr><td><code>Split</code>, <code>Exchange</code>, <code>OpenEscrow</code></td><td>yes</td><td>yes</td></tr><tr><td><code>Schedule</code>, <code>Transfer</code> with <code>ScheduledFor</code></td><td>yes, when you create it, against that day's usage</td><td>yes, on the day it posts</td></tr><tr><td><code>Bulk</code></td><td>no</td><td>yes</td></tr><tr><td><code>Deposit</code> and other money coming in</td><td>no</td><td>no</td></tr><tr><td>A refund the account pays, an <code>ops.Adjust</code> debit</td><td>no</td><td>no</td></tr><tr><td>Disputes, settlements, suspense, closure sweeps</td><td>no</td><td>no</td></tr><tr><td>Money leaving a pot or an escrow account</td><td>no limit applies</td><td>no</td></tr><tr><td>House accounts</td><td>no limit applies</td><td>no</td></tr></tbody></table></div>
+<ul><li>Moving money into one of the customer's own pots is a transfer from their account, so it is checked and it counts.</li><li><code>Bulk</code> batches are never checked. Check payroll and other batches yourself before you send them. Bulk items are transfers, so usage still counts them afterwards. An account can go over its cap this way, as in the sample. <code>DailyLeft</code> then reads zero.</li><li>Usage counts only the movements limits apply to. A refund Chidi Stores pays a customer, or a correction that debits an account, is a back-office flow: it is not checked and it doesn't use up the account's allowance.</li></ul>
+<aside class="note">A scheduled transfer doesn't count while it waits. It counts on the day it posts, by its scheduled time. A transfer created in August that posts on 1 September counts in September's usage.</aside>
 <h2 id="upgrading-a-tier"><a href="#upgrading-a-tier">Upgrading a tier</a></h2>
 <p>humanblnk has no call to change an account's metadata. When your KYC system upgrades a customer, set <code>tier</code> on each of their accounts through Blnk's metadata endpoint (<code>POST /{balance_id}/metadata</code>), for example with the <code>blnk</code> client's <code>UpdateMetadata</code>. It merges the key into the existing metadata.</p>
 <figure class="code"><figcaption>Tunde verifies his BVN and moves to tier2</figcaption><pre><code><span class="c">// Tunde verifies his BVN. Your KYC system moves him to tier2 on every account.</span>
@@ -185,11 +206,22 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;₦90,000 transfer:&quo
 <ul><li>The new tier applies to the next payment: limits read the account fresh on every check.</li><li>Usage carries over. Tunde has already sent ₦240,000 today, so on tier2 he has ₦260,000 left, not ₦500,000.</li><li>Accounts opened later need the tier too: pass it in <code>MetaData</code> when you open them.</li></ul>
 <h2 id="a-new-day"><a href="#a-new-day">A new day</a></h2>
 <p>Daily usage starts again at midnight in <code>Config.Location</code>; monthly usage on the 1st. With <code>Location</code> set to Lagos, 23:30 UTC is already the next day.</p>
-<figure class="code"><figcaption>00:30 on 2 September in Lagos</figcaption><pre><code>core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">23</span>, <span class="n">30</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>)) <span class="c">// 00:30 on 2 September in Lagos</span>
+<figure class="code"><figcaption>A transfer scheduled for just after midnight counts on the new day</figcaption><pre><code><span class="c">// Tunde schedules ₦20,000 for 00:15 on 2 September in Lagos.</span>
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;20000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;so_31007&quot;</span>,
+	<span class="t">ScheduledFor</span>: time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">2</span>, <span class="n">0</span>, <span class="n">15</span>, <span class="n">0</span>, <span class="n">0</span>, lagos)})
+check(err)
+u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
+check(err)
+limitsShow(<span class="s">&quot;while it waits:&quot;</span>, u)
+
+core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class="n">2026</span>, <span class="n">9</span>, <span class="n">1</span>, <span class="n">23</span>, <span class="n">30</span>, <span class="n">0</span>, <span class="n">0</span>, time.<span class="t">UTC</span>)) <span class="c">// 00:30 on 2 September in Lagos</span>
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
 check(err)
 limitsShow(<span class="s">&quot;next day:&quot;</span>, u)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>next day: used today 0.00 left today 500000.00 | used this month 330000.00 left 4670000.00</pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>while it waits: used today 330000.00 left today 170000.00 | used this month 330000.00 left 4670000.00
+next day: used today 20000.00 left today 480000.00 | used this month 350000.00 left 4650000.00</pre></figure>
+<ul><li>While the transfer waits, it doesn't count on 1 September.</li><li>Once it posts at 00:15, it counts on 2 September, the day it took effect. Monthly usage counts it in September too.</li></ul>
 <h2 id="on-the-confirm-screen"><a href="#on-the-confirm-screen">On the confirm screen</a></h2>
 <p>A quote runs the same checks, so the app can say "over your limit" before the customer confirms. See <a href="quotes.html">Quotes</a>.</p>
 <figure class="code"><figcaption>Ada (tier2, ₦100,000 at a time) asks for ₦150,000</figcaption><pre><code>q, err := wallet.<span class="t">QuoteTransfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: chidiNGN,
@@ -198,7 +230,7 @@ check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;allowed:&quot;</span>, q.<span class="t">Allowed</span>, <span class="s">&quot;limit:&quot;</span>, errors.<span class="t">Is</span>(q.<span class="t">Reason</span>, ledger.<span class="t">ErrLimitExceeded</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>allowed: false limit: true</pre></figure>
 <h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
-<p>Nothing is written for a limit. The check reads the account (<code>GET /balances/{id}</code>) for its tier and, for daily or monthly caps, its outgoing transactions for the period (<code>POST /transactions/filter</code> by <code>source</code> and <code>created_at</code>). A refused payment never reaches Blnk. A payment that passes posts as usual.</p>
+<p>Nothing is written for a limit. The check reads the account (<code>GET /balances/{id}</code>) for its tier and, for daily or monthly caps, its outgoing transactions for the period (<code>POST /transactions/filter</code> by <code>source</code>, and by <code>created_at</code> or, for scheduled transfers, <code>effective_date</code>). Each transaction's <code>txn_type</code> decides whether it counts. A refused payment never reaches Blnk. A payment that passes posts as usual.</p>
 <h2 id="errors"><a href="#errors">Errors</a></h2>
 <div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrLimitExceeded</code></td><td>the movement would break the per-transaction, daily or monthly cap</td><td>show what is left (<code>LimitUsage</code>), offer a tier upgrade, or try again tomorrow</td></tr><tr><td><code>ErrInvalidInput</code></td><td>a cap in <code>Config.Limits</code> isn't a valid decimal for the currency</td><td>fix the configuration</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>LimitUsage</code> was given a house account</td><td>pass a customer account</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist</td><td>check the id</td></tr></tbody></table></div>
 <h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>

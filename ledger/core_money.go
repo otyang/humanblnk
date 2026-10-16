@@ -40,16 +40,27 @@ func Minor(precise int64, currency string) Money {
 	return Money{PreciseAmount: big.NewInt(precise), Currency: strings.ToUpper(currency)}
 }
 
-// Precise builds a fully specified Money from a smallest-unit integer and precision.
+// Precise builds a fully specified Money from a smallest-unit integer and
+// precision. Display follows the built-in rule for the currency; amounts the
+// Service returns use Config.Display instead.
 func Precise(precise *big.Int, precision int64, currency string) Money {
 	m := Money{PreciseAmount: new(big.Int).Set(precise), Precision: precision, Currency: strings.ToUpper(currency)}
 	m.Value = formatDecimal(m.PreciseAmount, precision)
+	m.Display = builtinRule(m.Currency, precision).Format(m)
 	return m
 }
 
 // ParseDecimal resolves a decimal string against an explicit precision.
 func ParseDecimal(value, currency string, precision int64) (Money, error) {
-	return Amount(value, currency).resolve(precision)
+	if strings.TrimSpace(value) == "" {
+		return Money{}, fmt.Errorf("%w: amount is required", ErrInvalidInput)
+	}
+	m, err := Amount(value, currency).resolve(precision)
+	if err != nil {
+		return Money{}, err
+	}
+	m.Display = builtinRule(m.Currency, m.Precision).Format(m)
+	return m, nil
 }
 
 // resolve fills whichever of Value / PreciseAmount is missing (and checks they

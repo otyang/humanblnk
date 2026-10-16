@@ -20,6 +20,7 @@ Paystack tells Oja that ₦15,000 arrived, but the narration is blank and the se
 
 - `Provider: "paystack"` takes the money from `@PaystackClearing`, the same account deposits use. Paystack still owes it, so it settles with the rest of the day's collections. See [Provider settlement](settlement.html).
 - `ClearingAccount` names an exact clearing account instead. With neither, `Config.DepositClearingAccount` is used (`@DepositClearing` by default).
+- The clearing account must be a house account (`@Name`). It is posted with overdraft allowed, so a customer account id is refused with `ErrWrongKind`.
 - `Reference` is required. Use the provider's payment id: a retry with the same reference and amount returns the original, and the same reference can't be used for a different amount.
 - `Note` is what you know about the money: sender, bank, narration. It becomes the description and is stored as `suspense_note`. Without a note the description is `Unidentified funds`.
 - `MetaData` keys are stored on the entry next to `suspense_note`. Put what your back office searches on there, such as the sender's name.
@@ -47,7 +48,7 @@ One transfer can cover more than one customer. Claim each part separately with i
 @sample return | Unclaimed after 14 days, reversed to the sender
 
 - The money goes back to the provider's clearing account. `Provider: "paystack"` means `@PaystackClearing`. `ClearingAccount` names an exact one; with neither, `Config.DepositClearingAccount` is used.
-- The clearing account must be a house account (`@Name`). A customer account id is refused with `ErrInvalidInput`.
+- The clearing account must be a house account (`@Name`). A customer account id is refused with `ErrWrongKind`.
 - In the sample `@PaystackClearing` drops from ₦53,000 to ₦45,000: Paystack no longer owes Oja the ₦8,000, because it is sending the money back to the sender. The ₦45,000 left is the earlier suspense money Paystack has not settled yet.
 - `Note` becomes the description. Without one it is `Suspense return`.
 
@@ -109,10 +110,10 @@ The hold is posted with overdraft allowed on the clearing account, as deposits a
 | Error | When | What to do |
 |---|---|---|
 | `ErrInsufficientFunds` | a claim or return for more than `@Suspense` holds in that currency | check what is still held; it may already have been claimed |
-| `ErrWrongKind` | a claim to a house account such as `@FeeIncome` | pass the customer's account |
+| `ErrWrongKind` | a claim to a house account such as `@FeeIncome`; a hold or return whose clearing account is a customer account. Also matches `ErrInvalidInput` | pass the customer's account for a claim, a `@` clearing account for a hold or return |
 | `ErrAccountFrozen` | a claim to a frozen account | wait until it is unfrozen; the money stays in suspense |
 | `ErrAccountClosed` | a claim to a closed account | claim it for the customer's new account |
-| `ErrInvalidInput` | no `Reference`; a zero amount; a return to a customer account | fix the call |
+| `ErrInvalidInput` | no `Reference`; a zero amount | fix the call |
 | `ErrDuplicateReference` | a `Reference` reused for a different amount or account | use a new reference for each hold, claim and return |
 
 ## Related

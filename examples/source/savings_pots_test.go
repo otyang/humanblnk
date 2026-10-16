@@ -115,6 +115,15 @@ func TestSavingsPots(t *testing.T) {
 		fmt.Println(ref, r.EntryStatus)
 	}
 	fmt.Println("Rent pot:", potBalance(wallet, rent.ID), "Ada:", potBalance(wallet, adaNGN))
+
+	// The same plan sent again after it started still replays: nothing runs twice.
+	again, err = wallet.Schedule(ctx, ledger.RecurringInput{
+		Transfer: ledger.TransferInput{From: adaNGN, To: rent.ID, Amount: ledger.Amount("25000", "NGN"),
+			Fee: ledger.NoFee, Reference: "rent_plan_ada", Description: "Rent savings"},
+		First: time.Date(2026, 10, 1, 7, 0, 0, 0, lagos), Every: ledger.Monthly, Count: 12,
+	})
+	check(err)
+	fmt.Println("retry:", len(again), "occurrences, replayed:", again[0].Replayed, "Rent pot:", potBalance(wallet, rent.ID))
 	// end
 	end()
 

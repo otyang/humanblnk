@@ -52,8 +52,8 @@ The tier is the `tier` key in the account's `MetaData`. `OpenCustomer` copies it
 | `Limit` | the `*Limit` that applies; nil when none does |
 | `DailyUsed` | what has left the account since midnight in `Config.Location` |
 | `MonthlyUsed` | what has left since the 1st of the month |
-| `DailyLeft` | `Daily` minus `DailyUsed`; nil when there is no daily cap |
-| `MonthlyLeft` | `Monthly` minus `MonthlyUsed`; nil when there is no monthly cap |
+| `DailyLeft` | `Daily` minus `DailyUsed`, never below zero; nil when there is no daily cap |
+| `MonthlyLeft` | `Monthly` minus `MonthlyUsed`, never below zero; nil when there is no monthly cap |
 
 - With neither a daily nor a monthly cap, `DailyUsed` and `MonthlyUsed` stay zero: usage isn't read.
 - Reading usage lists the account's outgoing transactions for the period, so a daily or monthly check costs a Blnk query on every limited payment.
@@ -76,18 +76,19 @@ Pending withdrawals and pending transfers work the same way: they count while pe
 | `Withdraw`, `Transfer` | yes, `Amount` plus `Fee` | yes |
 | `Hold` | yes | yes, while held, then what was captured |
 | `Split`, `Exchange`, `OpenEscrow` | yes | yes |
-| `Schedule`, `Transfer` with `ScheduledFor` | yes, when you create it, against that day's usage | see the note below |
+| `Schedule`, `Transfer` with `ScheduledFor` | yes, when you create it, against that day's usage | yes, on the day it posts |
 | `Bulk` | no | yes |
 | `Deposit` and other money coming in | no | no |
-| A refund the account pays, an `ops.Adjust` debit | no | yes |
+| A refund the account pays, an `ops.Adjust` debit | no | no |
+| Disputes, settlements, suspense, closure sweeps | no | no |
 | Money leaving a pot or an escrow account | no limit applies | no |
 | House accounts | no limit applies | no |
 
 - Moving money into one of the customer's own pots is a transfer from their account, so it is checked and it counts.
-- `Bulk` batches are never checked. Check payroll and other batches yourself before you send them. Usage still counts them afterwards, so `DailyLeft` can go below zero, as in the sample; show zero in your app when it does.
-- Usage counts every movement out of the account, whichever call made it. A refund Chidi Stores pays a customer, or a correction that debits an account, uses up that account's allowance even though neither is checked.
+- `Bulk` batches are never checked. Check payroll and other batches yourself before you send them. Bulk items are transfers, so usage still counts them afterwards. An account can go over its cap this way, as in the sample. `DailyLeft` then reads zero.
+- Usage counts only the movements limits apply to. A refund Chidi Stores pays a customer, or a correction that debits an account, is a back-office flow: it is not checked and it doesn't use up the account's allowance.
 
-> note: Scheduled transfers don't count in usage while they wait, and usage counts a transfer by the day it was created. A transfer scheduled in August that posts in September counts in neither month's usage.
+> note: A scheduled transfer doesn't count while it waits. It counts on the day it posts, by its scheduled time. A transfer created in August that posts on 1 September counts in September's usage.
 
 ## Upgrading a tier
 
@@ -103,7 +104,10 @@ humanblnk has no call to change an account's metadata. When your KYC system upgr
 
 Daily usage starts again at midnight in `Config.Location`; monthly usage on the 1st. With `Location` set to Lagos, 23:30 UTC is already the next day.
 
-@sample next-day | 00:30 on 2 September in Lagos
+@sample next-day | A transfer scheduled for just after midnight counts on the new day
+
+- While the transfer waits, it doesn't count on 1 September.
+- Once it posts at 00:15, it counts on 2 September, the day it took effect. Monthly usage counts it in September too.
 
 ## On the confirm screen
 
@@ -113,7 +117,7 @@ A quote runs the same checks, so the app can say "over your limit" before the cu
 
 ## What happens in Blnk
 
-Nothing is written for a limit. The check reads the account (`GET /balances/{id}`) for its tier and, for daily or monthly caps, its outgoing transactions for the period (`POST /transactions/filter` by `source` and `created_at`). A refused payment never reaches Blnk. A payment that passes posts as usual.
+Nothing is written for a limit. The check reads the account (`GET /balances/{id}`) for its tier and, for daily or monthly caps, its outgoing transactions for the period (`POST /transactions/filter` by `source`, and by `created_at` or, for scheduled transfers, `effective_date`). Each transaction's `txn_type` decides whether it counts. A refused payment never reaches Blnk. A payment that passes posts as usual.
 
 ## Errors
 

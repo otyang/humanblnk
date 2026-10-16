@@ -51,7 +51,7 @@ There is no special call. A pot is an account, so money moves with `Transfer`, i
 | Field | What it does |
 |---|---|
 | `Transfer` | the transfer to repeat. `Reference` is required and is the base of every occurrence's reference. `Pending` is not allowed |
-| `First` | when the first occurrence runs. Must be in the future |
+| `First` | when the first occurrence runs. Must be in the future for a new plan |
 | `Every` | the gap between occurrences, an `Interval` |
 | `Count` | how many occurrences, from 1 to 120 |
 
@@ -75,13 +75,14 @@ Calling `Schedule` again with the same input returns the occurrences already cre
 
 @sample retry
 
-> note: A retry must still have `First` in the future. Once the first occurrence's time has passed, the same input is refused with `ErrInvalidInput`.
+- This works after the first occurrence has run too: every occurrence comes back as a replay. See the next sample.
+- If an earlier call stopped part way, the retry creates the missing occurrences. A missing occurrence whose time has already passed can't be created any more, and the retry fails with `ErrInvalidInput`.
 
 ## When occurrences run
 
 In production, Blnk posts each occurrence at its time. In tests, move the in-memory Blnk's clock with `core.SetNow` or `core.Advance`, and whatever is due runs. See [Testing](testing.html).
 
-@sample run | After 2 November, two occurrences have posted
+@sample run | After 2 November, two occurrences have posted, and a retry still replays
 
 ## When the money isn't there
 
@@ -110,7 +111,7 @@ Opening a pot makes a Blnk balance with `account_kind: pot`, `parent_account` an
 
 | Error | When | What to do |
 |---|---|---|
-| `ErrInvalidInput` | `Count` outside 1 to 120; `First` not in the future; a zero or negative interval; `Pending` set; no `Reference` | fix the plan |
+| `ErrInvalidInput` | `Count` outside 1 to 120; `First` not in the future for a new plan; a retry where a missing occurrence's time has passed; a zero or negative interval; `Pending` set; no `Reference` | fix the plan; make up a missed occurrence with a one-off transfer |
 | `ErrNotPending` | `Cancel` on a scheduled occurrence | let it run, or reverse it after it posts |
 | `ErrPendingActivity` | closing an account with occurrences still scheduled | wait for them to run |
 | `ErrLimitExceeded` | the transfer is over the sender's limit when the plan is made | see [Limits](limits.html) |

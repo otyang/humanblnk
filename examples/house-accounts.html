@@ -183,7 +183,7 @@ fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.
 
 _, err = ops.<span class="t">GetHouseAccount</span>(ctx, ledger.<span class="t">HouseRef</span>{<span class="t">Indicator</span>: <span class="s">&quot;@FeeIncome&quot;</span>, <span class="t">Currency</span>: <span class="s">&quot;GHS&quot;</span>}) <span class="c">// never used in GHS</span>
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.GetAccount: ledger: id names the wrong kind of object: ledger: invalid input: bln_000007 is a house account (@FeeIncome), not a customer account
+<figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.GetAccount: ledger: id names the wrong kind of object: bln_000007 is a house account (@FeeIncome), not a customer account
 true
 true ledger.Ops.GetHouseAccount: ledger: invalid input: indicator must start with @, e.g. @FeeIncome
 true ledger.Ops.GetHouseAccount: ledger: invalid input: currency is required

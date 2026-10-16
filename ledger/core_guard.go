@@ -21,7 +21,26 @@ func wrongKind(op, id, got, want string) error {
 	case "ledger":
 		hint = "; read ledgers with Ops().GetLedger"
 	}
-	return &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf("%s is a %s, not a %s%s", id, got, want, hint)}
+	return &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf("%s is %s, not %s%s", id, article(got), article(want), hint)}
+}
+
+// article puts "a" or "an" before a noun.
+func article(noun string) string {
+	if noun != "" && strings.ContainsRune("aeiou", rune(noun[0])) {
+		return "an " + noun
+	}
+	return "a " + noun
+}
+
+// houseOnly refuses anything but a house ("@") account where the money must
+// come from or go to the business's own books: provider clearing, bank and
+// fee accounts are posted with overdraft allowed, so a customer account there
+// could be taken below zero.
+func houseOnly(op, field, id string) error {
+	if strings.HasPrefix(id, "@") {
+		return nil
+	}
+	return &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf("%s %q must be a house account (\"@Name\")", field, id)}
 }
 
 // customerOnly refuses an "@" indicator, or an id of another kind, where only

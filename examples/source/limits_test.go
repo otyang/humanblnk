@@ -150,6 +150,25 @@ func TestLimits(t *testing.T) {
 	u, err = wallet.LimitUsage(ctx, tundeNGN) // but it counts in usage afterwards
 	check(err)
 	limitsShow("Tunde:", u)
+
+	// Back-office flows don't use up an allowance: a correction that debits Tunde,
+	_, err = ops.Adjust(ctx, ledger.AdjustInput{AccountID: tundeNGN, Type: ledger.AdjustDebit,
+		Amount: ledger.Amount("5000", "NGN"), Reason: "duplicate top-up", RequestedBy: "ops.kemi",
+		ApprovedBy: "lead.femi", Reference: "adj_31006"})
+	check(err)
+	u, err = wallet.LimitUsage(ctx, tundeNGN)
+	check(err)
+	limitsShow("after a correction:", u)
+
+	// or a ₦20,000 refund Chidi Stores pays, though its own cap is ₦10,000 at a time.
+	order, err := wallet.GetTransactionByReference(ctx, "order_5101")
+	check(err)
+	_, err = wallet.RefundPartial(ctx, order.TransactionID, ledger.PartialRefundInput{
+		Amount: ledger.Amount("20000", "NGN"), Reference: "refund_5101_1"})
+	check(err)
+	u, err = wallet.LimitUsage(ctx, chidiNGN)
+	check(err)
+	limitsShow("Chidi Stores:", u)
 	// end
 	end()
 
@@ -174,6 +193,15 @@ func TestLimits(t *testing.T) {
 
 	begin("limits/next-day")
 	// sample: limits/next-day
+	// Tunde schedules ₦20,000 for 00:15 on 2 September in Lagos.
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: adaNGN,
+		Amount: ledger.Amount("20000", "NGN"), Fee: ledger.NoFee, Reference: "so_31007",
+		ScheduledFor: time.Date(2026, 9, 2, 0, 15, 0, 0, lagos)})
+	check(err)
+	u, err = wallet.LimitUsage(ctx, tundeNGN)
+	check(err)
+	limitsShow("while it waits:", u)
+
 	core.SetNow(time.Date(2026, 9, 1, 23, 30, 0, 0, time.UTC)) // 00:30 on 2 September in Lagos
 	u, err = wallet.LimitUsage(ctx, tundeNGN)
 	check(err)
@@ -189,5 +217,4 @@ func TestLimits(t *testing.T) {
 	fmt.Println("allowed:", q.Allowed, "limit:", errors.Is(q.Reason, ledger.ErrLimitExceeded))
 	// end
 	end()
-	_ = ops
 }

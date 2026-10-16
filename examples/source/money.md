@@ -14,7 +14,7 @@ Ada types "50,000" to top up in naira, "0.00012345" to buy bitcoin, and "20.5" t
 | `Value` | `"0.456"` | the human decimal, trailing zeros trimmed |
 | `PreciseAmount` | `45600000` | the integer in the smallest unit, a `*big.Int`. Blnk sums this on balances |
 | `Precision` | `100000000` | the multiplier: `Value` × `Precision` = `PreciseAmount` |
-| `Display` | `"0.456"` | for people to read, set on every `Money` the library returns. Never compute with it |
+| `Display` | `"0.456"` | for people to read, set on every `Money` the library returns, including from `Parse`, `Precise` and `ParseDecimal`. Never compute with it |
 
 Only `precise_amount` and `precision` are sent to Blnk, never its float `amount`, so `0.456` can't turn into `0.45599999`.
 
@@ -31,7 +31,7 @@ Only `precise_amount` and `precision` are sent to Blnk, never its float `amount`
 
 ## Amount and Parse
 
-`Amount` keeps the text and upper-cases the currency. It doesn't resolve anything, so `PreciseAmount` is still nil. Every call that takes a `Money` resolves it with the currency's precision. `svc.Parse` does the same now, so you can read both forms.
+`Amount` keeps the text and upper-cases the currency. It doesn't resolve anything, so `PreciseAmount` is still nil. Every call that takes a `Money` resolves it with the currency's precision. `svc.Parse` does the same now, so you can read both forms and `Display`.
 
 @sample amount
 
@@ -49,13 +49,13 @@ Only `precise_amount` and `precision` are sent to Blnk, never its float `amount`
 
 @sample other-forms
 
-`Minor` leaves `Precision` empty, and the call fills it from the currency. `Precise` sets everything up front. A `Money` that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.
+`Minor` leaves `Precision` and `Display` empty, and the call fills them from the currency. `Precise` and `ParseDecimal` set everything up front. Their `Display` follows the built-in rule for the currency, because they have no `Service` to read `Config.Display` from. A `Money` that carries a different precision from the currency's is converted with its value kept, or refused if it has more decimals than the currency allows. It is never posted at the wrong scale.
 
 ## Rejected amounts
 
 @sample rejected
 
-More decimal places than the currency allows, exponents and anything that isn't a number fail with `ErrInvalidInput` before anything is sent to Blnk. Nothing is rounded for you.
+More decimal places than the currency allows, exponents, anything that isn't a number and an empty amount fail with `ErrInvalidInput` before anything is sent to Blnk. Nothing is rounded for you.
 
 ## Fees: an empty currency
 
@@ -134,7 +134,7 @@ These are `ledger.BuiltinPrecisions`. Add or override currencies with `Config.Pr
 
 | Error | When | What to do |
 |---|---|---|
-| `ErrInvalidInput` | more decimals than the currency allows; exponent notation; not a number; a fee in another currency; a negative fee; a zero or negative amount; no amount; `Value` and `PreciseAmount` disagree | show the user the allowed format, e.g. two decimal places for NGN |
+| `ErrInvalidInput` | more decimals than the currency allows; exponent notation; not a number; a fee in another currency; a negative fee; a zero or negative amount; an empty amount, also in `svc.Parse` and `ParseDecimal`; `Value` and `PreciseAmount` disagree | show the user the allowed format, e.g. two decimal places for NGN |
 | `ErrInvalidInput` | a precision that isn't a power of 10 | fix `Config.Precisions` or the `Precise` / `ParseDecimal` call |
 
 ## Related

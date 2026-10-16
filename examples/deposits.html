@@ -211,7 +211,7 @@ _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">Depos
 })
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>0.0125 BTC = 1250000 satoshi at precision 100000000
-true ledger.Wallet.Deposit: ledger: invalid input: ledger: invalid input: amount &quot;0.000000001&quot; has more than 8 decimal places</pre></figure>
+true ledger.Wallet.Deposit: ledger: invalid input: amount &quot;0.000000001&quot; has more than 8 decimal places</pre></figure>
 <ul><li>Use something unique per on-chain output as the reference, such as <code>txid:vout</code>.</li><li>An amount with more decimal places than the currency has is refused with <code>ErrInvalidInput</code>. Nothing is rounded.</li><li><code>Provider: &quot;custody&quot;</code> debits <code>@CustodyClearing</code>, one clearing account per custody provider.</li></ul>
 <h2 id="frozen-and-closed-accounts"><a href="#frozen-and-closed-accounts">Frozen and closed accounts</a></h2>
 <figure class="code"><pre><code>check(ops.<span class="t">FreezeAccount</span>(ctx, tundeNGN, <span class="s">&quot;KYC review&quot;</span>))

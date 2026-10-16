@@ -84,7 +84,7 @@ typo := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config<
 err = typo.<span class="t">Check</span>(ctx)
 fmt.<span class="t">Println</span>(<span class="s">&quot;bad id:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLedgerNotFound</span>), err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>good id: &lt;nil&gt;
-bad id: true Config.LedgerID: ledger.Check: ledger: ledger not found: ledger: not found: ledger ldg_0000_typo does not exist</pre></figure>
+bad id: true Config.LedgerID: ledger.Check: ledger: ledger not found: ledger ldg_0000_typo does not exist</pre></figure>
 <p><code>Check</code> verifies that:</p>
 <ol><li>the client is configured correctly (URL, and the instance id for Blnk Cloud);</li><li>Blnk Core is up and reaches its database (<code>GET /health</code>);</li><li><code>Config.LedgerID</code>, when set, exists and is not a duplicate.</li></ol>
 <p>The error wraps <code>ErrUnavailable</code> when Core can't be reached, and <code>ErrLedgerNotFound</code> when the ledger is missing. humanblnk needs Blnk Core 0.15.4 or later.</p>
@@ -136,7 +136,7 @@ fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.
 <figure class="output"><figcaption>Output</figcaption><pre>true ledger.Ops.CreateLedger: ledger: reference already used for a different transaction: ledger key &quot;oja-ng&quot; is already used by ldg_000002, named &quot;Oja Nigeria&quot;
 true ledger.Ops.CreateLedger: ledger: invalid input: key is required: it is what keeps the same ledger from being created twice
 true true
-true ledger.Ops.GetLedger: ledger: id names the wrong kind of object: ledger: invalid input: bln_000004 is a account, not a ledger</pre></figure>
+true ledger.Ops.GetLedger: ledger: id names the wrong kind of object: bln_000004 is an account, not a ledger</pre></figure>
 <div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrDuplicateReference</code></td><td>the <code>Key</code> is already used by a ledger with another <code>Name</code></td><td>pick another key, or use the existing name</td></tr><tr><td><code>ErrInvalidInput</code></td><td>no <code>Key</code>; opening an account in a duplicate ledger</td><td>add a key; use the ledger named in the message</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td>the ledger doesn't exist; also matches <code>ErrNotFound</code></td><td>fix the id or the configuration</td></tr><tr><td><code>ErrWrongKind</code></td><td>an account id or house account passed as a ledger id; also matches <code>ErrInvalidInput</code></td><td>pass a <code>LedgerID</code></td></tr><tr><td><code>ErrUnavailable</code></td><td>Blnk can't be reached</td><td>retry; the call is safe to repeat with the same <code>Key</code></td></tr></tbody></table></div>
 <h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>
 <ul><li><a href="setup.html">Setup</a>: connecting to Blnk and the provisioning step.</li><li><a href="customer-accounts.html">Create customer accounts</a>: <code>LedgerID</code> on <code>OpenAccount</code>.</li><li><a href="house-accounts.html">House accounts</a>: the general ledger and the chart of accounts.</li><li><a href="freeze.html">Freeze</a>: <code>FreezeLedger</code> and <code>UnfreezeLedger</code>.</li></ul>

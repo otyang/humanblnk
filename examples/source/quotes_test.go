@@ -95,7 +95,7 @@ func TestQuotes(t *testing.T) {
 		Reference: "fx_01J8ZQ0T5C",
 	})
 	check(err)
-	fmt.Println("Sold:", xq.Sold.Display, xq.Sold.Currency, "| Fee:", xq.Fee.Display, "| Debit:", xq.Debit.String())
+	fmt.Println("Sold:", xq.Sold.Display, xq.Sold.Currency, "| Fee:", xq.Fee.Display, "| Debit:", xq.Debit.Display, xq.Debit.Currency)
 	fmt.Println("Bought:", xq.Bought.Display, xq.Bought.Currency, "at", xq.Rate)
 	fmt.Println("Available:", xq.AvailableBefore.Display, "->", xq.AvailableAfter.Display)
 	fmt.Println("Allowed:", xq.Allowed, "| CheckedByLedger:", xq.CheckedByLedger)

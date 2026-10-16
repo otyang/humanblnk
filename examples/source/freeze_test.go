@@ -28,6 +28,10 @@ func TestFreeze(t *testing.T) {
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN.ID, To: adaNGN.ID, Amount: ledger.Amount("2000", "NGN"),
 		Fee: ledger.NoFee, Reference: "so_tunde_rent_1", ScheduledFor: core.Now().Add(24 * time.Hour)})
 	check(err)
+	// Ada starts a pending ₦1,500 transfer to Tunde.
+	incoming, err := wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: tundeNGN.ID, Amount: ledger.Amount("1500", "NGN"),
+		Fee: ledger.NoFee, Reference: "p2p_ada_pending_9", Pending: true})
+	check(err)
 
 	begin("freeze/account")
 	// sample: freeze/account
@@ -46,6 +50,10 @@ func TestFreeze(t *testing.T) {
 	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: adaNGN.ID, To: tundeNGN.ID,
 		Amount: ledger.Amount("1000", "NGN"), Fee: ledger.NoFee, Reference: "p2p_ada_12"})
 	fmt.Println("receive from Ada:", errors.Is(err, ledger.ErrAccountFrozen))
+
+	_, err = wallet.Hold(ctx, ledger.HoldInput{AccountID: adaNGN.ID, Destination: tundeNGN.ID,
+		Amount: ledger.Amount("1000", "NGN"), Reference: "hold_ada_12"})
+	fmt.Println("hold paying Tunde:", errors.Is(err, ledger.ErrAccountFrozen))
 
 	_, err = wallet.Deposit(ctx, ledger.DepositInput{AccountID: tundeNGN.ID,
 		Amount: ledger.Amount("3000", "NGN"), Fee: ledger.NoFee, Reference: "paystack_T5501", Provider: "paystack"})
@@ -72,7 +80,7 @@ func TestFreeze(t *testing.T) {
 
 	begin("freeze/pending")
 	// sample: freeze/pending
-	// Tunde's account is frozen, but three things were set up before the freeze.
+	// Tunde's account is frozen, but four things were set up before the freeze.
 
 	// 1. Flutterwave reports the ₦20,000 payout as paid.
 	r, err := wallet.Confirm(ctx, payout.TransactionID, nil)
@@ -84,7 +92,14 @@ func TestFreeze(t *testing.T) {
 	check(err)
 	fmt.Println("cancel card hold:", r.Status)
 
-	// 3. The ₦2,000 standing order to Ada falls due.
+	// 3. Ada's pending ₦1,500 transfer to Tunde can't settle into a frozen account.
+	_, err = wallet.Confirm(ctx, incoming.TransactionID, nil)
+	fmt.Println("confirm transfer in:", errors.Is(err, ledger.ErrAccountFrozen))
+	r, err = wallet.Cancel(ctx, incoming.TransactionID) // the money goes back to Ada
+	check(err)
+	fmt.Println("cancel transfer in:", r.Status)
+
+	// 4. The ₦2,000 standing order to Ada falls due.
 	core.Advance(24 * time.Hour)
 	so, err := wallet.GetTransactionByReference(ctx, "so_tunde_rent_1")
 	check(err)

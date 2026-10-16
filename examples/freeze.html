@@ -47,6 +47,10 @@ _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">Tran
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;p2p_ada_12&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;receive from Ada:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
 
+_, err = wallet.<span class="t">Hold</span>(ctx, ledger.<span class="t">HoldInput</span>{<span class="t">AccountID</span>: adaNGN.<span class="t">ID</span>, <span class="t">Destination</span>: tundeNGN.<span class="t">ID</span>,
+	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;1000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Reference</span>: <span class="s">&quot;hold_ada_12&quot;</span>})
+fmt.<span class="t">Println</span>(<span class="s">&quot;hold paying Tunde:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+
 _, err = wallet.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: tundeNGN.<span class="t">ID</span>,
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;3000&quot;</span>, <span class="s">&quot;NGN&quot;</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;paystack_T5501&quot;</span>, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;top up:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
@@ -54,9 +58,10 @@ fmt.<span class="t">Println</span>(err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>send out: true
 cash out: true
 receive from Ada: true
+hold paying Tunde: true
 top up: true
 ledger.Wallet.Deposit: ledger: account is frozen or blocked: account bln_000005 is frozen</pre></figure>
-<ul><li>A frozen account refuses money <strong>in both directions</strong>: transfers out, withdrawals, transfers from other customers and deposits from a provider all fail with <code>ErrAccountFrozen</code>.</li><li>The check runs in humanblnk before anything is sent to Blnk, so a refused call writes nothing.</li><li>The <code>reason</code> is stored on the account. It is for your staff and your audit trail; the customer never sees it unless you show it.</li><li>Freezing an account that is already frozen just updates the reason.</li></ul>
+<ul><li>A frozen account refuses money <strong>in both directions</strong>: transfers out, withdrawals, transfers from other customers, card holds paying it and deposits from a provider all fail with <code>ErrAccountFrozen</code>.</li><li>The check runs in humanblnk before anything is sent to Blnk, so a refused call writes nothing.</li><li>The <code>reason</code> is stored on the account. It is for your staff and your audit trail; the customer never sees it unless you show it.</li><li>Freezing an account that is already frozen just updates the reason.</li></ul>
 <aside class="warn">A deposit refused because the account is frozen is still money the provider collected. Paystack has it, and the clearing account doesn't show it yet. Park it in <code>@Suspense</code> with <code>ops.HoldInSuspense</code> and claim it for Tunde once the freeze is lifted. See <a href="suspense.html">Unidentified money</a>.</aside>
 <h2 id="see-the-status"><a href="#see-the-status">See the status</a></h2>
 <figure class="code"><figcaption>What support sees on Tunde's account</figcaption><pre><code>acct, err := wallet.<span class="t">GetAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
@@ -77,8 +82,8 @@ balance: 80000.00 available: 50000.00
 quote allowed: false frozen: true</pre></figure>
 <ul><li><code>Account.Status</code> reads <code>frozen</code>. Accounts that were never frozen read <code>active</code>.</li><li><code>MetaData</code> keeps <code>status_reason</code> and <code>status_changed_at</code> (UTC, RFC 3339) from the last status change.</li><li>The balance doesn't move. <code>Available</code> is lower than <code>Balance</code> here only because of the payout and card hold Tunde started before the freeze.</li><li>Quotes run the same checks, so <code>wallet.QuoteTransfer</code> comes back with <code>Allowed: false</code> and <code>Reason</code> set to <code>ErrAccountFrozen</code>. Use it to grey out the Send button in the app.</li></ul>
 <h2 id="what-a-freeze-does-not-stop"><a href="#what-a-freeze-does-not-stop">What a freeze does not stop</a></h2>
-<p>The freeze is checked when a movement starts. Three things that started before the freeze still finish:</p>
-<figure class="code"><figcaption>Work started before the freeze</figcaption><pre><code><span class="c">// Tunde&#x27;s account is frozen, but three things were set up before the freeze.</span>
+<p>The freeze is checked when a movement starts, and again when a pending transaction would settle into the account. Some things that started before the freeze still finish:</p>
+<figure class="code"><figcaption>Work started before the freeze</figcaption><pre><code><span class="c">// Tunde&#x27;s account is frozen, but four things were set up before the freeze.</span>
 
 <span class="c">// 1. Flutterwave reports the ₦20,000 payout as paid.</span>
 r, err := wallet.<span class="t">Confirm</span>(ctx, payout.<span class="t">TransactionID</span>, <span class="b">nil</span>)
@@ -90,7 +95,14 @@ r, err = wallet.<span class="t">Cancel</span>(ctx, cardHold.<span class="t">Tran
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;cancel card hold:&quot;</span>, r.<span class="t">Status</span>)
 
-<span class="c">// 3. The ₦2,000 standing order to Ada falls due.</span>
+<span class="c">// 3. Ada&#x27;s pending ₦1,500 transfer to Tunde can&#x27;t settle into a frozen account.</span>
+_, err = wallet.<span class="t">Confirm</span>(ctx, incoming.<span class="t">TransactionID</span>, <span class="b">nil</span>)
+fmt.<span class="t">Println</span>(<span class="s">&quot;confirm transfer in:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))
+r, err = wallet.<span class="t">Cancel</span>(ctx, incoming.<span class="t">TransactionID</span>) <span class="c">// the money goes back to Ada</span>
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;cancel transfer in:&quot;</span>, r.<span class="t">Status</span>)
+
+<span class="c">// 4. The ₦2,000 standing order to Ada falls due.</span>
 core.<span class="t">Advance</span>(<span class="n">24</span> * time.<span class="t">Hour</span>)
 so, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;so_tunde_rent_1&quot;</span>)
 check(err)
@@ -101,11 +113,12 @@ check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;status:&quot;</span>, acct.<span class="t">Status</span>, <span class="s">&quot;balance:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>confirm payout: APPLIED
 cancel card hold: VOID
+confirm transfer in: true
+cancel transfer in: VOID
 scheduled transfer: APPLIED
 status: frozen balance: 58000.00</pre></figure>
-<ul><li><code>wallet.Confirm</code> and <code>wallet.Cancel</code> on a pending transaction are not checked. A payout already sent to Flutterwave can be confirmed, and a card hold can be released.</li><li>Scheduled transfers are posted by Blnk itself when they fall due, so humanblnk never sees them and can't refuse them. The same goes for hold expiry and auto-capture (<code>HoldInput.CaptureAt</code>).</li><li>If those must stop too, cancel the pending ones yourself with <code>wallet.Cancel</code> after you freeze.</li></ul>
-<div class="tablewrap"><table><thead><tr><th>Started before the freeze</th><th>After the freeze</th></tr></thead><tbody><tr><td>Pending withdrawal or hold</td><td><code>Confirm</code> and <code>Cancel</code> still work</td></tr><tr><td>Scheduled transfer</td><td>posts when due</td></tr><tr><td>Hold with <code>ExpiresAt</code> or <code>CaptureAt</code></td><td>released or captured by Blnk when due</td></tr><tr><td>Any new <code>Transfer</code>, <code>Withdraw</code>, <code>Deposit</code>, <code>Hold</code>, <code>Split</code>, <code>Exchange</code>, <code>Refund</code></td><td>refused with <code>ErrAccountFrozen</code></td></tr></tbody></table></div>
-<aside class="warn"><code>wallet.Hold</code> checks only the account the money is held on, not its <code>Destination</code>. A new card hold paying a frozen merchant is accepted, and confirming it credits the frozen account. Check the merchant's <code>Status</code> yourself before you place the hold.</aside>
+<ul><li><code>wallet.Confirm</code> checks only the accounts that receive the money. A payout already sent to Flutterwave can be confirmed, because the money leaves the frozen account. A pending transfer <strong>into</strong> the frozen account can't be confirmed: <code>ErrAccountFrozen</code>. <code>ConfirmMany</code> checks the same way.</li><li><code>wallet.Cancel</code> is never checked. A card hold can be released, and a pending transfer in can be cancelled so the money goes back to its sender.</li><li>Scheduled transfers are posted by Blnk itself when they fall due, so humanblnk never sees them and can't refuse them. The same goes for hold expiry and auto-capture (<code>HoldInput.CaptureAt</code>).</li><li>If those must stop too, cancel the pending ones yourself with <code>wallet.Cancel</code> after you freeze.</li></ul>
+<div class="tablewrap"><table><thead><tr><th>Started before the freeze</th><th>After the freeze</th></tr></thead><tbody><tr><td>Pending withdrawal or hold paid by the frozen account</td><td><code>Confirm</code> and <code>Cancel</code> still work</td></tr><tr><td>Pending transfer or hold paying the frozen account</td><td><code>Confirm</code> is refused; <code>Cancel</code> works</td></tr><tr><td>Scheduled transfer</td><td>posts when due</td></tr><tr><td>Hold with <code>ExpiresAt</code> or <code>CaptureAt</code></td><td>released or captured by Blnk when due</td></tr><tr><td>Any new <code>Transfer</code>, <code>Withdraw</code>, <code>Deposit</code>, <code>Hold</code>, <code>Split</code>, <code>Exchange</code>, <code>Refund</code></td><td>refused with <code>ErrAccountFrozen</code></td></tr></tbody></table></div>
 <h2 id="unfreeze-ops-unfreezeaccount"><a href="#unfreeze-ops-unfreezeaccount">Unfreeze: ops.UnfreezeAccount</a></h2>
 <figure class="code"><figcaption>Tunde confirms the device was his</figcaption><pre><code><span class="c">// Tunde confirms the new device was his. Support lifts the freeze.</span>
 err = ops.<span class="t">UnfreezeAccount</span>(ctx, tundeNGN.<span class="t">ID</span>)
@@ -215,7 +228,7 @@ unfreeze closed: true
 freeze @FeeIncome: true
 freeze general ledger: true
 unknown account: true</pre></figure>
-<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrAccountFrozen</code></td><td>a movement touches a frozen account, in or out</td><td>wait for the freeze to be lifted; park incoming provider money in <a href="suspense.html">suspense</a></td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>money would leave a customer account in a frozen ledger</td><td>wait for <code>UnfreezeLedger</code>; money in still works</td></tr><tr><td><code>ErrAccountClosed</code></td><td>freezing, unfreezing or moving money on a closed account</td><td>open a new account for the customer</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>FreezeAccount</code> on a house account such as <code>@FeeIncome</code>, or <code>FreezeLedger</code> on the general ledger</td><td>house accounts are never frozen</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist</td><td>check the id</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td><code>FreezeLedger</code> on a ledger that doesn't exist</td><td>check the id</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrAccountFrozen</code></td><td>a movement touches a frozen account, in or out; <code>Confirm</code> would settle a pending transaction into one</td><td>wait for the freeze to be lifted; park incoming provider money in <a href="suspense.html">suspense</a></td></tr><tr><td><code>ErrLedgerFrozen</code></td><td>money would leave a customer account in a frozen ledger</td><td>wait for <code>UnfreezeLedger</code>; money in still works</td></tr><tr><td><code>ErrAccountClosed</code></td><td>freezing, unfreezing or moving money on a closed account</td><td>open a new account for the customer</td></tr><tr><td><code>ErrWrongKind</code></td><td><code>FreezeAccount</code> on a house account such as <code>@FeeIncome</code>, or <code>FreezeLedger</code> on the general ledger</td><td>house accounts are never frozen</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist</td><td>check the id</td></tr><tr><td><code>ErrLedgerNotFound</code></td><td><code>FreezeLedger</code> on a ledger that doesn't exist</td><td>check the id</td></tr></tbody></table></div>
 <h2 id="related"><a href="#related">Related</a></h2>
 <ul><li><a href="close-account.html">Close an account</a>: the permanent version of a freeze.</li><li><a href="suspense.html">Unidentified money</a>: where to park money that can't reach a frozen or closed account.</li><li><a href="ledgers.html">Provision ledgers</a>: split accounts into ledgers so you can freeze a group at once.</li><li><a href="errors.html">Errors</a>: how <code>errors.Is</code> works with every sentinel.</li></ul>
 </article>

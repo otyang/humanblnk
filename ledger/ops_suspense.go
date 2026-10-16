@@ -2,7 +2,6 @@ package ledger
 
 import (
 	"context"
-	"strings"
 )
 
 // SuspenseInput holds money that arrived but can't be matched to a customer yet.
@@ -17,12 +16,17 @@ type SuspenseInput struct {
 
 // HoldInSuspense records unidentified incoming money: clearing account → @Suspense.
 func (s opsAPI) HoldInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error) {
+	const op = "ledger.Ops.HoldInSuspense"
+	clearing := s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount)
+	if err := houseOnly(op, "ClearingAccount", clearing); err != nil {
+		return nil, err
+	}
 	md := map[string]any{"suspense_note": in.Note}
 	for k, v := range in.MetaData {
 		md[k] = v
 	}
-	return s.move(ctx, "ledger.Ops.HoldInSuspense", TransferInput{
-		From: AccountID(s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount)), To: SuspenseAccount,
+	return s.move(ctx, op, TransferInput{
+		From: AccountID(clearing), To: SuspenseAccount,
 		Amount: in.Amount, Reference: in.Reference, AllowOverdraft: true,
 		Description: firstNonEmpty(in.Note, "Unidentified funds"), MetaData: md,
 	}, "suspense_in")
@@ -70,8 +74,8 @@ type ReturnFromSuspenseInput struct {
 func (s opsAPI) ReturnFromSuspense(ctx context.Context, in ReturnFromSuspenseInput) (*Receipt, error) {
 	const op = "ledger.Ops.ReturnFromSuspense"
 	clearing := s.clearing(in.ClearingAccount, in.Provider, s.cfg.DepositClearingAccount)
-	if !strings.HasPrefix(clearing, "@") {
-		return nil, invalid(op, "clearing account must be a house account (\"@Name\")")
+	if err := houseOnly(op, "ClearingAccount", clearing); err != nil {
+		return nil, err
 	}
 	return s.move(ctx, op, TransferInput{
 		From: SuspenseAccount, To: AccountID(clearing), Amount: in.Amount, Reference: in.Reference,

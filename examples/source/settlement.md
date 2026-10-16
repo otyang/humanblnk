@@ -71,8 +71,7 @@ The defaults fit most cases. Override them when you have more than one bank acco
 
 - One of `Provider` or `ClearingAccount` is required. When both are set, `ClearingAccount` wins.
 - New house accounts need no setup: Blnk creates `@BankProvidus` the first time it is used. Add them to `ledger.Chart` at start-up so `ops.GetHouseAccount`, `TrialBalance` and statements know their type and normal side.
-
-> warn: `ClearingAccount`, `BankAccount` and `FeeAccount` are posted with overdraft allowed and are not checked for status. Pass house accounts (`@Name`) only, never a customer account id.
+- `ClearingAccount`, `BankAccount` and `FeeAccount` must be house accounts (`@Name`). They are posted with overdraft allowed, so a customer account id is refused with `ErrWrongKind` before anything is posted.
 
 ## What happens in Blnk
 
@@ -94,7 +93,7 @@ Payout, ₦60,000 with a ₦250 fee:
 | `@ProviderFees` | 250 | |
 | `@BankOperating` | | 60,250 |
 
-These are two Blnk transactions, the main one under `Reference` and the fee under `Reference_fee`, sent as one atomic bulk request. Settlements touch house accounts only, so they carry on while a customer account or ledger is frozen.
+These are two Blnk transactions, the main one under `Reference` and the fee under `Reference_fee`, sent as one atomic bulk request. Settlements touch house accounts only, so they carry on while a customer account or ledger is frozen. The library refuses any other account.
 
 ## Errors
 
@@ -103,6 +102,7 @@ These are two Blnk transactions, the main one under `Reference` and the fee unde
 | Error | When | What to do |
 |---|---|---|
 | `ErrInvalidInput` | no `Provider` or `ClearingAccount`; no `Reference`; a zero or negative `Amount`; a `Fee` in another currency; a collection fee equal to or above `Amount` | fix the call |
+| `ErrWrongKind` | `ClearingAccount`, `BankAccount` or `FeeAccount` isn't a house account (`@Name`). Also matches `ErrInvalidInput` | pass the `@` name of a house account |
 | `ErrDuplicateReference` | the `Reference` was used for a different settlement | use the provider's new settlement id |
 | `ErrUnavailable` | Blnk can't be reached | retry with the same `Reference`; a settlement that did post comes back as a replay |
 

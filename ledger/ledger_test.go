@@ -470,7 +470,7 @@ func TestMoneyJSONRoundTrip(t *testing.T) {
 		}
 	}
 	out, _ := json.Marshal(ledger.Precise(bigInt("45600000"), 100_000_000, "BTC"))
-	want := `{"amount":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}`
+	want := `{"amount":"0.456","display":"0.456","currency":"BTC","precise_amount":"45600000","precision":100000000}`
 	if string(out) != want {
 		t.Fatalf("got %s", out)
 	}

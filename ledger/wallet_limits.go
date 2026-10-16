@@ -84,7 +84,11 @@ func (s *Service) usage(ctx context.Context, op string, b *blnk.Balance) (*Limit
 		if err != nil {
 			return nil, &OpError{Op: op, Kind: ErrInvalidInput, Cause: fmt.Errorf("limit: %w", err)}
 		}
-		m := s.money(c.Sub(c, used), prec, cur)
+		c.Sub(c, used)
+		if c.Sign() < 0 {
+			c.SetInt64(0) // bulk items aren't checked, so usage can pass the cap
+		}
+		m := s.money(c, prec, cur)
 		return &m, nil
 	}
 	if u.DailyLeft, err = left(u.Limit.Daily, daily); err != nil {
@@ -116,8 +120,12 @@ func (s *Service) checkLimits(ctx context.Context, op string, accountID AccountI
 			return &OpError{Op: op, Kind: ErrInvalidInput, Cause: fmt.Errorf("limit: %w", err)}
 		}
 		if new(big.Int).Add(used, amount).Cmp(c) > 0 {
+			if what == "per-transaction" {
+				return &OpError{Op: op, Kind: ErrLimitExceeded, Cause: fmt.Errorf("%s limit %s %s: this needs %s",
+					what, capStr, cur, s.money(amount, prec, cur).Display)}
+			}
 			return &OpError{Op: op, Kind: ErrLimitExceeded, Cause: fmt.Errorf("%s limit %s %s: already used %s, this needs %s",
-				what, capStr, cur, formatDecimal(used, prec), formatDecimal(amount, prec))}
+				what, capStr, cur, s.money(used, prec, cur).Display, s.money(amount, prec, cur).Display)}
 		}
 		return nil
 	}
@@ -167,23 +175,35 @@ func (s *Service) limitFor(b *blnk.Balance) *Limit {
 	return nil
 }
 
-// outflows lists every transaction with the account as source since t.
+// outflows lists every transaction with the account as source since t: those
+// created since then, and scheduled ones created earlier that took effect
+// since then.
 func (s *Service) outflows(ctx context.Context, accountID string, since time.Time) ([]blnk.Transaction, error) {
 	var out []blnk.Transaction
-	for offset := 0; ; offset += 100 {
-		page, _, err := s.c.FilterTransactions(ctx, blnk.FilterRequest{
-			Filters: []blnk.Filter{
-				{Field: "source", Operator: "eq", Value: accountID},
-				{Field: "created_at", Operator: "gte", Value: since.UTC().Format(time.RFC3339)},
-			},
-			SortBy: "created_at", SortOrder: "asc", Limit: 100, Offset: offset,
-		})
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, page...)
-		if len(page) < 100 {
-			break
+	at := since.UTC().Format(time.RFC3339)
+	seen := map[string]bool{}
+	for _, extra := range [][]blnk.Filter{
+		{{Field: "created_at", Operator: "gte", Value: at}},
+		{{Field: "created_at", Operator: "lt", Value: at}, {Field: "effective_date", Operator: "gte", Value: at},
+			{Field: "status", Operator: "eq", Value: blnk.StatusApplied}},
+	} {
+		for offset := 0; ; offset += 100 {
+			page, _, err := s.c.FilterTransactions(ctx, blnk.FilterRequest{
+				Filters: append([]blnk.Filter{{Field: "source", Operator: "eq", Value: accountID}}, extra...),
+				SortBy:  "created_at", SortOrder: "asc", Limit: 100, Offset: offset,
+			})
+			if err != nil {
+				return nil, err
+			}
+			for _, t := range page {
+				if !seen[t.GetID()] {
+					seen[t.GetID()] = true
+					out = append(out, t)
+				}
+			}
+			if len(page) < 100 {
+				break
+			}
 		}
 	}
 	// Blnk 0.15's filter leaves parent_transaction empty on the rows it
@@ -211,7 +231,9 @@ func (s *Service) outflows(ctx context.Context, accountID string, since time.Tim
 }
 
 // spent sums money committed to leave the account since t, counting each
-// amount once:
+// amount once. Only movements that limits apply to count (see limited), and
+// each is dated by when it took effect, so a scheduled transfer counts on the
+// day it posts:
 //   - an INFLIGHT or QUEUED transaction counts in full;
 //   - an APPLIED or INFLIGHT child of a counted INFLIGHT/QUEUED parent (a
 //     commit, or the "_q" copy the queue writes) isn't counted again;
@@ -225,12 +247,19 @@ func spent(txs []blnk.Transaction, since time.Time) *big.Int {
 	sum := new(big.Int)
 	for i := range txs {
 		t := &txs[i]
-		if t.CreatedAt.Before(since) || isSplitParent(t) {
+		if effective(t).Before(since) || isSplitParent(t) {
 			continue
 		}
 		parent := byID[t.ParentTransaction]
+		kind, _ := t.MetaData["txn_type"].(string)
+		if kind == "" && parent != nil {
+			kind, _ = parent.MetaData["txn_type"].(string)
+		}
+		if (kind != "" && !limited(kind)) || strings.HasSuffix(t.Reference, "_refund") {
+			continue // refunds, adjustments, settlements and other back-office flows
+		}
 		// The parent (or, for a split, its legs) already counted this money.
-		counted := parent != nil && !parent.CreatedAt.Before(since) &&
+		counted := parent != nil && !effective(parent).Before(since) &&
 			(parent.Status == blnk.StatusInflight || parent.Status == blnk.StatusQueued)
 		switch t.Status {
 		case blnk.StatusInflight, blnk.StatusQueued, blnk.StatusApplied:

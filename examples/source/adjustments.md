@@ -30,7 +30,7 @@ Kemi from operations asks for Ada's cashback. Femi, her lead, approves it.
 - `Type: ledger.AdjustCredit` moves money from the house account into the customer's account.
 - The description is `Adjustment: ` followed by your `Reason`.
 - `MetaData` holds `adjust_reason`, `requested_by` and `approved_by`, plus `txn_type: adjustment`, which humanblnk sets on every adjustment. Filter on it when you audit corrections.
-- No fee is charged and no [limits](limits.html) are checked: an adjustment isn't a customer payment.
+- No fee is charged and no [limits](limits.html) are checked: an adjustment isn't a customer payment. A debit doesn't count in the account's limit usage either.
 
 ## Take money back: an error correction
 

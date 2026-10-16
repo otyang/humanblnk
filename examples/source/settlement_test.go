@@ -171,6 +171,12 @@ func TestSettlement(t *testing.T) {
 	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack",
 		Amount: ledger.Amount("0", "NGN"), Reference: "stl_x4"})
 	fmt.Println("zero amount:", errors.Is(err, ledger.ErrInvalidInput))
+
+	// Only house accounts: a customer account here could be taken below zero.
+	_, err = ops.RecordSettlement(ctx, ledger.SettlementInput{Provider: "paystack", BankAccount: string(adaNGN.ID),
+		Amount: ledger.Amount("1000", "NGN"), Reference: "stl_x5"})
+	fmt.Println("customer account as the bank:", errors.Is(err, ledger.ErrWrongKind))
+	fmt.Println(err)
 	// end
 	end()
 }

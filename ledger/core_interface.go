@@ -80,7 +80,9 @@ type Wallet interface {
 	// ---- Limits (wallet_limits.go)
 
 	// LimitUsage reports usage against the account's limit (for "you can send X
-	// more today" in your app).
+	// more today" in your app). Only movements limits apply to count (transfers,
+	// withdrawals, holds, splits, exchanges, escrow, and bulk items), each on
+	// the day it took effect; what's left never goes below zero.
 	LimitUsage(ctx context.Context, id AccountID) (*LimitUsage, error)
 
 	// ---- Moving money (wallet_payments.go)
@@ -159,7 +161,9 @@ type Wallet interface {
 	// Confirm settles an INFLIGHT transaction. With partial set, only that amount is
 	// settled and the rest stays held (call Confirm again or Cancel the remainder).
 	// A transaction with several legs (one with a fee) can only be confirmed in
-	// full, or one leg at a time by the leg's transaction id.
+	// full, or one leg at a time by the leg's transaction id. A customer account
+	// that would receive the money must not be frozen or closed
+	// (ErrAccountFrozen, ErrAccountClosed); Cancel it instead.
 	Confirm(ctx context.Context, txID string, partial *Money) (*Receipt, error)
 
 	// Cancel releases whatever is still held on an INFLIGHT transaction.
@@ -181,10 +185,18 @@ type Wallet interface {
 	// suffix used for records produced by the queue.
 	GetTransactionByReference(ctx context.Context, reference string) (*Receipt, error)
 
-	// Refund reverses a settled (or confirmed/cancelled pending) transaction once.
-	// For split transactions created through the queue, pass the queued parent id.
-	// Blnk reverses the whole amount, so a transaction that already has partial
-	// refunds (RefundPartial) is refused; refund the rest with RefundPartial.
+	// Refund reverses a settled transaction in full, once. A payment with a fee,
+	// or a split, is reversed leg by leg (fee included): the receipt's Amount is
+	// the total and Legs lists each reversal, and if one leg fails, calling
+	// Refund again finishes the rest. Each account that received money must
+	// still hold it, checked just before reversing: otherwise the refund is
+	// refused with ErrInsufficientFunds and nothing is reversed. For a pending
+	// payment that was confirmed, pass the id Confirm returned; if it carried a
+	// fee, Confirm returned one leg's id, so reverse each leg by its own id or
+	// use RefundPartial.
+	// A transaction that already has partial refunds (RefundPartial) is
+	// refused; refund the rest with RefundPartial. For split transactions
+	// created through the queue, pass the queued parent id.
 	Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error)
 
 	// RefundPartial sends part of a posted transaction back: destination → source,
@@ -202,6 +214,8 @@ type Wallet interface {
 	// ---- Escrow (wallet_escrow.go)
 
 	// OpenEscrow opens an escrow account and moves Amount into it from the payer.
+	// Status, limits and the payer's available balance are checked before the
+	// account is opened, and a retry with the same Reference reuses it.
 	OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, error)
 
 	// GetEscrow returns an escrow and how much of it is still held.
@@ -248,7 +262,10 @@ type Ops interface {
 	// ---- Controls: freeze and close (ops_controls.go)
 
 	// FreezeAccount marks the account frozen: every movement touching it is refused
-	// (ErrAccountFrozen). A closed account can't be frozen (ErrAccountClosed).
+	// (ErrAccountFrozen), and a pending transaction can't be confirmed into it;
+	// one can still be cancelled. Movements Blnk posts by itself (scheduled
+	// transfers, auto-capture, hold expiry) aren't checked. A closed account
+	// can't be frozen (ErrAccountClosed).
 	FreezeAccount(ctx context.Context, id AccountID, reason string) error
 
 	// UnfreezeAccount marks a frozen account active again. A closed account stays
@@ -300,12 +317,15 @@ type Ops interface {
 	//	Collection: Dr Bank (Amount−Fee), Dr ProviderFees (Fee) / Cr Clearing (Amount)
 	//	Payout:     Dr Clearing (Amount), Dr ProviderFees (Fee) / Cr Bank (Amount+Fee)
 	//
-	// The entries post atomically.
+	// The entries post atomically. ClearingAccount, BankAccount and FeeAccount
+	// must be house accounts ("@Name"); anything else is ErrWrongKind.
 	RecordSettlement(ctx context.Context, in SettlementInput) (*SettlementReceipt, error)
 
 	// ---- Suspense (ops_suspense.go)
 
 	// HoldInSuspense records unidentified incoming money: clearing account → @Suspense.
+	// The clearing account must be a house account ("@Name"); anything else is
+	// ErrWrongKind.
 	HoldInSuspense(ctx context.Context, in SuspenseInput) (*Receipt, error)
 
 	// ClaimFromSuspense moves held money to its owner once known: @Suspense →

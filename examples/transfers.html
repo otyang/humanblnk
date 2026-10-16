@@ -118,7 +118,7 @@ balances()</code></pre></figure>
 Ada: 57490.00 available: 57490.00 | Tunde: 42500.00
 APPLIED posted
 Ada: 55490.00 available: 55490.00 | Tunde: 44500.00</pre></figure>
-<ul><li>The in-memory Blnk used here posts it when its clock passes the date (<code>core.Advance</code>). Real Blnk does the same on its own schedule.</li><li>Account status and limits are checked when you create it. When Blnk posts it later, humanblnk is not involved, so those checks are not repeated. That is why <code>ops.CloseAccount</code> refuses an account with scheduled transfers.</li><li>A transfer can't be both pending and scheduled.</li></ul>
+<ul><li>The in-memory Blnk used here posts it when its clock passes the date (<code>core.Advance</code>). Real Blnk does the same on its own schedule.</li><li>Account status and limits are checked when you create it. When Blnk posts it later, humanblnk is not involved, so those checks are not repeated. That is why <code>ops.CloseAccount</code> refuses an account with scheduled transfers.</li><li>It counts in the sender's <a href="limits.html">limit</a> usage on the day it posts, not while it waits.</li><li>A transfer can't be both pending and scheduled.</li></ul>
 <h2 id="to-and-from-house-accounts"><a href="#to-and-from-house-accounts">To and from house accounts</a></h2>
 <p><code>From</code> and <code>To</code> also accept a house account, written <code>ledger.AccountID(&quot;@Name&quot;)</code>. Use this for money the business pays to a customer, or a customer pays to the business.</p>
 <figure class="code"><figcaption>Cashback in, airtime out</figcaption><pre><code><span class="c">// Oja pays Ada ₦500 cashback out of its marketing budget.</span>
@@ -226,7 +226,7 @@ _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">Tran
 })
 fmt.<span class="t">Println</span>(<span class="s">&quot;frozen recipient:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrAccountFrozen</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>insufficient funds: true
-limit: true ledger.Wallet.Transfer: ledger: transaction limit exceeded: per-transaction limit 100000 NGN: already used 0, this needs 150000
+limit: true ledger.Wallet.Transfer: ledger: transaction limit exceeded: per-transaction limit 100000 NGN: this needs 150000.00
 same account: true
 pending and scheduled: true
 frozen recipient: true</pre></figure>

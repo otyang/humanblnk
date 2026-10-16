@@ -147,7 +147,7 @@ fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.
 _, err = wallet.<span class="t">History</span>(ctx, <span class="s">&quot;bln_doesnotexist&quot;</span>, ledger.<span class="t">HistoryQuery</span>{})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>true ledger.Wallet.Statement: ledger: invalid input: from must be before to
-true ledger.Wallet.Statement: ledger: id names the wrong kind of object: ledger: invalid input: @FeeIncome is a house account, not a customer account; read house accounts with Ops().GetHouseAccount
+true ledger.Wallet.Statement: ledger: id names the wrong kind of object: @FeeIncome is a house account, not a customer account; read house accounts with Ops().GetHouseAccount
 true</pre></figure>
 <div class="tablewrap"><table><thead><tr><th>Error</th><th>When</th><th>What to do</th></tr></thead><tbody><tr><td><code>ErrInvalidInput</code></td><td><code>from</code> is not before <code>to</code>; more than 10,000 lines in the period</td><td>fix the dates; ask for a shorter period</td></tr><tr><td><code>ErrWrongKind</code></td><td>a house account was passed to a wallet method</td><td>use <code>ops.HouseStatement</code> and the other house methods</td></tr><tr><td><code>ErrNotFound</code></td><td>the account doesn't exist</td><td>check the id</td></tr><tr><td><code>ErrConflict</code></td><td>the lines don't add up to Blnk's balance at <code>To</code></td><td>ask again; if it persists, look for backdated entries</td></tr></tbody></table></div>
 <h2 id="related-pages"><a href="#related-pages">Related pages</a></h2>

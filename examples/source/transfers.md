@@ -58,6 +58,7 @@ The fee is charged to the sender on top of `Amount` and goes to `@FeeIncome`.
 
 - The in-memory Blnk used here posts it when its clock passes the date (`core.Advance`). Real Blnk does the same on its own schedule.
 - Account status and limits are checked when you create it. When Blnk posts it later, humanblnk is not involved, so those checks are not repeated. That is why `ops.CloseAccount` refuses an account with scheduled transfers.
+- It counts in the sender's [limit](limits.html) usage on the day it posts, not while it waits.
 - A transfer can't be both pending and scheduled.
 
 ## To and from house accounts

@@ -54,6 +54,11 @@ func (s opsAPI) RecordSettlement(ctx context.Context, in SettlementInput) (*Sett
 	clearing := s.clearing(in.ClearingAccount, in.Provider, "")
 	bank := firstNonEmpty(in.BankAccount, BankOperatingAccount)
 	feeAcct := firstNonEmpty(in.FeeAccount, ProviderFeesAccount)
+	for _, f := range []struct{ name, id string }{{"ClearingAccount", clearing}, {"BankAccount", bank}, {"FeeAccount", feeAcct}} {
+		if err := houseOnly(op, f.name, f.id); err != nil {
+			return nil, err
+		}
+	}
 	amount, fee, err := s.prepare(op, AccountID(clearing), in.Amount, in.Fee, in.Reference)
 	if err != nil {
 		return nil, err

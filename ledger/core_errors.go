@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/otyang/humanblnk/blnk"
 )
@@ -30,14 +31,24 @@ var (
 	ErrUnauthorized       = errors.New("ledger: unauthorized")
 
 	// ErrLedgerNotFound: the ledger doesn't exist. errors.Is(err, ErrNotFound) also holds.
-	ErrLedgerNotFound = fmt.Errorf("ledger: ledger not found: %w", ErrNotFound)
+	ErrLedgerNotFound error = &narrower{"ledger: ledger not found", ErrNotFound}
 	// ErrLedgerFrozen: the account's ledger is frozen, so no money can leave it.
 	ErrLedgerFrozen = errors.New("ledger: ledger is frozen")
 	// ErrWrongKind: the id names another kind of object, e.g. a ledger id passed
 	// to a customer-account method, or a house account where a customer account is required.
 	// errors.Is(err, ErrInvalidInput) also holds.
-	ErrWrongKind = fmt.Errorf("ledger: id names the wrong kind of object: %w", ErrInvalidInput)
+	ErrWrongKind error = &narrower{"ledger: id names the wrong kind of object", ErrInvalidInput}
 )
+
+// narrower is a sentinel that also matches a broader one with errors.Is, but
+// prints only its own text.
+type narrower struct {
+	msg   string
+	broad error
+}
+
+func (e *narrower) Error() string { return e.msg }
+func (e *narrower) Unwrap() error { return e.broad }
 
 // OpError carries the operation name, a domain sentinel, and the cause.
 type OpError struct {
@@ -51,7 +62,10 @@ func (e *OpError) Error() string {
 	if e.Cause == nil {
 		return fmt.Sprintf("%s: %v", e.Op, e.Kind)
 	}
-	return fmt.Sprintf("%s: %v: %v", e.Op, e.Kind, e.Cause)
+	// A cause that already names the same kind isn't repeated:
+	// "invalid input: amount …", not "invalid input: invalid input: amount …".
+	cause := strings.TrimPrefix(e.Cause.Error(), e.Kind.Error()+": ")
+	return fmt.Sprintf("%s: %v: %s", e.Op, e.Kind, cause)
 }
 
 // Unwrap exposes both the sentinel and the cause to errors.Is / errors.As.

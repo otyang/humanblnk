@@ -19,7 +19,7 @@ Freezing is on `svc.Ops()`. A customer-facing server that only holds a `ledger.W
 
 @sample account | Tunde's account is frozen after a suspicious login
 
-- A frozen account refuses money **in both directions**: transfers out, withdrawals, transfers from other customers and deposits from a provider all fail with `ErrAccountFrozen`.
+- A frozen account refuses money **in both directions**: transfers out, withdrawals, transfers from other customers, card holds paying it and deposits from a provider all fail with `ErrAccountFrozen`.
 - The check runs in humanblnk before anything is sent to Blnk, so a refused call writes nothing.
 - The `reason` is stored on the account. It is for your staff and your audit trail; the customer never sees it unless you show it.
 - Freezing an account that is already frozen just updates the reason.
@@ -37,22 +37,22 @@ Freezing is on `svc.Ops()`. A customer-facing server that only holds a `ledger.W
 
 ## What a freeze does not stop
 
-The freeze is checked when a movement starts. Three things that started before the freeze still finish:
+The freeze is checked when a movement starts, and again when a pending transaction would settle into the account. Some things that started before the freeze still finish:
 
 @sample pending | Work started before the freeze
 
-- `wallet.Confirm` and `wallet.Cancel` on a pending transaction are not checked. A payout already sent to Flutterwave can be confirmed, and a card hold can be released.
+- `wallet.Confirm` checks only the accounts that receive the money. A payout already sent to Flutterwave can be confirmed, because the money leaves the frozen account. A pending transfer **into** the frozen account can't be confirmed: `ErrAccountFrozen`. `ConfirmMany` checks the same way.
+- `wallet.Cancel` is never checked. A card hold can be released, and a pending transfer in can be cancelled so the money goes back to its sender.
 - Scheduled transfers are posted by Blnk itself when they fall due, so humanblnk never sees them and can't refuse them. The same goes for hold expiry and auto-capture (`HoldInput.CaptureAt`).
 - If those must stop too, cancel the pending ones yourself with `wallet.Cancel` after you freeze.
 
 | Started before the freeze | After the freeze |
 |---|---|
-| Pending withdrawal or hold | `Confirm` and `Cancel` still work |
+| Pending withdrawal or hold paid by the frozen account | `Confirm` and `Cancel` still work |
+| Pending transfer or hold paying the frozen account | `Confirm` is refused; `Cancel` works |
 | Scheduled transfer | posts when due |
 | Hold with `ExpiresAt` or `CaptureAt` | released or captured by Blnk when due |
 | Any new `Transfer`, `Withdraw`, `Deposit`, `Hold`, `Split`, `Exchange`, `Refund` | refused with `ErrAccountFrozen` |
-
-> warn: `wallet.Hold` checks only the account the money is held on, not its `Destination`. A new card hold paying a frozen merchant is accepted, and confirming it credits the frozen account. Check the merchant's `Status` yourself before you place the hold.
 
 ## Unfreeze: ops.UnfreezeAccount
 
@@ -109,7 +109,7 @@ Blnk itself doesn't act on these fields. humanblnk enforces them on every moveme
 
 | Error | When | What to do |
 |---|---|---|
-| `ErrAccountFrozen` | a movement touches a frozen account, in or out | wait for the freeze to be lifted; park incoming provider money in [suspense](suspense.html) |
+| `ErrAccountFrozen` | a movement touches a frozen account, in or out; `Confirm` would settle a pending transaction into one | wait for the freeze to be lifted; park incoming provider money in [suspense](suspense.html) |
 | `ErrLedgerFrozen` | money would leave a customer account in a frozen ledger | wait for `UnfreezeLedger`; money in still works |
 | `ErrAccountClosed` | freezing, unfreezing or moving money on a closed account | open a new account for the customer |
 | `ErrWrongKind` | `FreezeAccount` on a house account such as `@FeeIncome`, or `FreezeLedger` on the general ledger | house accounts are never frozen |

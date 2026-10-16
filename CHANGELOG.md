@@ -15,6 +15,28 @@ change the API; such changes are listed under **Changed**.
 ### Fixed
 - A savings pot's goal had an empty `Display` when returned by `OpenPot` and
   `ListPots`.
+- Money could reach a frozen or closed account: `Hold` now checks its
+  `Destination`, and `Confirm` and `ConfirmMany` check the accounts receiving
+  the money. `Cancel` is still always allowed.
+- `RecordSettlement`, `HoldInSuspense` and `ReturnFromSuspense` accepted a
+  customer account as a clearing, bank or fee account and could overdraw it.
+  They now require house accounts (`ErrWrongKind` otherwise).
+- `Refund` could take a customer account below zero, and failed for a payment
+  with a fee or a split. It now refuses with `ErrInsufficientFunds` before
+  reversing anything, reverses fee-carrying and split payments leg by leg, and
+  a retry finishes any legs left.
+- A refused `OpenEscrow` left an empty escrow account behind, and each retry
+  opened another. The checks now run first, and a retry reuses the account.
+- Limit usage counted refunds, adjustments and other back-office movements,
+  never counted scheduled transfers on the day they posted, and could report a
+  negative amount left. Fixed.
+- `ExchangeQuote.Debit.Display` was empty; `Precise`, `ComputeFee` and
+  `Convert` now fill `Display`. `Parse("")` and `ParseDecimal("")` returned
+  zero instead of `ErrInvalidInput`.
+- Some error messages repeated "invalid input", and wrong-kind errors read
+  "is a account".
+- Calling `Schedule` again after the first occurrence had run failed with
+  "first occurrence must be in the future"; it now returns the plan.
 
 ## [0.1.0] - 2026-10-16
 

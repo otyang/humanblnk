@@ -193,6 +193,19 @@ func TestCardHolds(t *testing.T) {
 
 	_, err = wallet.Confirm(ctx, c.TransactionID, nil) // the capture record, not a hold
 	fmt.Println("not a hold:", errors.Is(err, ledger.ErrNotPending))
+
+	// A merchant under review: no new hold pays it, and an open one can't be captured into it.
+	held, err := wallet.Hold(ctx, ledger.HoldInput{AccountID: adaNGN, Destination: chidiNGN,
+		Amount: ledger.Amount("2000", "NGN"), Reference: "e5"})
+	check(err)
+	check(ops.FreezeAccount(ctx, chidiNGN, "merchant review"))
+	_, err = wallet.Hold(ctx, ledger.HoldInput{AccountID: adaNGN, Destination: chidiNGN,
+		Amount: ledger.Amount("1000", "NGN"), Reference: "e6"})
+	fmt.Println("hold paying a frozen merchant:", errors.Is(err, ledger.ErrAccountFrozen))
+	_, err = wallet.Confirm(ctx, held.TransactionID, nil)
+	fmt.Println("capture into a frozen merchant:", errors.Is(err, ledger.ErrAccountFrozen))
+	_, err = wallet.Cancel(ctx, held.TransactionID) // releasing it gives Ada her money back
+	fmt.Println("release:", err == nil)
 	// end
 	end()
 }

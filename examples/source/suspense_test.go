@@ -161,7 +161,11 @@ func TestSuspense(t *testing.T) {
 
 	_, err = ops.ReturnFromSuspense(ctx, ledger.ReturnFromSuspenseInput{ClearingAccount: string(tundeNGN.ID),
 		Amount: ledger.Amount("5000", "NGN"), Reference: "return_x4"})
-	fmt.Println("return to a customer account:", errors.Is(err, ledger.ErrInvalidInput))
+	fmt.Println("return to a customer account:", errors.Is(err, ledger.ErrWrongKind))
+
+	_, err = ops.HoldInSuspense(ctx, ledger.SuspenseInput{ClearingAccount: string(tundeNGN.ID),
+		Amount: ledger.Amount("5000", "NGN"), Reference: "suspense_x5"})
+	fmt.Println("hold from a customer account:", errors.Is(err, ledger.ErrWrongKind))
 
 	_, err = ops.HoldInSuspense(ctx, ledger.SuspenseInput{Amount: ledger.Amount("5000", "NGN"), Provider: "paystack"})
 	fmt.Println("no reference:", errors.Is(err, ledger.ErrInvalidInput))

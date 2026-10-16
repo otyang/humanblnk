@@ -61,7 +61,7 @@ description: Adjustment: Cashback: September promo
   requested_by = ops.kemi
   txn_type = adjustment
 Ada&#x27;s balance: 20500.00</pre></figure>
-<ul><li><code>Type: ledger.AdjustCredit</code> moves money from the house account into the customer's account.</li><li>The description is <code>Adjustment: </code> followed by your <code>Reason</code>.</li><li><code>MetaData</code> holds <code>adjust_reason</code>, <code>requested_by</code> and <code>approved_by</code>, plus <code>txn_type: adjustment</code>, which humanblnk sets on every adjustment. Filter on it when you audit corrections.</li><li>No fee is charged and no <a href="limits.html">limits</a> are checked: an adjustment isn't a customer payment.</li></ul>
+<ul><li><code>Type: ledger.AdjustCredit</code> moves money from the house account into the customer's account.</li><li>The description is <code>Adjustment: </code> followed by your <code>Reason</code>.</li><li><code>MetaData</code> holds <code>adjust_reason</code>, <code>requested_by</code> and <code>approved_by</code>, plus <code>txn_type: adjustment</code>, which humanblnk sets on every adjustment. Filter on it when you audit corrections.</li><li>No fee is charged and no <a href="limits.html">limits</a> are checked: an adjustment isn't a customer payment. A debit doesn't count in the account's limit usage either.</li></ul>
 <h2 id="take-money-back-an-error-correction"><a href="#take-money-back-an-error-correction">Take money back: an error correction</a></h2>
 <figure class="code"><figcaption>A duplicated deposit is reversed</figcaption><pre><code><span class="c">// Tunde&#x27;s ₦3,000 deposit was posted twice. Take the extra one back.</span>
 rc, err = ops.<span class="t">Adjust</span>(ctx, ledger.<span class="t">AdjustInput</span>{

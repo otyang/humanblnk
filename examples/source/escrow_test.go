@@ -157,6 +157,10 @@ func TestEscrow(t *testing.T) {
 	_, err = wallet.OpenEscrow(ctx, ledger.EscrowInput{Payer: adaNGN, Beneficiary: chidi,
 		Amount: ledger.Amount("9000000", "NGN"), Reference: "escrow_bad_3"})
 	fmt.Println("not enough money:", errors.Is(err, ledger.ErrInsufficientFunds))
+	left, err := wallet.FindAccounts(ctx, ledger.AccountQuery{Kind: ledger.EscrowAccount,
+		MetaData: map[string]string{"escrow_reference": "escrow_bad_3"}})
+	check(err)
+	fmt.Println("escrow accounts left behind:", left.Total)
 
 	_, err = wallet.ReleaseEscrow(ctx, adaNGN, ledger.EscrowSettleInput{Reference: "escrow_bad_4"})
 	fmt.Println("not an escrow:", errors.Is(err, ledger.ErrInvalidInput))

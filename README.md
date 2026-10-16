@@ -282,7 +282,7 @@ Account fields take an `AccountID`. Some fields also accept a house account: `Tr
 
 | Operation | Entries |
 |---|---|
-| `wallet.Refund` | a full reversal in one step; refused once partial refunds exist |
+| `wallet.Refund` | a full reversal, once. A payment with a fee or a split is reversed leg by leg, fee included. Refused if the recipient no longer has the money (`ErrInsufficientFunds`), or once partial refunds exist |
 | `wallet.RefundPartial` | reverse transfer for part of the amount, linked by `meta_data.refund_of`; over-refunds refused |
 | `wallet.OpenDispute` / `ResolveDispute` | holds the disputed amount in the recipient's account pointed back at the payer; `DisputeUpheld` returns it (partially if you like), `DisputeRejected` releases it |
 | `wallet.OpenEscrow` / `ReleaseEscrow` / `RefundEscrow` / `GetEscrow` | buyer protection: each escrow is its own balance, so what's left is that balance and over-release is impossible |
@@ -315,7 +315,7 @@ svc := ledger.New(client, ledger.Config{
 - A fee is always in the transaction's currency (an exchange's in the sell currency). Convert inside your function with `r.Convert(ledger.Amount("0.50", "USD"), rate, ledger.RoundUp)`.
 - `FeeRule` + `ComputeFee`: percentage + fixed, min/max, tiers, rounding mode.
 - A retry is priced again; if the price changed meanwhile, the retry gets `ErrDuplicateReference`. Retry with the original `Fee` to be safe.
-- `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`. They apply to money leaving customer accounts; `Bulk` batches aren't checked. `wallet.LimitUsage` shows what's left. Usage is read before posting, so two payments racing each other can both pass.
+- `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`. They apply to money customers send: transfers, withdrawals, holds, splits, exchanges and escrow. Refunds, adjustments and other back-office movements neither are checked nor count. `Bulk` batches aren't checked but do count. A scheduled transfer counts on the day it posts. `wallet.LimitUsage` shows what's left, never below zero. Usage is read before posting, so two payments racing each other can both pass.
 
 ### Statements
 
@@ -382,7 +382,7 @@ Blnk itself ignores status, so this layer enforces it on **every** movement, inc
 
 `ops.CloseAccount` is final. It needs a `Reason` and an `ApprovedBy` other than the requester, and refuses while anything is pending or scheduled, while a pot under the account is open or an escrow on it still holds money. It sweeps the balance to `SweepTo`, then marks the account `closed`. A closed account can't be frozen or unfrozen.
 
-Each movement reads the customer accounts it touches (one request each; `Bulk` reuses what it already read). It also checks the ledger of each account money leaves, using a cached status that refreshes every `Config.LedgerStatusTTL` (default 30s). Some movements aren't checked: the ones Blnk posts by itself (scheduled transfers, auto-capture, hold expiry) and calls made to Blnk directly. That's why `CloseAccount` refuses while transfers are scheduled.
+Each movement reads the customer accounts it touches (one request each; `Bulk` reuses what it already read). It also checks the ledger of each account money leaves, using a cached status that refreshes every `Config.LedgerStatusTTL` (default 30s). Confirming a pending transaction checks again that the accounts receiving the money aren't frozen or closed; cancelling one is never refused, since it only returns reserved money. Some movements aren't checked: the ones Blnk posts by itself (scheduled transfers, auto-capture, hold expiry) and calls made to Blnk directly. That's why `CloseAccount` refuses while transfers are scheduled.
 
 ## Integration
 
@@ -435,7 +435,7 @@ for _, e := range core.Events() { … } // webhooks Blnk would have sent
   - Confirming a pending transaction has no reference, so it's retried only when Blnk certainly didn't act, never after a network error or gateway timeout.
   - Every call takes a `context.Context`: cancel it and the call stops.
 - **Errors.** Check with `errors.Is(err, ledger.ErrInsufficientFunds)` and the other sentinels, mapped from Blnk's `error_detail.code`. `ErrWrongKind` also matches `ErrInvalidInput`; `ErrLedgerNotFound` also matches `ErrNotFound`. The raw `*blnk.APIError` stays reachable with `errors.As`.
-- **Overdraft.** Only external sources (deposits, settlements, house counterparties) are sent with `allow_overdraft`; customer accounts never overdraft unless you set `AllowOverdraft`.
+- **Overdraft.** Only external sources (deposits, settlements, house counterparties) are sent with `allow_overdraft`; customer accounts never overdraft unless you set `AllowOverdraft`. Fields that must name the business's own accounts (settlement and suspense clearing, bank and fee accounts) refuse a customer account with `ErrWrongKind`, and a full refund checks the recipient still holds the money, because Blnk reverses with overdraft allowed.
 - **Fee legs.** Blnk stores a movement with a fee only as its legs (`<ref>-1`, `<ref>-2`, …).
   - Lookups, retries and `Confirm`/`Cancel` rebuild the parent.
   - Disputes and partial refunds act on the recipient's leg. A split paying several recipients needs the leg's own id.

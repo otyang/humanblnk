@@ -84,11 +84,11 @@ Available: 47490.00 -&gt; 27440.00 | Allowed: true</pre></figure>
 	<span class="t">Reference</span>: <span class="s">&quot;fx_01J8ZQ0T5C&quot;</span>,
 })
 check(err)
-fmt.<span class="t">Println</span>(<span class="s">&quot;Sold:&quot;</span>, xq.<span class="t">Sold</span>.<span class="t">Display</span>, xq.<span class="t">Sold</span>.<span class="t">Currency</span>, <span class="s">&quot;| Fee:&quot;</span>, xq.<span class="t">Fee</span>.<span class="t">Display</span>, <span class="s">&quot;| Debit:&quot;</span>, xq.<span class="t">Debit</span>.<span class="t">String</span>())
+fmt.<span class="t">Println</span>(<span class="s">&quot;Sold:&quot;</span>, xq.<span class="t">Sold</span>.<span class="t">Display</span>, xq.<span class="t">Sold</span>.<span class="t">Currency</span>, <span class="s">&quot;| Fee:&quot;</span>, xq.<span class="t">Fee</span>.<span class="t">Display</span>, <span class="s">&quot;| Debit:&quot;</span>, xq.<span class="t">Debit</span>.<span class="t">Display</span>, xq.<span class="t">Debit</span>.<span class="t">Currency</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Bought:&quot;</span>, xq.<span class="t">Bought</span>.<span class="t">Display</span>, xq.<span class="t">Bought</span>.<span class="t">Currency</span>, <span class="s">&quot;at&quot;</span>, xq.<span class="t">Rate</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Available:&quot;</span>, xq.<span class="t">AvailableBefore</span>.<span class="t">Display</span>, <span class="s">&quot;-&gt;&quot;</span>, xq.<span class="t">AvailableAfter</span>.<span class="t">Display</span>)
 fmt.<span class="t">Println</span>(<span class="s">&quot;Allowed:&quot;</span>, xq.<span class="t">Allowed</span>, <span class="s">&quot;| CheckedByLedger:&quot;</span>, xq.<span class="t">CheckedByLedger</span>)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>Sold: 100.00 USD | Fee: 1.00 | Debit: 101 USD
+<figure class="output"><figcaption>Output</figcaption><pre>Sold: 100.00 USD | Fee: 1.00 | Debit: 101.00 USD
 Bought: 153240.00 NGN at 1532.40
 Available: 300.00 -&gt; 199.00
 Allowed: true | CheckedByLedger: true</pre></figure>
