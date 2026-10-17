@@ -251,6 +251,12 @@ func (s *Service) moveReq(ctx context.Context, op string, in TransferInput, kind
 // Atomic makes them all-or-nothing; Pending holds them all INFLIGHT; Async
 // processes them in the background with the outcome sent by webhook.
 //
+// Each sender's limits apply to its items before anything is sent: the
+// per-transaction limit to each item, the daily and monthly limits to its
+// items' total on top of what it has already used. A sender over a limit
+// refuses the whole call (ErrLimitExceeded). Pending and Async batches count
+// in full when they are made.
+//
 // A batch that isn't atomic stops at the first item Blnk can't post (e.g.
 // for funds); the items before it stay posted. Bulk then returns the error
 // and a receipt (Status "partial") whose Items say which were recorded.
@@ -309,7 +315,12 @@ func (s walletAPI) Bulk(ctx context.Context, in BulkTransferInput) (*BulkReceipt
 			return nil, fmt.Errorf("item %d: %w", i, err)
 		}
 	}
+	// Limits apply to what is actually sent: on a retry, items already
+	// posted have counted once and aren't counted again.
 	send := func(reqs []blnk.CreateTransactionRequest) (*blnk.BulkTransactionResponse, error) {
+		if err := s.checkBatchLimits(ctx, op, bals, reqs); err != nil {
+			return nil, err
+		}
 		return s.c.CreateBulkTransactions(ctx, blnk.BulkTransactionRequest{
 			Atomic: in.Atomic, Inflight: in.Pending, RunAsync: in.Async,
 			SkipQueue: !s.cfg.UseQueue, Transactions: reqs,

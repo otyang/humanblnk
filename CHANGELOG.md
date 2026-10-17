@@ -36,6 +36,11 @@ change the API; such changes are listed under **Changed**.
   account `@FrozenFunds`, so scheduled transfers that fall due while it is
   frozen are rejected by Blnk. `UnfreezeAccount` releases it; `Confirm` and
   `Cancel` refuse it (`ErrWrongKind`).
+- `Bulk` items count against their senders' limits: each item against the
+  per-transaction cap, each sender's items together against the daily and
+  monthly caps. A sender over a cap refuses the whole batch with
+  `ErrLimitExceeded` before anything is sent. Before, bulk batches weren't
+  checked, so a customer could send past their limits in one batch.
 - Pots move money only to and from their parent account, and escrow
   accounts only through `ReleaseEscrow` and `RefundEscrow`. Deposits,
   withdrawals, transfers, holds, splits, exchanges and bulk items that use

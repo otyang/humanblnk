@@ -18,7 +18,10 @@ func bulkBalance(w ledger.Wallet, id ledger.AccountID) string {
 
 func TestBulkPayouts(t *testing.T) {
 	svc, core, wallet, _ := setup(t, ledger.Config{
-		Limits: []ledger.Limit{{Tier: "*", Currency: currency.NGN, PerTransaction: "100000"}},
+		Limits: []ledger.Limit{
+			{Tier: "business", Currency: currency.NGN, PerTransaction: "1000000"}, // Chidi Stores pays payroll
+			{Tier: "*", Currency: currency.NGN, PerTransaction: "100000"},         // everyone else
+		},
 	})
 	ada := customer(wallet, "user_ada", "Ada", currency.NGN)
 	tunde := customer(wallet, "user_tunde", "Tunde", currency.NGN)
@@ -140,16 +143,18 @@ func TestBulkPayouts(t *testing.T) {
 
 	begin("bulk-payouts/limits")
 	// sample: bulk-payouts/limits
-	// Every account here may send at most ₦100,000 per transaction.
-	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: chidi, To: tundeNGN,
+	// Tunde may send at most ₦100,000 per transaction; Chidi Stores,
+	// on the business tier, ₦1,000,000.
+	fund(wallet, tundeNGN, "200000", currency.NGN, "tunde_top_up")
+	_, err = wallet.Transfer(ctx, ledger.TransferInput{From: tundeNGN, To: adaNGN,
 		Amount: ledger.Amount("150000", currency.NGN), Fee: ledger.NoFee, Reference: "big_one"})
 	fmt.Println("Transfer:", errors.Is(err, ledger.ErrLimitExceeded))
 
-	big, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
-		{From: chidi, To: tundeNGN, Amount: ledger.Amount("150000", currency.NGN), Fee: ledger.NoFee, Reference: "big_one_bulk"},
+	_, err = wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
+		{From: tundeNGN, To: adaNGN, Amount: ledger.Amount("150000", currency.NGN), Fee: ledger.NoFee, Reference: "big_one_bulk"},
 	}})
-	check(err)
-	fmt.Println("Bulk:", big.Status) // not checked against limits
+	fmt.Println("Bulk:", errors.Is(err, ledger.ErrLimitExceeded)) // checked the same way
+	fmt.Println(err)
 	// end
 	end()
 

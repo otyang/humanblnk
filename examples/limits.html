@@ -151,12 +151,12 @@ _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">Tran
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;save_31004&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;into the pot:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
 
-<span class="c">// Bulk batches are not checked: you are responsible for them.</span>
+<span class="c">// Bulk items are checked like transfers: each one, and their total.</span>
 _, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Atomic</span>: <span class="b">true</span>, <span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
 	{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;60000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bulk_31005_1&quot;</span>},
 }})
-fmt.<span class="t">Println</span>(<span class="s">&quot;bulk over the limit:&quot;</span>, err == <span class="b">nil</span>)
-u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN) <span class="c">// but it counts in usage afterwards</span>
+fmt.<span class="t">Println</span>(<span class="s">&quot;bulk over the limit:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
+u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
 check(err)
 limitsShow(<span class="s">&quot;Tunde:&quot;</span>, u)
 
@@ -181,11 +181,11 @@ limitsShow(<span class="s">&quot;Chidi Stores:&quot;</span>, u)</code></pre></fi
 <figure class="output"><figcaption>Output</figcaption><pre>deposit: true
 into the pot: true
 bulk over the limit: true
-Tunde: used today 240000.00 left today 0.00 | used this month 240000.00 left 760000.00
-after a correction: used today 240000.00 left today 0.00 | used this month 240000.00 left 760000.00
+Tunde: used today 180000.00 left today 20000.00 | used this month 180000.00 left 820000.00
+after a correction: used today 180000.00 left today 20000.00 | used this month 180000.00 left 820000.00
 Chidi Stores: used today 0.00 left today 30000.00 | used this month 0.00 left no cap</pre></figure>
-<div class="tablewrap"><table><thead><tr><th>Movement</th><th>Checked before it posts</th><th>Counts in usage</th></tr></thead><tbody><tr><td><code>Withdraw</code>, <code>Transfer</code></td><td>yes, <code>Amount</code> plus <code>Fee</code></td><td>yes</td></tr><tr><td><code>Hold</code></td><td>yes</td><td>yes, while held, then what was captured</td></tr><tr><td><code>Split</code>, <code>Exchange</code>, <code>OpenEscrow</code></td><td>yes</td><td>yes</td></tr><tr><td><code>Schedule</code>, <code>Transfer</code> with <code>ScheduledFor</code></td><td>yes, when you create it, against that day's usage</td><td>yes, on the day it posts</td></tr><tr><td><code>Bulk</code></td><td>no</td><td>yes</td></tr><tr><td><code>Deposit</code> and other money coming in</td><td>no</td><td>no</td></tr><tr><td>A refund the account pays, an <code>ops.Adjust</code> debit</td><td>no</td><td>no</td></tr><tr><td>Disputes, settlements, suspense, closure sweeps</td><td>no</td><td>no</td></tr><tr><td>Money leaving a pot or an escrow account</td><td>no limit applies</td><td>no</td></tr><tr><td>House accounts</td><td>no limit applies</td><td>no</td></tr></tbody></table></div>
-<ul><li>Moving money into one of the customer's own pots is a transfer from their account, so it is checked and it counts.</li><li><code>Bulk</code> batches are never checked. Check payroll and other batches yourself before you send them. Bulk items are transfers, so usage still counts them afterwards. An account can go over its cap this way, as in the sample. <code>DailyLeft</code> then reads zero.</li><li>Usage counts only the movements limits apply to. A refund Chidi Stores pays a customer, or a correction that debits an account, is a back-office flow: it is not checked and it doesn't use up the account's allowance.</li></ul>
+<div class="tablewrap"><table><thead><tr><th>Movement</th><th>Checked before it posts</th><th>Counts in usage</th></tr></thead><tbody><tr><td><code>Withdraw</code>, <code>Transfer</code></td><td>yes, <code>Amount</code> plus <code>Fee</code></td><td>yes</td></tr><tr><td><code>Hold</code></td><td>yes</td><td>yes, while held, then what was captured</td></tr><tr><td><code>Split</code>, <code>Exchange</code>, <code>OpenEscrow</code></td><td>yes</td><td>yes</td></tr><tr><td><code>Schedule</code>, <code>Transfer</code> with <code>ScheduledFor</code></td><td>yes, when you create it, against that day's usage</td><td>yes, on the day it posts</td></tr><tr><td><code>Bulk</code></td><td>yes: each item, and each sender's items together</td><td>yes</td></tr><tr><td><code>Deposit</code> and other money coming in</td><td>no</td><td>no</td></tr><tr><td>A refund the account pays, an <code>ops.Adjust</code> debit</td><td>no</td><td>no</td></tr><tr><td>Disputes, settlements, suspense, closure sweeps</td><td>no</td><td>no</td></tr><tr><td>Money leaving a pot or an escrow account</td><td>no limit applies</td><td>no</td></tr><tr><td>House accounts</td><td>no limit applies</td><td>no</td></tr></tbody></table></div>
+<ul><li>Moving money into one of the customer's own pots is a transfer from their account, so it is checked and it counts.</li><li><code>Bulk</code> checks each item against the per-transaction cap, and adds up each sender's items for the daily and monthly caps. A sender over a cap refuses the whole batch before anything is sent. Put businesses that pay payroll on a tier with caps to match.</li><li>If the caps are lowered later, an account's usage can be over its new cap. <code>DailyLeft</code> and <code>MonthlyLeft</code> then read zero.</li><li>Usage counts only the movements limits apply to. A refund Chidi Stores pays a customer, or a correction that debits an account, is a back-office flow: it is not checked and it doesn't use up the account's allowance.</li></ul>
 <aside class="note">A scheduled transfer doesn't count while it waits. It counts on the day it posts, by its scheduled time. A transfer created in August that posts on 1 September counts in September's usage.</aside>
 <h2 id="upgrading-a-tier"><a href="#upgrading-a-tier">Upgrading a tier</a></h2>
 <p>humanblnk has no call to change an account's metadata. When your KYC system upgrades a customer, set <code>tier</code> on each of their accounts through Blnk's metadata endpoint (<code>POST /{balance_id}/metadata</code>), for example with the <code>blnk</code> client's <code>UpdateMetadata</code>. It merges the key into the existing metadata.</p>
@@ -201,7 +201,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;now:&quot;</span>, u.<s
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: chidiNGN,
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;90000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;order_5106&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;₦90,000 transfer:&quot;</span>, err == <span class="b">nil</span>)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>now: tier2 daily 500000 left today 260000.00
+<figure class="output"><figcaption>Output</figcaption><pre>now: tier2 daily 500000 left today 320000.00
 ₦90,000 transfer: true</pre></figure>
 <ul><li>The new tier applies to the next payment: limits read the account fresh on every check.</li><li>Usage carries over. Tunde has already sent ₦240,000 today, so on tier2 he has ₦260,000 left, not ₦500,000.</li><li>Accounts opened later need the tier too: pass it in <code>MetaData</code> when you open them.</li></ul>
 <h2 id="a-new-day"><a href="#a-new-day">A new day</a></h2>
@@ -219,8 +219,8 @@ core.<span class="t">SetNow</span>(time.<span class="t">Date</span>(<span class=
 u, err = wallet.<span class="t">LimitUsage</span>(ctx, tundeNGN)
 check(err)
 limitsShow(<span class="s">&quot;next day:&quot;</span>, u)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>while it waits: used today 330000.00 left today 170000.00 | used this month 330000.00 left 4670000.00
-next day: used today 20000.00 left today 480000.00 | used this month 350000.00 left 4650000.00</pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>while it waits: used today 270000.00 left today 230000.00 | used this month 270000.00 left 4730000.00
+next day: used today 20000.00 left today 480000.00 | used this month 290000.00 left 4710000.00</pre></figure>
 <ul><li>While the transfer waits, it doesn't count on 1 September.</li><li>Once it posts at 00:15, it counts on 2 September, the day it took effect. Monthly usage counts it in September too.</li></ul>
 <h2 id="on-the-confirm-screen"><a href="#on-the-confirm-screen">On the confirm screen</a></h2>
 <p>A quote runs the same checks, so the app can say "over your limit" before the customer confirms. See <a href="quotes.html">Quotes</a>.</p>

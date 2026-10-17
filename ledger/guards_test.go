@@ -205,13 +205,17 @@ func TestLimitUsage(t *testing.T) {
 		t.Fatalf("usage on the day the scheduled transfer posted: %+v %v", u, err)
 	}
 
-	// Bulk items aren't checked, so usage can pass the cap; what's left stops at zero.
+	// Bulk items are checked too, together with what was already used.
 	if _, err := w.Bulk(ctx, ledger.BulkTransferInput{Atomic: true, Items: []ledger.TransferInput{
 		{From: ada.ID, To: shop.ID, Amount: ledger.Amount("9000", "NGN"), Fee: ledger.NoFee, Reference: "b1"},
-	}}); err != nil {
-		t.Fatal(err)
+	}}); !errors.Is(err, ledger.ErrLimitExceeded) {
+		t.Fatalf("bulk past the daily cap: %v", err)
 	}
-	if u, err := w.LimitUsage(ctx, ada.ID); err != nil || u.DailyLeft == nil || u.DailyLeft.Value != "0" {
+
+	// Usage over a cap that was lowered later: what's left stops at zero.
+	lower := ledger.New(core.Client(), ledger.Config{LedgerID: ada.LedgerID, Now: core.Now,
+		Limits: []ledger.Limit{{Tier: "*", Currency: "NGN", Daily: "1000"}}})
+	if u, err := lower.Wallet().LimitUsage(ctx, ada.ID); err != nil || u.DailyLeft == nil || u.DailyLeft.Value != "0" {
 		t.Fatalf("left after going over: %+v %v", u, err)
 	}
 }

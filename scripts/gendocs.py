@@ -409,7 +409,7 @@ section('fees', 'Fees', f'''
 
 section('limits', 'Limits and KYC tiers', f'''
 {code('limits')}
-<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow (bulk batches are not checked). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
+<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges, escrow and bulk items (each item, and each sender’s items together). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
 ''', 'Per-tier caps, checked before any money moves.')
 
 # --- Reporting

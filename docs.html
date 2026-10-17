@@ -555,7 +555,7 @@ batch, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">Bul
 }
 u, err := wallet.<span class="t">LimitUsage</span>(ctx, adaNGN.<span class="t">ID</span>)
 fmt.<span class="t">Printf</span>(<span class="s">&quot;You can send ₦%s more today\n&quot;</span>, u.<span class="t">DailyLeft</span>.<span class="t">Display</span>)</code></pre></figure>
-<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges and escrow (bulk batches are not checked). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
+<p>Limits apply to money leaving customer accounts: transfers, withdrawals, holds, splits, exchanges, escrow and bulk items (each item, and each sender’s items together). A pending hold counts while held and comes back if cancelled. Days and months reset in <code>Config.Location</code>.</p>
 </section><section id="trial"><h2><a href="#trial">Trial balance</a></h2><p class="lede">One call to prove the books add up.</p>
 <figure class="code"><pre><code>tb, err := ops.<span class="t">TrialBalance</span>(ctx, currency.<span class="t">NGN</span>)
 <span class="k">if</span> err != <span class="b">nil</span> {

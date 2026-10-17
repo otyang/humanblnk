@@ -448,3 +448,42 @@ func TestOpenEscrowChecksFirst(t *testing.T) {
 }
 
 func str(v any) string { s, _ := v.(string); return s }
+
+// Bulk items count against their senders' limits: each item against the
+// per-transaction cap, a sender's items together against the daily cap. A
+// retry counts only what is still to send.
+func TestBulkLimits(t *testing.T) {
+	svc, _ := ledgertest.New(t, ledger.Config{Limits: []ledger.Limit{{Tier: "*", Currency: currency.NGN, PerTransaction: "100", Daily: "250"}}})
+	w := svc.Wallet()
+	alice, bob, carol := open(t, svc, currency.NGN), open(t, svc, currency.NGN), open(t, svc, currency.NGN)
+	fund(t, svc, alice.ID, "1000", currency.NGN, "d1")
+	fund(t, svc, carol.ID, "1000", currency.NGN, "d2")
+	item := func(from ledger.AccountID, amt, ref string) ledger.TransferInput {
+		return ledger.TransferInput{From: from, To: bob.ID, Amount: ledger.Amount(amt, currency.NGN), Fee: ledger.NoFee, Reference: ref}
+	}
+
+	if _, err := w.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{item(alice.ID, "101", "p1")}}); !errors.Is(err, ledger.ErrLimitExceeded) {
+		t.Fatalf("one item over the per-transaction cap: %v", err)
+	}
+	// Three items of 100 are each fine, but 300 is over the daily 250.
+	three := ledger.BulkTransferInput{Items: []ledger.TransferInput{item(alice.ID, "100", "a1"), item(alice.ID, "100", "a2"), item(alice.ID, "100", "a3")}}
+	if _, err := w.Bulk(ctx, three); !errors.Is(err, ledger.ErrLimitExceeded) {
+		t.Fatalf("items over the daily cap together: %v", err)
+	}
+	if got := bal(t, svc, bob.ID); got != "0" {
+		t.Fatalf("a refused batch moved money: bob = %s", got)
+	}
+	// Each sender is counted on its own.
+	mixed := ledger.BulkTransferInput{Items: []ledger.TransferInput{item(alice.ID, "100", "m1"), item(carol.ID, "100", "m2"), item(alice.ID, "100", "m3"), item(carol.ID, "100", "m4")}}
+	if _, err := w.Bulk(ctx, mixed); err != nil {
+		t.Fatalf("200 each for two senders: %v", err)
+	}
+	// Alice has 50 left today: a retry of the same batch sends nothing new,
+	// so it isn't refused.
+	if r, err := w.Bulk(ctx, mixed); err != nil || !r.Replayed {
+		t.Fatalf("retry: %+v %v", r, err)
+	}
+	if _, err := w.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{item(alice.ID, "51", "x1")}}); !errors.Is(err, ledger.ErrLimitExceeded) {
+		t.Fatalf("past what is left today: %v", err)
+	}
+}

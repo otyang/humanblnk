@@ -109,9 +109,47 @@ func (s *Service) checkLimits(ctx context.Context, op string, accountID AccountI
 	if err != nil {
 		return mapErr(op, err)
 	}
+	return s.checkLimitsOn(ctx, op, b, amount)
+}
+
+// checkBatchLimits applies each sender's limits to the requests of a batch:
+// the per-transaction limit to each request, the daily and monthly limits to
+// the sender's total in the batch on top of what it has already used.
+// bals holds the senders' balances.
+func (s *Service) checkBatchLimits(ctx context.Context, op string, bals map[AccountID]*blnk.Balance, reqs []blnk.CreateTransactionRequest) error {
+	if len(s.cfg.Limits) == 0 {
+		return nil
+	}
+	var order []AccountID
+	bySender := map[AccountID][]*big.Int{}
+	for i := range reqs {
+		id := AccountID(reqs[i].Source)
+		if bals[id] == nil {
+			continue // a house account
+		}
+		if bySender[id] == nil {
+			order = append(order, id)
+		}
+		bySender[id] = append(bySender[id], &reqs[i].PreciseAmount.Int)
+	}
+	for _, id := range order {
+		if err := s.checkLimitsOn(ctx, op, bals[id], bySender[id]...); err != nil {
+			return fmt.Errorf("sender %s: %w", id, err)
+		}
+	}
+	return nil
+}
+
+// checkLimitsOn checks amounts leaving b: each against the per-transaction
+// limit, their total against the daily and monthly limits.
+func (s *Service) checkLimitsOn(ctx context.Context, op string, b *blnk.Balance, amounts ...*big.Int) error {
 	lim := s.limitFor(b)
 	if lim == nil {
 		return nil
+	}
+	amount := new(big.Int)
+	for _, a := range amounts {
+		amount.Add(amount, a)
 	}
 	prec, cur := s.precisionOf(b), strings.ToUpper(b.Currency)
 	exceeded := func(what, capStr string, used *big.Int) error {
@@ -120,18 +158,21 @@ func (s *Service) checkLimits(ctx context.Context, op string, accountID AccountI
 			return &OpError{Op: op, Kind: ErrInvalidInput, Cause: fmt.Errorf("limit: %w", err)}
 		}
 		if new(big.Int).Add(used, amount).Cmp(c) > 0 {
-			if what == "per-transaction" {
-				return &OpError{Op: op, Kind: ErrLimitExceeded, Cause: fmt.Errorf("%s limit %s %s: this needs %s",
-					what, capStr, cur, s.money(amount, prec, cur).Display)}
-			}
 			return &OpError{Op: op, Kind: ErrLimitExceeded, Cause: fmt.Errorf("%s limit %s %s: already used %s, this needs %s",
 				what, capStr, cur, s.money(used, prec, cur).Display, s.money(amount, prec, cur).Display)}
 		}
 		return nil
 	}
 	if lim.PerTransaction != "" {
-		if err := exceeded("per-transaction", lim.PerTransaction, new(big.Int)); err != nil {
-			return err
+		c, err := parseDecimal(lim.PerTransaction, prec)
+		if err != nil {
+			return &OpError{Op: op, Kind: ErrInvalidInput, Cause: fmt.Errorf("limit: %w", err)}
+		}
+		for _, a := range amounts {
+			if a.Cmp(c) > 0 {
+				return &OpError{Op: op, Kind: ErrLimitExceeded, Cause: fmt.Errorf("per-transaction limit %s %s: this needs %s",
+					lim.PerTransaction, cur, s.money(a, prec, cur).Display)}
+			}
 		}
 	}
 	if lim.Daily == "" && lim.Monthly == "" {

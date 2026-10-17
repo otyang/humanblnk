@@ -18,8 +18,13 @@
 <p class="crumb"><a href="index.html">Examples</a> · Wallet</p>
 <h1>Bulk payouts and payroll</h1>
 <p class="lead">Send up to 10,000 transfers in one call: payroll that pays everyone or no one, batches held for approval, and big runs processed in the background.</p>
-<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#payroll-atomic">Payroll: Atomic</a><a href="#when-one-item-fails">When one item fails</a><a href="#waiting-for-approval-pending">Waiting for approval: Pending</a><a href="#large-batches-async">Large batches: Async</a><a href="#limits-are-not-checked">Limits are not checked</a><a href="#bulktransferinput-fields">BulkTransferInput fields</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
-<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// bulkBalance reads an account&#x27;s balance for display.</span>
+<nav class="toc" aria-label="On this page"><span>On this page</span><a href="#the-situation">The situation</a><a href="#payroll-atomic">Payroll: Atomic</a><a href="#when-one-item-fails">When one item fails</a><a href="#waiting-for-approval-pending">Waiting for approval: Pending</a><a href="#large-batches-async">Large batches: Async</a><a href="#limits">Limits</a><a href="#bulktransferinput-fields">BulkTransferInput fields</a><a href="#what-happens-in-blnk">What happens in Blnk</a><a href="#errors">Errors</a><a href="#related">Related</a></nav>
+<details class="helpers"><summary>Helpers these samples use</summary><p>Small functions the samples on this page call, shown in full. <code>check(err)</code> stands for your own error handling.</p><figure class="code"><pre><code><span class="c">// fund deposits money with no fee, as if it arrived through Paystack.</span>
+<span class="k">func</span> fund(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>, amount, currency, ref <span class="b">string</span>) {
+	_, err := w.<span class="t">Deposit</span>(ctx, ledger.<span class="t">DepositInput</span>{<span class="t">AccountID</span>: id, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(amount, currency),
+		<span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: ref, <span class="t">Provider</span>: <span class="s">&quot;paystack&quot;</span>})
+	check(err)
+}</code></pre></figure><figure class="code"><pre><code><span class="c">// bulkBalance reads an account&#x27;s balance for display.</span>
 <span class="k">func</span> bulkBalance(w ledger.<span class="t">Wallet</span>, id ledger.<span class="t">AccountID</span>) <span class="b">string</span> {
 	a, err := w.<span class="t">GetAccount</span>(ctx, id)
 	check(err)
@@ -145,21 +150,24 @@ fmt.<span class="t">Println</span>(e.<span class="t">Name</span>, <span class="s
 <figure class="output"><figcaption>Output</figcaption><pre>processing
 bulk_transaction.applied same batch: true</pre></figure>
 <ul><li><code>e.Bulk</code> has <code>BatchID</code>, <code>Status</code>, <code>Count</code> and, for a failed batch, <code>Error</code>.</li><li>Match the event to your run by <code>BatchID</code>. See <a href="webhooks.html">Webhooks</a>.</li></ul>
-<h2 id="limits-are-not-checked"><a href="#limits-are-not-checked">Limits are not checked</a></h2>
-<p><code>Config.Limits</code> apply to transfers, but not to bulk items. The same ₦150,000 that a transfer refuses goes through in a batch.</p>
-<figure class="code"><figcaption>Every account may send at most ₦100,000 per transaction</figcaption><pre><code><span class="c">// Every account here may send at most ₦100,000 per transaction.</span>
-_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN,
+<h2 id="limits"><a href="#limits">Limits</a></h2>
+<p><code>Config.Limits</code> apply to bulk items as to transfers. Each item is checked against the sender's per-transaction cap, and each sender's items are added up for its daily and monthly caps, on top of what it has already sent. A sender over a cap refuses the whole batch before anything is sent, so a batch never stops part way for a limit.</p>
+<figure class="code"><figcaption>The same ₦150,000 is refused either way</figcaption><pre><code><span class="c">// Tunde may send at most ₦100,000 per transaction; Chidi Stores,</span>
+<span class="c">// on the business tier, ₦1,000,000.</span>
+fund(wallet, tundeNGN, <span class="s">&quot;200000&quot;</span>, currency.<span class="t">NGN</span>, <span class="s">&quot;tunde_top_up&quot;</span>)
+_, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN,
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one&quot;</span>})
 fmt.<span class="t">Println</span>(<span class="s">&quot;Transfer:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>))
 
-big, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
-	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one_bulk&quot;</span>},
+_, err = wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
+	{<span class="t">From</span>: tundeNGN, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;150000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;big_one_bulk&quot;</span>},
 }})
-check(err)
-fmt.<span class="t">Println</span>(<span class="s">&quot;Bulk:&quot;</span>, big.<span class="t">Status</span>) <span class="c">// not checked against limits</span></code></pre></figure>
+fmt.<span class="t">Println</span>(<span class="s">&quot;Bulk:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrLimitExceeded</span>)) <span class="c">// checked the same way</span>
+fmt.<span class="t">Println</span>(err)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>Transfer: true
-Bulk: applied</pre></figure>
-<p>Only use <code>Bulk</code> for money the business sends, or check each customer's limits yourself before building the batch. See <a href="limits.html">Limits</a>.</p>
+Bulk: true
+sender bln_000005: ledger.Wallet.Bulk: ledger: transaction limit exceeded: per-transaction limit 100000 NGN: this needs 150000.00</pre></figure>
+<p>Put a business that pays payroll on a tier with caps to match, as Chidi Stores is here. Pending and <code>Async</code> batches count in full when they are made. Sending a batch again after it stopped part way counts only the items still to send. See <a href="limits.html">Limits</a>.</p>
 <h2 id="bulktransferinput-fields"><a href="#bulktransferinput-fields">BulkTransferInput fields</a></h2>
 <div class="tablewrap"><table><thead><tr><th>Field</th><th>What it does</th></tr></thead><tbody><tr><td><code>Items</code></td><td>1 to 10,000 transfers. <code>Pending</code> on an item is ignored: the batch decides</td></tr><tr><td><code>Atomic</code></td><td>all items post, or none do. The zero value is <code>false</code>, so set it for payroll</td></tr><tr><td><code>Pending</code></td><td>every item INFLIGHT; confirm or cancel with <code>BatchID</code></td></tr><tr><td><code>Async</code></td><td>process in the background; the outcome arrives by webhook</td></tr></tbody></table></div>
 <h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>

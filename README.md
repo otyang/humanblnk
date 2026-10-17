@@ -333,7 +333,7 @@ svc := ledger.New(client, ledger.Config{
 - A fee is always in the transaction's currency (an exchange's in the sell currency). Convert inside your function with `r.Convert(ledger.Amount("0.50", currency.USD), rate, ledger.RoundUp)`.
 - `FeeRule` + `ComputeFee`: percentage + fixed, min/max, tiers, rounding mode.
 - A retry is priced again; if the price changed meanwhile, the retry gets `ErrDuplicateReference`. Retry with the original `Fee` to be safe.
-- `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`. They apply to money customers send: transfers, withdrawals, holds, splits, exchanges and escrow. Refunds, adjustments and other back-office movements neither are checked nor count. `Bulk` batches aren't checked but do count. A scheduled transfer counts on the day it posts. `wallet.LimitUsage` shows what's left, never below zero. Usage is read before posting, so two payments racing each other can both pass.
+- `Config.Limits`: per-transaction, daily and monthly caps per KYC tier (`meta_data.tier`) and currency → `ErrLimitExceeded`. They apply to money customers send: transfers, withdrawals, holds, splits, exchanges, escrow and bulk items (each item, and each sender's items together). Refunds, adjustments and other back-office movements neither are checked nor count. A scheduled transfer counts on the day it posts. `wallet.LimitUsage` shows what's left, never below zero. Usage is read before posting, so two payments racing each other can both pass.
 
 ### Statements
 

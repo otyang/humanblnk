@@ -106,6 +106,9 @@ type Wallet interface {
 	// Bulk posts up to 10,000 transfers as one Blnk batch, e.g. payroll.
 	// Atomic makes them all-or-nothing; Pending holds them all INFLIGHT; Async
 	// processes them in the background with the outcome sent by webhook.
+	// Each sender's limits apply to its items; a sender over a limit refuses
+	// the whole batch. A batch that isn't atomic and stops part way returns
+	// the error with a receipt of what was posted.
 	Bulk(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error)
 
 	// ---- Split payments (wallet_split.go)

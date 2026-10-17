@@ -143,12 +143,12 @@ func TestLimits(t *testing.T) {
 		Amount: ledger.Amount("60000", currency.NGN), Fee: ledger.NoFee, Reference: "save_31004"})
 	fmt.Println("into the pot:", errors.Is(err, ledger.ErrLimitExceeded))
 
-	// Bulk batches are not checked: you are responsible for them.
+	// Bulk items are checked like transfers: each one, and their total.
 	_, err = wallet.Bulk(ctx, ledger.BulkTransferInput{Atomic: true, Items: []ledger.TransferInput{
 		{From: tundeNGN, To: adaNGN, Amount: ledger.Amount("60000", currency.NGN), Fee: ledger.NoFee, Reference: "bulk_31005_1"},
 	}})
-	fmt.Println("bulk over the limit:", err == nil)
-	u, err = wallet.LimitUsage(ctx, tundeNGN) // but it counts in usage afterwards
+	fmt.Println("bulk over the limit:", errors.Is(err, ledger.ErrLimitExceeded))
+	u, err = wallet.LimitUsage(ctx, tundeNGN)
 	check(err)
 	limitsShow("Tunde:", u)
 

@@ -66,13 +66,13 @@ Sending the same batch again is safe, even after a timeout. Items already record
 - `e.Bulk` has `BatchID`, `Status`, `Count` and, for a failed batch, `Error`.
 - Match the event to your run by `BatchID`. See [Webhooks](webhooks.html).
 
-## Limits are not checked
+## Limits
 
-`Config.Limits` apply to transfers, but not to bulk items. The same ₦150,000 that a transfer refuses goes through in a batch.
+`Config.Limits` apply to bulk items as to transfers. Each item is checked against the sender's per-transaction cap, and each sender's items are added up for its daily and monthly caps, on top of what it has already sent. A sender over a cap refuses the whole batch before anything is sent, so a batch never stops part way for a limit.
 
-@sample limits | Every account may send at most ₦100,000 per transaction
+@sample limits | The same ₦150,000 is refused either way
 
-Only use `Bulk` for money the business sends, or check each customer's limits yourself before building the batch. See [Limits](limits.html).
+Put a business that pays payroll on a tier with caps to match, as Chidi Stores is here. Pending and `Async` batches count in full when they are made. Sending a batch again after it stopped part way counts only the items still to send. See [Limits](limits.html).
 
 ## BulkTransferInput fields
 

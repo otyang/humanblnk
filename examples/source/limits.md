@@ -77,7 +77,7 @@ Pending withdrawals and pending transfers work the same way: they count while pe
 | `Hold` | yes | yes, while held, then what was captured |
 | `Split`, `Exchange`, `OpenEscrow` | yes | yes |
 | `Schedule`, `Transfer` with `ScheduledFor` | yes, when you create it, against that day's usage | yes, on the day it posts |
-| `Bulk` | no | yes |
+| `Bulk` | yes: each item, and each sender's items together | yes |
 | `Deposit` and other money coming in | no | no |
 | A refund the account pays, an `ops.Adjust` debit | no | no |
 | Disputes, settlements, suspense, closure sweeps | no | no |
@@ -85,7 +85,8 @@ Pending withdrawals and pending transfers work the same way: they count while pe
 | House accounts | no limit applies | no |
 
 - Moving money into one of the customer's own pots is a transfer from their account, so it is checked and it counts.
-- `Bulk` batches are never checked. Check payroll and other batches yourself before you send them. Bulk items are transfers, so usage still counts them afterwards. An account can go over its cap this way, as in the sample. `DailyLeft` then reads zero.
+- `Bulk` checks each item against the per-transaction cap, and adds up each sender's items for the daily and monthly caps. A sender over a cap refuses the whole batch before anything is sent. Put businesses that pay payroll on a tier with caps to match.
+- If the caps are lowered later, an account's usage can be over its new cap. `DailyLeft` and `MonthlyLeft` then read zero.
 - Usage counts only the movements limits apply to. A refund Chidi Stores pays a customer, or a correction that debits an account, is a back-office flow: it is not checked and it doesn't use up the account's allowance.
 
 > note: A scheduled transfer doesn't count while it waits. It counts on the day it posts, by its scheduled time. A transfer created in August that posts on 1 September counts in September's usage.
