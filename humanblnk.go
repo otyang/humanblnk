@@ -77,6 +77,7 @@ type (
 	Balances                = ledger.Balances
 	BatchResult             = ledger.BatchResult
 	BulkEvent               = ledger.BulkEvent
+	BulkItem                = ledger.BulkItem
 	BulkReceipt             = ledger.BulkReceipt
 	BulkTransferInput       = ledger.BulkTransferInput
 	ClaimFromSuspenseInput  = ledger.ClaimFromSuspenseInput
@@ -242,6 +243,7 @@ const (
 	EventTransactionScheduled = ledger.EventTransactionScheduled
 	EventTransactionVoid      = ledger.EventTransactionVoid
 	FXPoolAccount             = ledger.FXPoolAccount
+	FrozenFundsAccount        = ledger.FrozenFundsAccount
 	FeeDeposit                = ledger.FeeDeposit
 	FeeExchange               = ledger.FeeExchange
 	FeeIncomeAccount          = ledger.FeeIncomeAccount

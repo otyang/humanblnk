@@ -32,7 +32,7 @@ Freezing is on `svc.Ops()`. A customer-facing server that only holds a `ledger.W
 
 - `Account.Status` reads `frozen`. Accounts that were never frozen read `active`.
 - `MetaData` keeps `status_reason` and `status_changed_at` (UTC, RFC 3339) from the last status change.
-- The balance doesn't move. `Available` is lower than `Balance` here only because of the payout and card hold Tunde started before the freeze.
+- The balance doesn't move, but `Available` drops to zero: the freeze holds everything that was available on `@FrozenFunds`, so a scheduled transfer coming due can't spend it (below). The hold is never posted, and `UnfreezeAccount` releases it. The payout and card hold Tunde started before the freeze are still held as they were.
 - Quotes run the same checks, so `wallet.QuoteTransfer` comes back with `Allowed: false` and `Reason` set to `ErrAccountFrozen`. Use it to grey out the Send button in the app.
 
 ## What a freeze does not stop
@@ -43,14 +43,16 @@ The freeze is checked when a movement starts, and again when a pending transacti
 
 - `wallet.Confirm` checks only the accounts that receive the money. A payout already sent to Flutterwave can be confirmed, because the money leaves the frozen account. A pending transfer **into** the frozen account can't be confirmed: `ErrAccountFrozen`. `ConfirmMany` checks the same way.
 - `wallet.Cancel` is never checked. A card hold can be released, and a pending transfer in can be cancelled so the money goes back to its sender.
-- Scheduled transfers are posted by Blnk itself when they fall due, so humanblnk never sees them and can't refuse them. The same goes for hold expiry and auto-capture (`HoldInput.CaptureAt`).
-- If those must stop too, cancel the pending ones yourself with `wallet.Cancel` after you freeze.
+- Scheduled transfers are posted by Blnk itself when they fall due, so humanblnk can't refuse them then. The freeze's hold on the available balance is what stops them: Blnk finds nothing to spend and rejects them. A scheduled transfer created with `AllowOverdraft` still posts. Once the account is unfrozen, the ones still to come run as normal.
+- Hold expiry and auto-capture (`HoldInput.CaptureAt`) still happen when due: the money was already reserved, as with a card authorisation. If a capture must not happen, cancel the hold with `wallet.Cancel` after you freeze.
+- The freeze hold itself can't be confirmed or cancelled with `wallet.Confirm` or `wallet.Cancel` (`ErrWrongKind`); only `UnfreezeAccount` releases it. A dispute against the frozen account still opens: it takes its share of the money from the freeze hold.
+- `ops.FreezeLedger` holds no balances, so scheduled transfers in a frozen ledger still post. Freeze the accounts themselves to stop those.
 
 | Started before the freeze | After the freeze |
 |---|---|
 | Pending withdrawal or hold paid by the frozen account | `Confirm` and `Cancel` still work |
 | Pending transfer or hold paying the frozen account | `Confirm` is refused; `Cancel` works |
-| Scheduled transfer | posts when due |
+| Scheduled transfer | rejected by Blnk when due, for lack of available funds |
 | Hold with `ExpiresAt` or `CaptureAt` | released or captured by Blnk when due |
 | Any new `Transfer`, `Withdraw`, `Deposit`, `Hold`, `Split`, `Exchange`, `Refund` | refused with `ErrAccountFrozen` |
 

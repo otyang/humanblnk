@@ -53,7 +53,7 @@ pot: Rent parent is Ada&#x27;s account: true
 pot: Travel parent is Ada&#x27;s account: true</pre></figure>
 <ul><li><code>Name</code> is unique per parent. Opening the same name again returns the existing pot.</li><li><code>Goal</code> is optional and only recorded. Nothing stops a pot going past it, and nothing moves when it is reached.</li><li><code>Pot</code> embeds <code>*Account</code>, so it has <code>ID</code>, <code>Balance</code>, <code>Available</code> and the rest, plus <code>Name</code>, <code>Parent</code> and <code>Goal</code>.</li><li><code>ListPots</code> returns the pots under one parent. <code>GetCustomer</code> leaves pots out.</li></ul>
 <h2 id="moving-money-in-and-out"><a href="#moving-money-in-and-out">Moving money in and out</a></h2>
-<p>There is no special call. A pot is an account, so money moves with <code>Transfer</code>, in either direction.</p>
+<p>There is no special call. A pot is an account, so money moves with <code>Transfer</code>, in either direction, between the pot and its parent account.</p>
 <figure class="code"><pre><code><span class="c">// Into the pot: an ordinary transfer from Ada&#x27;s main account.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{
 	<span class="t">From</span>: adaNGN, <span class="t">To</span>: rent.<span class="t">ID</span>,
@@ -76,9 +76,9 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;Rent pot:&quot;</span>,
 fmt.<span class="t">Println</span>(<span class="s">&quot;Ada&#x27;s main account:&quot;</span>, potBalance(wallet, adaNGN))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>Rent pot: 35000.00 of 600000.00
 Ada&#x27;s main account: 65000.00</pre></figure>
-<ul><li>Pass a fee as for any transfer: <code>ledger.NoFee</code> here, or let <code>Config.Fees</code> price it. See <a href="fees.html">Fees</a>.</li><li>Pots aren't limited, but a transfer out of Ada's main account counts against her <a href="limits.html">limits</a>.</li></ul>
+<ul><li>Pass a fee as for any transfer: <code>ledger.NoFee</code> here, or let <code>Config.Fees</code> price it. See <a href="fees.html">Fees</a>.</li><li>Pots aren't limited, but a transfer out of Ada's main account counts against her <a href="limits.html">limits</a>.</li><li>Money moves only between a pot and its parent. A deposit straight into a pot, a withdrawal from it, or a transfer between a pot and anyone else is refused with <code>ErrWrongKind</code>, so a pot can't be used to get around the parent's limits.</li></ul>
 <h2 id="a-standing-order-wallet-schedule"><a href="#a-standing-order-wallet-schedule">A standing order: wallet.Schedule</a></h2>
-<p><code>Schedule</code> creates every occurrence at once, as a Blnk scheduled transaction. Blnk posts each one itself when its time comes.</p>
+<p><code>Schedule</code> creates every occurrence at once, as a Blnk scheduled transaction. Blnk's queue posts each one itself when its time comes, so Blnk's workers must be running.</p>
 <figure class="code"><figcaption>₦25,000 into the rent pot on the 1st of every month for a year</figcaption><pre><code>lagos := time.<span class="t">FixedZone</span>(<span class="s">&quot;WAT&quot;</span>, <span class="n">3600</span>)
 plan, err := wallet.<span class="t">Schedule</span>(ctx, ledger.<span class="t">RecurringInput</span>{
 	<span class="t">Transfer</span>: ledger.<span class="t">TransferInput</span>{
@@ -162,6 +162,7 @@ Rent pot: 85000.00 Ada: 15000.00
 retry: 12 occurrences, replayed: true Rent pot: 85000.00</pre></figure>
 <h2 id="when-the-money-isn-t-there"><a href="#when-the-money-isn-t-there">When the money isn't there</a></h2>
 <p>An occurrence that runs when Ada's balance is too low is refused by Blnk with status <code>REJECTED</code>. The later occurrences are not affected.</p>
+<p>Blnk keeps each occurrence as <code>SCHEDULED</code> and records what happened when it ran as a copy referenced <code>&lt;reference&gt;_q</code>. <code>GetTransaction</code> and <code>GetTransactionByReference</code> return that outcome once the occurrence has run: its <code>Reference</code> ends in <code>_q</code> and its <code>ParentTransaction</code> is the occurrence. Statements show the occurrence's own reference.</p>
 <figure class="code"><figcaption>Ada is ₦15,000 short on 1 December</figcaption><pre><code><span class="c">// Ada spends most of her balance before 1 December.</span>
 _, err = wallet.<span class="t">Transfer</span>(ctx, ledger.<span class="t">TransferInput</span>{<span class="t">From</span>: adaNGN, <span class="t">To</span>: travel.<span class="t">ID</span>,
 	<span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;pot_in_1120&quot;</span>})
@@ -177,10 +178,10 @@ next, err := wallet.<span class="t">GetTransactionByReference</span>(ctx, <span 
 check(err)
 fmt.<span class="t">Println</span>(next.<span class="t">Reference</span>, next.<span class="t">EntryStatus</span>) <span class="c">// the plan carries on</span></code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>Ada before: 10000.00
-rent_plan_ada_3 REJECTED rejected
+rent_plan_ada_3_q REJECTED rejected
 rent_plan_ada_4 scheduled</pre></figure>
 <p>Watch for <code>ledger.EventTransactionRejected</code> on your <a href="webhooks.html">webhook</a> to tell Ada her saving was skipped. To make it up, send a one-off transfer.</p>
-<aside class="warn">humanblnk has no call to cancel scheduled occurrences, and <code>Cancel</code> only works on pending (INFLIGHT) transactions. An account with occurrences still scheduled can't be closed. Choose <code>Count</code> with this in mind. Blnk posts occurrences itself, so freezing an account doesn't stop them either.</aside>
+<aside class="warn">humanblnk has no call to cancel scheduled occurrences, and <code>Cancel</code> only works on pending (INFLIGHT) transactions. An account with occurrences still to run can't be closed. Choose <code>Count</code> with this in mind. Freezing the account makes the occurrences that come due while it is frozen fail for lack of funds; see <a href="freeze.html">Freeze accounts</a>.</aside>
 <h2 id="what-happens-in-blnk"><a href="#what-happens-in-blnk">What happens in Blnk</a></h2>
 <p>Each occurrence is its own transaction with <code>scheduled_for</code> set and status <code>SCHEDULED</code>. When it runs, it posts like a transfer:</p>
 <div class="tablewrap"><table><thead><tr><th>Account</th><th>Debit</th><th>Credit</th></tr></thead><tbody><tr><td>Ada</td><td>₦25,000.00</td><td></td></tr><tr><td>Rent pot</td><td></td><td>₦25,000.00</td></tr></tbody></table></div>

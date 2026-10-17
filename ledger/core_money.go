@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 )
 
@@ -32,19 +33,22 @@ type Money struct {
 // Amount builds Money from a decimal string as the user typed it:
 // Amount("0.456", "BTC"), Amount("100.56", "USD"), Amount("1,500", "NGN").
 func Amount(value, currency string) Money {
-	return Money{Value: strings.TrimSpace(value), Currency: strings.ToUpper(strings.TrimSpace(currency))}
+	return Money{Value: strings.TrimSpace(value), Currency: normCode(currency)}
 }
+
+// normCode is a currency code as stored: trimmed and upper-case.
+func normCode(code string) string { return strings.ToUpper(strings.TrimSpace(code)) }
 
 // Minor builds Money from an integer in the smallest unit: Minor(10056, "USD") = 100.56 USD.
 func Minor(precise int64, currency string) Money {
-	return Money{PreciseAmount: big.NewInt(precise), Currency: strings.ToUpper(currency)}
+	return Money{PreciseAmount: big.NewInt(precise), Currency: normCode(currency)}
 }
 
 // Precise builds a fully specified Money from a smallest-unit integer and
 // precision. Display follows the built-in rule for the currency; amounts the
 // Service returns follow Config.Currencies instead.
 func Precise(precise *big.Int, precision int64, currency string) Money {
-	m := Money{PreciseAmount: new(big.Int).Set(precise), Precision: precision, Currency: strings.ToUpper(currency)}
+	m := Money{PreciseAmount: new(big.Int).Set(precise), Precision: precision, Currency: normCode(currency)}
 	m.Value = formatDecimal(m.PreciseAmount, precision)
 	m.Display = m.Format(builtinRule(m.Currency, precision))
 	return m
@@ -72,7 +76,7 @@ func (m Money) resolve(precision int64) (Money, error) {
 	if _, ok := decimalPlaces(precision); !ok {
 		return Money{}, fmt.Errorf("%w: precision %d must be a power of 10", ErrInvalidInput, precision)
 	}
-	out := Money{Currency: strings.ToUpper(m.Currency), Precision: precision}
+	out := Money{Currency: normCode(m.Currency), Precision: precision}
 
 	switch {
 	case m.Value != "":
@@ -94,6 +98,19 @@ func (m Money) resolve(precision int64) (Money, error) {
 	return out, nil
 }
 
+// plainDecimal is what an amount, rate or percentage may look like: digits
+// with an optional sign and decimal point. big.Rat alone would also take
+// fractions ("200/2"), hex ("0x10"), binary ("0b11") and exponents.
+var plainDecimal = regexp.MustCompile(`^[+-]?([0-9]+(\.[0-9]*)?|\.[0-9]+)$`)
+
+// decimalRat parses a plain decimal exactly.
+func decimalRat(s string) (*big.Rat, bool) {
+	if !plainDecimal.MatchString(s) {
+		return nil, false
+	}
+	return new(big.Rat).SetString(s)
+}
+
 func parseDecimal(s string, precision int64) (*big.Int, error) {
 	clean := strings.ReplaceAll(strings.TrimSpace(s), ",", "")
 	clean = strings.ReplaceAll(clean, "_", "")
@@ -103,7 +120,7 @@ func parseDecimal(s string, precision int64) (*big.Int, error) {
 	if strings.ContainsAny(clean, "eE") {
 		return nil, fmt.Errorf("%w: amount %q: exponent notation not allowed", ErrInvalidInput, s)
 	}
-	r, ok := new(big.Rat).SetString(clean)
+	r, ok := decimalRat(clean)
 	if !ok {
 		return nil, fmt.Errorf("%w: invalid amount %q", ErrInvalidInput, s)
 	}

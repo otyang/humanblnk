@@ -2,6 +2,7 @@ package ledger
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -43,7 +44,7 @@ func (s walletAPI) ConfirmMany(ctx context.Context, items []ConfirmItem) ([]Batc
 			return nil, invalid(op, "item %d: transaction id is required", i)
 		}
 		if err := s.checkReceivers(ctx, op, it.TransactionID); err != nil {
-			if !refusal(err) {
+			if !refusal(err) && !errors.Is(err, ErrWrongKind) {
 				return nil, fmt.Errorf("item %d: %w", i, err)
 			}
 			out[i] = BatchResult{TransactionID: it.TransactionID, Err: err}
@@ -89,13 +90,64 @@ func (s walletAPI) CancelMany(ctx context.Context, txIDs []string) ([]BatchResul
 	if len(txIDs) == 0 || len(txIDs) > maxInflightBatch {
 		return nil, invalid(op, "between 1 and %d transactions per call", maxInflightBatch)
 	}
+	// A freeze hold fails on its own; the rest go to Blnk. Results come back
+	// in the order of txIDs.
+	out := make([]BatchResult, len(txIDs))
+	var send []string
+	var sent []int
+	for i, id := range txIDs {
+		if err := s.notFreezeHold(ctx, op, id); err != nil {
+			if !errors.Is(err, ErrWrongKind) {
+				return nil, fmt.Errorf("item %d: %w", i, err)
+			}
+			out[i] = BatchResult{TransactionID: id, Err: err}
+			continue
+		}
+		send, sent = append(send, id), append(sent, i)
+	}
+	if len(sent) == 0 {
+		return out, nil
+	}
 	resp, err := s.c.BulkVoidInflight(ctx, blnk.BulkVoidInflightRequest{
-		SkipQueue: !s.cfg.UseQueue, TransactionIDs: txIDs,
+		SkipQueue: !s.cfg.UseQueue, TransactionIDs: send,
 	})
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
-	return batchResults(op, resp), nil
+	byID := map[string]BatchResult{}
+	for _, r := range batchResults(op, resp) {
+		byID[r.TransactionID] = r
+	}
+	for _, i := range sent {
+		if r, ok := byID[txIDs[i]]; ok {
+			out[i] = r
+		} else {
+			out[i] = BatchResult{TransactionID: txIDs[i], Err: &OpError{Op: op, Kind: ErrUnavailable,
+				Cause: fmt.Errorf("no result from Blnk for %s", txIDs[i])}}
+		}
+	}
+	return out, nil
+}
+
+// notFreezeHold refuses to cancel the hold FreezeAccount placed: only
+// UnfreezeAccount releases it. A transaction Blnk doesn't know is left for
+// the call itself to report.
+func (s *Service) notFreezeHold(ctx context.Context, op, txID string) error {
+	t, err := s.c.GetTransaction(ctx, txID)
+	if blnk.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return mapErr(op, err)
+	}
+	if kind, _ := t.MetaData["txn_type"].(string); kind == "freeze" {
+		return freezeHoldErr(op, txID)
+	}
+	return nil
+}
+
+func freezeHoldErr(op, txID string) error {
+	return &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf("%s holds a frozen account's balance; Ops().UnfreezeAccount releases it", txID)}
 }
 
 func batchResults(op string, resp *blnk.BulkInflightResponse) []BatchResult {
@@ -173,14 +225,25 @@ func (s *Service) hold(ctx context.Context, op string, in HoldInput, kind string
 	if !in.CaptureAt.IsZero() && !in.ExpiresAt.IsZero() && !in.CaptureAt.Before(in.ExpiresAt) {
 		return nil, invalid(op, "CaptureAt must be before ExpiresAt or the hold is released first")
 	}
-	// A dispute hold points back at the payer, who may be frozen for the very
-	// reason the payment is disputed; ring-fencing the money must still work.
-	var to []AccountID
-	if kind != "dispute" {
-		to = append(to, in.Destination)
-	}
-	if err := s.checkActive(ctx, op, []AccountID{in.AccountID}, to...); err != nil {
-		return nil, err
+	if kind == "dispute" {
+		// Ring-fencing disputed money must work even when the payer or the
+		// recipient is frozen, as either may be for the very reason the
+		// payment is disputed: only the recipient's precision is checked.
+		b, err := s.c.GetBalance(ctx, string(in.AccountID))
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		if err := s.samePrecision(op, b); err != nil {
+			return nil, err
+		}
+	} else {
+		bals, err := s.loadActive(ctx, op, nil, []AccountID{in.AccountID}, in.Destination)
+		if err != nil {
+			return nil, err
+		}
+		if err := subAccounts(op, bals, in.AccountID, in.Destination); err != nil {
+			return nil, err
+		}
 	}
 	if limited(kind) {
 		if err := s.checkLimits(ctx, op, in.AccountID, amount.PreciseAmount); err != nil {
@@ -240,8 +303,12 @@ func (s *Service) checkReceivers(ctx context.Context, op, txID string) error {
 	if err != nil {
 		return mapErr(op, err)
 	}
-	if kind, _ := held.MetaData["txn_type"].(string); kind == "dispute" {
+	kind, _ := held.MetaData["txn_type"].(string)
+	switch kind {
+	case "dispute":
 		return nil // a dispute's outcome must post even to a frozen payer
+	case "freeze":
+		return freezeHoldErr(op, txID)
 	}
 	var to []AccountID
 	if held.Destination != "" {
@@ -260,6 +327,9 @@ func (s walletAPI) Cancel(ctx context.Context, txID string) (*Receipt, error) {
 	const op = "ledger.Wallet.Cancel"
 	if txID == "" {
 		return nil, invalid(op, "transaction id is required")
+	}
+	if err := s.notFreezeHold(ctx, op, txID); err != nil {
+		return nil, err
 	}
 	resp, err := s.c.UpdateInflight(ctx, txID, blnk.UpdateInflightRequest{
 		Status: blnk.ActionVoid, SkipQueue: !s.cfg.UseQueue,

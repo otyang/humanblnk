@@ -23,8 +23,9 @@ Each escrow is its own Blnk balance, opened for that one deal. What is still hel
 
 - The escrow account is a new account in Ada's ledger, currency and identity, with `Kind` set to `escrow`.
 - The money moves from Ada into it straight away. Chidi Stores' balance doesn't change yet.
-- `Reference` is required. A retry with the same reference returns the same escrow, so a timed-out request is safe to repeat.
-- The payer's status, limits and available balance are checked before the escrow account is created. A refused escrow leaves no account behind.
+- `Reference` is required. A retry with the same reference returns the same escrow, so a timed-out request is safe to repeat. A call with the same reference but a different payer, beneficiary or amount is refused with `ErrDuplicateReference`.
+- The payer's status, limits, currency and available balance are checked before the escrow account is created. A refused escrow leaves no account behind.
+- The escrow account's money moves only with `ReleaseEscrow` and `RefundEscrow`. A `Transfer`, `Withdraw`, `Hold` or `Bulk` item on it is refused with `ErrWrongKind`.
 - If the account was opened but the money didn't move, for example because Blnk timed out, a retry with the same reference reuses that account.
 - `Description` defaults to "Escrow". `MetaData` goes on the funding transaction.
 

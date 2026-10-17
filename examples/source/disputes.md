@@ -63,6 +63,20 @@ For a card order split out of `@PaystackClearing`, the hold points back at `@Pay
 
 > note: For a pending payment that was later confirmed, dispute the id that `Confirm` returned. The id of the hold is not a posted transaction.
 
+## Disputes and refunds share one limit
+
+A payment is never paid back to its payer more than once. Refunds and disputes count against the same amount:
+
+| Already on the payment | What is left to dispute or refund |
+|---|---|
+| a full `Refund` | nothing: a dispute is `ErrAlreadyFinalized` |
+| partial refunds | the amount minus those refunds |
+| an open dispute | the amount minus the dispute; a full `Refund` is refused |
+| an upheld dispute | the amount minus what went back to the payer |
+| a rejected dispute | everything it held is free again |
+
+A dispute with no `Amount` takes whatever is left. A frozen recipient can still be disputed: that is often why it was frozen. The dispute takes its share from the freeze's hold and the rest stays held.
+
 ## What happens in Blnk
 
 Opening the ₦9,800 dispute makes an INFLIGHT transaction with `txn_type: dispute`. Nothing is posted yet:
@@ -80,12 +94,11 @@ Opening the ₦9,800 dispute makes an INFLIGHT transaction with `txn_type: dispu
 
 | Error | When | What to do |
 |---|---|---|
-| `ErrAmountExceeded` | `Amount` is more than the disputed transaction; upholding more than is still held | use at most the amount still held |
+| `ErrAmountExceeded` | `Amount` is more than what is left of the transaction after refunds and other disputes; upholding more than is still held | dispute at most what is left |
 | `ErrInsufficientFunds` | the recipient no longer has the disputed amount available | dispute what is there, or recover the rest another way, e.g. an [adjustment](adjustments.html) |
 | `ErrInvalidInput` | the transaction isn't posted; a split with several recipients given by its parent id; an amount on a rejected dispute; no `Reference`; an unknown outcome | fix the call; dispute the leg |
-| `ErrAlreadyFinalized` | resolving a dispute that is already fully resolved | nothing to do |
+| `ErrAlreadyFinalized` | the transaction has already been refunded or disputed in full; resolving a dispute that is already fully resolved | nothing to do |
 | `ErrNotFound` | no transaction with that id | check the id |
-| `ErrAccountFrozen` / `ErrAccountClosed` | the recipient is frozen or closed when the dispute is opened | see [Freeze accounts](freeze.html) |
 
 ## Related
 

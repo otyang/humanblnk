@@ -71,6 +71,7 @@ type Service struct {
 	cfg Config
 
 	currencies map[string]currency.Currency // built-in list merged with Config.Currencies, fixed at New
+	broken     map[string]error             // codes whose Config.Currencies entry has a mistake: refused
 	configErr  error                        // mistakes in Config, reported by Check
 
 	ruleMu sync.Mutex
@@ -78,14 +79,16 @@ type Service struct {
 
 	indicators sync.Map // "@Name|CUR" → balance id; indicator balances never move
 	ledgers    sync.Map // LedgerID → *ledgerEntry; ledgers are never deleted
-	ledgerKeys sync.Map // CreateLedgerInput.Key → *sync.Mutex, one Create per key at a time
+	ledgerMu   sync.Mutex
+	ledgerGens map[LedgerID]uint64 // bumped by forgetLedger, under ledgerMu
+	ledgerKeys sync.Map            // CreateLedgerInput.Key → *sync.Mutex, one Create per key at a time
 }
 
 // New builds a Service. The client is shared and safe for concurrent use.
 func New(c *blnk.Client, cfg Config) *Service {
 	cfg.defaults()
 	s := &Service{c: c, cfg: cfg}
-	s.currencies, s.configErr = buildCurrencies(cfg.Currencies)
+	s.currencies, s.broken, s.configErr = buildCurrencies(cfg.Currencies)
 	return s
 }
 
@@ -108,7 +111,7 @@ func (s *Service) Parse(amount, currency string) (Money, error) {
 // resolve fills PreciseAmount/Precision (or Value) using the currency's precision.
 // currency is used when m.Currency is empty (e.g. a fee written as Amount("1.50", "")).
 func (s *Service) resolve(op string, m Money, currency string) (Money, error) {
-	cur := strings.ToUpper(firstNonEmpty(m.Currency, currency))
+	cur := normCode(firstNonEmpty(strings.TrimSpace(m.Currency), currency))
 	if cur != "" {
 		if err := s.knownCurrency(op, cur); err != nil {
 			return Money{}, err
@@ -123,8 +126,9 @@ func (s *Service) resolve(op string, m Money, currency string) (Money, error) {
 // from a client's JSON) is converted with its value kept, or rejected when it
 // has more decimal places than precision allows. It is never posted as is.
 func (s *Service) resolveAt(op string, m Money, currency string, precision int64) (Money, error) {
+	m.Currency = normCode(m.Currency)
 	if m.Currency == "" {
-		m.Currency = strings.ToUpper(currency)
+		m.Currency = normCode(currency)
 	}
 	if m.Currency == "" {
 		return Money{}, invalid(op, "currency is required")
@@ -239,6 +243,9 @@ func (s *Service) transferReq(in TransferInput, amount, fee Money, kind string) 
 			return req, fmt.Errorf("a scheduled transfer cannot also be pending")
 		}
 		req.ScheduledFor = in.ScheduledFor.Format(time.RFC3339)
+		// Core posts a skip_queue transaction at once, whatever its
+		// scheduled_for: only the queue holds it until then.
+		req.SkipQueue = false
 	}
 	if fee.IsPositive() {
 		req.Destinations = []blnk.Distribution{
@@ -276,7 +283,7 @@ func (s *Service) post(ctx context.Context, op string, req blnk.CreateTransactio
 
 func (s *Service) toAccount(b *blnk.Balance) *Account {
 	cur := b.Currency
-	precision := s.Precision(cur)
+	precision := s.precisionOf(b)
 	w := &Account{
 		ID: AccountID(b.BalanceID), LedgerID: LedgerID(b.LedgerID), IdentityID: b.IdentityID,
 		Currency: cur, Precision: precision,

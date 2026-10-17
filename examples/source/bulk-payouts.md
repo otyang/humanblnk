@@ -32,7 +32,9 @@ Each item is an ordinary `TransferInput`. Build the list in your own order: a sl
 |---|---|
 | `BatchID` | Blnk's id for the batch. Pass it to `Confirm` or `Cancel` for a pending batch |
 | `Status` | `applied`, `inflight` (with `Pending`) or `processing` (with `Async`) |
-| `Count` | the number of transactions Blnk created |
+| `Count` | how many items Blnk recorded |
+| `Items` | each item's `Reference`, `TransactionID`, `Status` and `Recorded`, in the order given. Empty with `Async` |
+| `Replayed` | every item was already recorded by an earlier call with the same items |
 
 ## When one item fails
 
@@ -40,11 +42,11 @@ With `Atomic`, one item Blnk can't post fails the whole batch and nothing moves.
 
 @sample atomic-fail | October's run asks for more than Chidi Stores has
 
-Without `Atomic`, the items that can post do, and the others are left out. `Count` tells you how many went through. Check each item by its reference to find the ones that didn't.
+Without `Atomic`, Blnk posts the items in order and stops at the first one it can't post. The items before it stay posted. `Bulk` returns the error together with a receipt whose `Status` is `partial` and whose `Items` say which went through.
 
 @sample non-atomic
 
-> note: In the in-memory Blnk used here, an item left out of a non-atomic batch is not stored at all, so the lookup returns `ErrNotFound`. Treat any item that isn't `APPLIED` as not paid.
+Sending the same batch again is safe, even after a timeout. Items already recorded are replayed, provided they are unchanged, and only the rest are sent. An item whose reference was used for a different transfer refuses the call with `ErrDuplicateReference`.
 
 ## Waiting for approval: Pending
 

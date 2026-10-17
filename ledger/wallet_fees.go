@@ -61,7 +61,7 @@ func (r FeeRequest) Convert(m Money, rate string, mode Rounding) (Money, error) 
 	if err != nil {
 		return Money{}, err
 	}
-	x, ok := new(big.Rat).SetString(strings.TrimSpace(rate))
+	x, ok := decimalRat(strings.TrimSpace(rate))
 	if !ok || x.Sign() <= 0 {
 		return Money{}, fmt.Errorf("%w: rate %q must be a positive decimal", ErrInvalidInput, rate)
 	}
@@ -80,7 +80,7 @@ func ratOf(m Money) (*big.Rat, error) {
 		if strings.ContainsAny(clean, "eE") {
 			return nil, fmt.Errorf("%w: amount %q: exponent notation not allowed", ErrInvalidInput, m.Value)
 		}
-		v, ok := new(big.Rat).SetString(clean)
+		v, ok := decimalRat(clean)
 		if !ok {
 			return nil, fmt.Errorf("%w: invalid amount %q", ErrInvalidInput, m.Value)
 		}
@@ -224,7 +224,7 @@ func (r FeeRule) compute(a Money) (*big.Int, error) {
 
 	fee := new(big.Int)
 	if r.Percent != "" {
-		pct, ok := new(big.Rat).SetString(strings.TrimSuffix(strings.TrimSpace(r.Percent), "%"))
+		pct, ok := decimalRat(strings.TrimSuffix(strings.TrimSpace(r.Percent), "%"))
 		if !ok || pct.Sign() < 0 {
 			return nil, fmt.Errorf("%w: invalid percent %q", ErrInvalidInput, r.Percent)
 		}

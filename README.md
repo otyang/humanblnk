@@ -447,7 +447,7 @@ for _, e := range core.Events() { … } // webhooks Blnk would have sent
   - Every movement needs a `Reference`. Use the provider's payment id for deposits.
   - A retry with the same reference and the same payload returns the original with `Replayed: true`.
   - A different payload under the same reference is `ErrDuplicateReference`.
-- **Synchronous by default.** `skip_queue: true` is sent, so you get `APPLIED`/`INFLIGHT` or a definite error in the response. `Config.UseQueue` routes writes through Blnk's queue for very hot balances; results then arrive by webhook.
+- **Synchronous by default.** `skip_queue: true` is sent, so you get `APPLIED`/`INFLIGHT` or a definite error in the response. `Config.UseQueue` routes writes through Blnk's queue for very hot balances; results then arrive by webhook. Scheduled transfers always use the queue (Blnk posts a `skip_queue` transfer at once, whatever its date), so Blnk's workers must run.
 - **Retries.**
   - The client retries lock contention (423), rate limits (429), 502/503/504 and network errors, with jittered backoff. Retrying a payment is safe because of its reference.
   - Confirming a pending transaction has no reference, so it's retried only when Blnk certainly didn't act, never after a network error or gateway timeout.
@@ -461,7 +461,12 @@ for _, e := range core.Events() { … } // webhooks Blnk would have sent
   - Reconciling one-to-one won't match a provider line: try `Strategy: "one_to_many"` with `GroupingCriteria: "parent_transaction"`.
 - **House account ids.** Blnk stores `@` accounts by balance id: receipts and history show the id, statements the `@Name`.
 - **Descriptions** are required by Blnk; without one, the operation's name is used ("Deposit", "Escrow release", …).
+- **Paid back once.** Refunds, partial refunds and disputes count against the same amount, so a payment is never paid back twice.
 - **Concurrent partial refunds** of one transaction can both pass the remaining-amount check; serialise them.
+- **Freezing** holds the account's available balance on `@FrozenFunds`, so scheduled transfers falling due while it is frozen are rejected by Blnk. Holds set to capture themselves (`CaptureAt`) still capture.
+- **Precision per account.** Each account records the precision it was opened with; balances are read at it, and movements at another precision are refused.
+- **Pots and escrows.** A pot's money moves only to and from its parent account; an escrow's only through `ReleaseEscrow` and `RefundEscrow`.
+- **Bulk.** A batch that isn't atomic stops at the first item Blnk can't post; the items before it stay posted. `Bulk` returns the error with a receipt whose `Items` say which were recorded, and sending the same batch again finishes it.
 - **Ledger keys.** Calls with the same key run one at a time in a process. Across processes, a race can create two ledgers; the oldest then wins. Create ledgers at provisioning time.
 - **Balance alerts** fire after every update while the condition holds; debounce them. Blnk's monitor threshold goes through float math, so `WatchBalance` sends it in the smallest unit with precision 1.
 

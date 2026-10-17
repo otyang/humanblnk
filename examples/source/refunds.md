@@ -28,7 +28,7 @@ Ada paid Chidi Stores for an order. Sometimes the whole order is cancelled. Some
 - `Reason` is stored as `meta_data.refund_reason`. `Description` and `MetaData` go on the refund too.
 - A second `Refund` of the same transaction fails with `ErrAlreadyFinalized`.
 - Every customer account that received the money must still have it available. Otherwise nothing is reversed and the refund fails with `ErrInsufficientFunds`. See [When the recipient has spent it](#when-the-recipient-has-spent-it).
-- The transaction must be posted. For a pending payment that was later confirmed, pass the id that `Confirm` returned (the record of the capture), not the id of the hold. This holds for `RefundPartial` too.
+- The transaction must be posted: a pending hold is `ErrInvalidInput`. For a pending payment that was later confirmed, pass the id that `Confirm` returned (the record of the capture), not the id of the hold. This holds for `RefundPartial` too.
 
 ## Partial refunds: wallet.RefundPartial
 
@@ -37,8 +37,8 @@ Ada paid Chidi Stores for an order. Sometimes the whole order is cancelled. Some
 @sample partial | Two items out of stock in a ₦6,000 order
 
 - `Reference` is required, one per refund. Retrying with the same reference replays that refund instead of counting it twice.
-- The library adds up the refunds already linked to the payment. Anything over what is left fails with `ErrAmountExceeded`, and the error says how much is left.
-- Once a payment has partial refunds, `Refund` is refused with `ErrAlreadyFinalized`. Refund the rest with `RefundPartial`.
+- The library adds up the refunds already linked to the payment, and any dispute still open or upheld on it ([Disputes](disputes.html#disputes-and-refunds-share-one-limit)). Anything over what is left fails with `ErrAmountExceeded`, and the error says how much is left.
+- Once a payment has partial refunds or a dispute, `Refund` is refused with `ErrAlreadyFinalized`. Refund the rest with `RefundPartial`.
 - After a full `Refund`, `RefundPartial` is refused with `ErrAlreadyFinalized`.
 
 > warn: Two partial refunds of the same payment sent at the same moment can both pass the remaining-amount check. Run refunds for one payment one at a time in your app, for example through one worker or a row lock.

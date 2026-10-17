@@ -60,7 +60,7 @@ Chidi Stores: 395000.00 Tunde: 85000.00 Ada: 120000.00
 payroll_2026_09_2 APPLIED 120000.00</pre></figure>
 <ul><li>Every item needs its own <code>Reference</code>, unique within the batch. Look any item up later with <code>GetTransactionByReference</code>.</li><li>Every item needs a fee: <code>ledger.NoFee</code>, an amount, or <code>Config.Fees</code> to price it. A fee is charged to the item's sender and paid to <code>@FeeIncome</code>, as for a transfer.</li><li>The account status of every sender and recipient is checked first. One frozen or closed account refuses the whole call.</li></ul>
 <h3 id="bulkreceipt-fields">BulkReceipt fields</h3>
-<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it is</th></tr></thead><tbody><tr><td><code>BatchID</code></td><td>Blnk's id for the batch. Pass it to <code>Confirm</code> or <code>Cancel</code> for a pending batch</td></tr><tr><td><code>Status</code></td><td><code>applied</code>, <code>inflight</code> (with <code>Pending</code>) or <code>processing</code> (with <code>Async</code>)</td></tr><tr><td><code>Count</code></td><td>the number of transactions Blnk created</td></tr></tbody></table></div>
+<div class="tablewrap"><table><thead><tr><th>Field</th><th>What it is</th></tr></thead><tbody><tr><td><code>BatchID</code></td><td>Blnk's id for the batch. Pass it to <code>Confirm</code> or <code>Cancel</code> for a pending batch</td></tr><tr><td><code>Status</code></td><td><code>applied</code>, <code>inflight</code> (with <code>Pending</code>) or <code>processing</code> (with <code>Async</code>)</td></tr><tr><td><code>Count</code></td><td>how many items Blnk recorded</td></tr><tr><td><code>Items</code></td><td>each item's <code>Reference</code>, <code>TransactionID</code>, <code>Status</code> and <code>Recorded</code>, in the order given. Empty with <code>Async</code></td></tr><tr><td><code>Replayed</code></td><td>every item was already recorded by an earlier call with the same items</td></tr></tbody></table></div>
 <h2 id="when-one-item-fails"><a href="#when-one-item-fails">When one item fails</a></h2>
 <p>With <code>Atomic</code>, one item Blnk can't post fails the whole batch and nothing moves.</p>
 <figure class="code"><figcaption>October's run asks for more than Chidi Stores has</figcaption><pre><code><span class="c">// October: the second salary is more than Chidi Stores has left.</span>
@@ -72,20 +72,32 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;refused:&quot;</span>, 
 fmt.<span class="t">Println</span>(<span class="s">&quot;Chidi Stores unchanged:&quot;</span>, bulkBalance(wallet, chidi), <span class="s">&quot;Tunde unchanged:&quot;</span>, bulkBalance(wallet, tundeNGN))</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>refused: true
 Chidi Stores unchanged: 395000.00 Tunde unchanged: 85000.00</pre></figure>
-<p>Without <code>Atomic</code>, the items that can post do, and the others are left out. <code>Count</code> tells you how many went through. Check each item by its reference to find the ones that didn't.</p>
-<figure class="code"><pre><code><span class="c">// Without Atomic, each item stands alone and a bad one is skipped.</span>
-b, err := wallet.<span class="t">Bulk</span>(ctx, ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
+<p>Without <code>Atomic</code>, Blnk posts the items in order and stops at the first one it can't post. The items before it stay posted. <code>Bulk</code> returns the error together with a receipt whose <code>Status</code> is <code>partial</code> and whose <code>Items</code> say which went through.</p>
+<figure class="code"><pre><code><span class="c">// Without Atomic, Blnk posts items in order and stops at the first it</span>
+<span class="c">// can&#x27;t post. The ones before it stay posted.</span>
+bonuses := ledger.<span class="t">BulkTransferInput</span>{<span class="t">Items</span>: []ledger.<span class="t">TransferInput</span>{
 	{<span class="t">From</span>: chidi, <span class="t">To</span>: tundeNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;10000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_1&quot;</span>},
 	{<span class="t">From</span>: chidi, <span class="t">To</span>: adaNGN, <span class="t">Amount</span>: ledger.<span class="t">Amount</span>(<span class="s">&quot;900000&quot;</span>, currency.<span class="t">NGN</span>), <span class="t">Fee</span>: ledger.<span class="t">NoFee</span>, <span class="t">Reference</span>: <span class="s">&quot;bonus_2&quot;</span>},
-}})
-check(err)
-fmt.<span class="t">Println</span>(b.<span class="t">Status</span>, <span class="s">&quot;count:&quot;</span>, b.<span class="t">Count</span>)
+}}
+b, err := wallet.<span class="t">Bulk</span>(ctx, bonuses)
+fmt.<span class="t">Println</span>(<span class="s">&quot;refused:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInsufficientFunds</span>))
+fmt.<span class="t">Println</span>(b.<span class="t">Status</span>, <span class="s">&quot;count:&quot;</span>, b.<span class="t">Count</span>, <span class="s">&quot;of&quot;</span>, <span class="b">len</span>(bonuses.<span class="t">Items</span>))
+<span class="k">for</span> _, it := <span class="k">range</span> b.<span class="t">Items</span> {
+	fmt.<span class="t">Println</span>(<span class="s">&quot; &quot;</span>, it.<span class="t">Reference</span>, <span class="s">&quot;recorded:&quot;</span>, it.<span class="t">Recorded</span>, it.<span class="t">Status</span>)
+}
 
-_, err = wallet.<span class="t">GetTransactionByReference</span>(ctx, <span class="s">&quot;bonus_2&quot;</span>)
-fmt.<span class="t">Println</span>(<span class="s">&quot;bonus_2 not posted:&quot;</span>, errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrNotFound</span>))</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>applied count: 1
-bonus_2 not posted: true</pre></figure>
-<aside class="note">In the in-memory Blnk used here, an item left out of a non-atomic batch is not stored at all, so the lookup returns <code>ErrNotFound</code>. Treat any item that isn't <code>APPLIED</code> as not paid.</aside>
+<span class="c">// Lower bonus_2 to what Chidi Stores can pay, and send the same batch</span>
+<span class="c">// again: bonus_1 is replayed, not paid twice.</span>
+bonuses.<span class="t">Items</span>[<span class="n">1</span>].<span class="t">Amount</span> = ledger.<span class="t">Amount</span>(<span class="s">&quot;5000&quot;</span>, currency.<span class="t">NGN</span>)
+b, err = wallet.<span class="t">Bulk</span>(ctx, bonuses)
+check(err)
+fmt.<span class="t">Println</span>(<span class="s">&quot;retry:&quot;</span>, b.<span class="t">Status</span>, <span class="s">&quot;count:&quot;</span>, b.<span class="t">Count</span>, <span class="s">&quot;Tunde:&quot;</span>, bulkBalance(wallet, tundeNGN))</code></pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>refused: true
+partial count: 1 of 2
+  bonus_1 recorded: true posted
+  bonus_2 recorded: false 
+retry: applied count: 2 Tunde: 95000.00</pre></figure>
+<p>Sending the same batch again is safe, even after a timeout. Items already recorded are replayed, provided they are unchanged, and only the rest are sent. An item whose reference was used for a different transfer refuses the call with <code>ErrDuplicateReference</code>.</p>
 <h2 id="waiting-for-approval-pending"><a href="#waiting-for-approval-pending">Waiting for approval: Pending</a></h2>
 <p><code>Pending: true</code> creates every item INFLIGHT. The money is reserved at the sender but not moved. Pass the <code>BatchID</code> to <code>Confirm</code> to post every item, or to <code>Cancel</code> to release them all.</p>
 <figure class="code"><figcaption>Quarterly commissions approved; a refund run turned down</figcaption><pre><code><span class="c">// Hold the batch until the finance lead approves it.</span>
@@ -111,9 +123,9 @@ check(err)
 acct, err = wallet.<span class="t">GetAccount</span>(ctx, chidi)
 check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;after cancel:&quot;</span>, acct.<span class="t">Balance</span>.<span class="t">Display</span>, <span class="s">&quot;available:&quot;</span>, acct.<span class="t">Available</span>.<span class="t">Display</span>)</code></pre></figure>
-<figure class="output"><figcaption>Output</figcaption><pre>inflight Chidi Stores balance: 385000.00 available: 335000.00
-after confirm: 335000.00
-after cancel: 335000.00 available: 335000.00</pre></figure>
+<figure class="output"><figcaption>Output</figcaption><pre>inflight Chidi Stores balance: 380000.00 available: 330000.00
+after confirm: 330000.00
+after cancel: 330000.00 available: 330000.00</pre></figure>
 <ul><li><code>wallet.Confirm(ctx, batch.BatchID, nil)</code> and <code>wallet.Cancel(ctx, batch.BatchID)</code> act on the whole batch.</li><li>To settle items one by one instead, pass each item's transaction id to <code>Confirm</code> or <code>Cancel</code>, or up to 100 at once to <code>ConfirmMany</code> and <code>CancelMany</code>. See <a href="card-holds.html">Card holds</a>.</li></ul>
 <h2 id="large-batches-async"><a href="#large-batches-async">Large batches: Async</a></h2>
 <p><code>Async: true</code> returns at once with status <code>processing</code>. Blnk works through the batch in the background and sends the outcome to your webhook as <code>bulk_transaction.applied</code>, <code>bulk_transaction.inflight</code> or <code>bulk_transaction.failed</code>.</p>

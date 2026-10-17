@@ -97,7 +97,11 @@ func (s *Service) depositReq(ctx context.Context, op string, in DepositInput) (b
 	if fee.cmp(amount) >= 0 {
 		return none, invalid(op, "fee must be less than the deposit amount")
 	}
-	if err := s.checkActive(ctx, op, nil, in.AccountID); err != nil {
+	bals, err := s.loadActive(ctx, op, nil, nil, in.AccountID)
+	if err != nil {
+		return none, err
+	}
+	if err := subAccounts(op, bals, "", in.AccountID); err != nil {
 		return none, err
 	}
 
@@ -144,7 +148,11 @@ func (s *Service) withdrawReq(ctx context.Context, op string, in WithdrawInput) 
 	if err != nil {
 		return none, err
 	}
-	if err := s.checkActive(ctx, op, []AccountID{in.AccountID}); err != nil {
+	bals, err := s.loadActive(ctx, op, nil, []AccountID{in.AccountID})
+	if err != nil {
+		return none, err
+	}
+	if err := subAccounts(op, bals, in.AccountID, ""); err != nil {
 		return none, err
 	}
 	if err := s.checkLimits(ctx, op, in.AccountID, amount.add(fee).PreciseAmount); err != nil {
@@ -218,8 +226,14 @@ func (s *Service) moveReq(ctx context.Context, op string, in TransferInput, kind
 	if in.From == in.To {
 		return none, invalid(op, "cannot transfer to the same account")
 	}
-	if err := s.checkActive(ctx, op, []AccountID{in.From}, in.To); err != nil {
+	bals, err := s.loadActive(ctx, op, nil, []AccountID{in.From}, in.To)
+	if err != nil {
 		return none, err
+	}
+	if kind == "transfer" || kind == "exchange" {
+		if err := subAccounts(op, bals, in.From, in.To); err != nil {
+			return none, err
+		}
 	}
 	if limited(kind) {
 		if err := s.checkLimits(ctx, op, in.From, amount.add(fee).PreciseAmount); err != nil {
@@ -236,6 +250,12 @@ func (s *Service) moveReq(ctx context.Context, op string, in TransferInput, kind
 // Bulk posts up to 10,000 transfers as one Blnk batch, e.g. payroll.
 // Atomic makes them all-or-nothing; Pending holds them all INFLIGHT; Async
 // processes them in the background with the outcome sent by webhook.
+//
+// A batch that isn't atomic stops at the first item Blnk can't post (e.g.
+// for funds); the items before it stay posted. Bulk then returns the error
+// and a receipt (Status "partial") whose Items say which were recorded.
+// Calling Bulk again with the same items is safe: recorded items are
+// replayed, provided they match, and only the rest are sent.
 func (s walletAPI) Bulk(ctx context.Context, in BulkTransferInput) (*BulkReceipt, error) {
 	const op = "ledger.Wallet.Bulk"
 	if len(in.Items) == 0 {
@@ -280,15 +300,121 @@ func (s walletAPI) Bulk(ctx context.Context, in BulkTransferInput) (*BulkReceipt
 		reqs = append(reqs, r)
 		from, to = append(from, it.From), append(to, it.To)
 	}
-	if err := s.checkActiveWith(ctx, op, senders, from, to...); err != nil {
+	bals, err := s.loadActive(ctx, op, senders, from, to...)
+	if err != nil {
 		return nil, err
 	}
-	resp, err := s.c.CreateBulkTransactions(ctx, blnk.BulkTransactionRequest{
-		Atomic: in.Atomic, Inflight: in.Pending, RunAsync: in.Async,
-		SkipQueue: !s.cfg.UseQueue, Transactions: reqs,
-	})
-	if err != nil {
-		return nil, mapErr(op, err)
+	for i := range from {
+		if err := subAccounts(op, bals, from[i], to[i]); err != nil {
+			return nil, fmt.Errorf("item %d: %w", i, err)
+		}
 	}
-	return &BulkReceipt{BatchID: resp.BatchID, Status: resp.Status, Count: resp.TransactionCount}, nil
+	send := func(reqs []blnk.CreateTransactionRequest) (*blnk.BulkTransactionResponse, error) {
+		return s.c.CreateBulkTransactions(ctx, blnk.BulkTransactionRequest{
+			Atomic: in.Atomic, Inflight: in.Pending, RunAsync: in.Async,
+			SkipQueue: !s.cfg.UseQueue, Transactions: reqs,
+		})
+	}
+	// A retry is spotted by its first item already being recorded (a batch
+	// that isn't atomic doesn't report duplicates), or by Blnk refusing a
+	// duplicate reference.
+	var resp *blnk.BulkTransactionResponse
+	if _, ferr := s.byReference(ctx, reqs[0].Reference); ferr == nil {
+		err = &blnk.APIError{Status: 409, Code: blnk.CodeDuplicateReference}
+	} else if !blnk.IsNotFound(ferr) {
+		return nil, mapErr(op, ferr)
+	} else {
+		resp, err = send(reqs)
+	}
+	replayed := false
+	if blnk.HasCode(err, blnk.CodeDuplicateReference) {
+		// A retry of a batch whose answer was lost: replay the items already
+		// recorded (they must match) and send only the rest.
+		items, err := s.bulkItems(ctx, reqs)
+		if err != nil {
+			return nil, mapErr(op, err)
+		}
+		var missing []blnk.CreateTransactionRequest
+		for i, it := range items {
+			if it.Err != nil {
+				return nil, &OpError{Op: op, Kind: ErrDuplicateReference, Cause: fmt.Errorf("item %d: %w", i, it.Err)}
+			}
+			if !it.Recorded {
+				missing = append(missing, reqs[i])
+			}
+		}
+		if len(missing) == 0 {
+			replayed = true
+			resp = &blnk.BulkTransactionResponse{Status: "applied"}
+			if in.Pending {
+				resp.Status = "inflight"
+			}
+		} else if resp, err = send(missing); err != nil {
+			return s.bulkFailed(ctx, op, in, reqs, err)
+		}
+	} else if err != nil {
+		return s.bulkFailed(ctx, op, in, reqs, err)
+	}
+	out := &BulkReceipt{BatchID: resp.BatchID, Status: resp.Status, Replayed: replayed}
+	if in.Async {
+		out.Count = len(reqs) // accepted; the outcome arrives by webhook
+		return out, nil
+	}
+	if out.Items, err = s.bulkItems(ctx, reqs); err != nil {
+		return out, mapErr(op, fmt.Errorf("batch %s sent, but its items could not be read back: %w", resp.BatchID, err))
+	}
+	for _, it := range out.Items {
+		if it.Recorded {
+			out.Count++
+		}
+	}
+	return out, nil
+}
+
+// bulkFailed reports a batch Blnk refused. A batch that isn't atomic stops
+// at the first item Blnk can't post, but the items before it stay posted:
+// then the receipt lists what was recorded, alongside the error.
+func (s *Service) bulkFailed(ctx context.Context, op string, in BulkTransferInput, reqs []blnk.CreateTransactionRequest, err error) (*BulkReceipt, error) {
+	e := mapErr(op, err)
+	if in.Atomic || in.Async {
+		return nil, e
+	}
+	items, rerr := s.bulkItems(ctx, reqs)
+	if rerr != nil {
+		return nil, fmt.Errorf("%w (and the items posted before it could not be read back: %v)", e, rerr)
+	}
+	out := &BulkReceipt{Status: "partial", Items: items}
+	for _, it := range items {
+		if it.Recorded {
+			out.Count++
+		}
+	}
+	if out.Count == 0 {
+		return nil, e
+	}
+	return out, e
+}
+
+// bulkItems reads back each request of a batch by its reference. An item
+// recorded with a different payload (its reference was used for another
+// transfer) has Err set.
+func (s *Service) bulkItems(ctx context.Context, reqs []blnk.CreateTransactionRequest) ([]BulkItem, error) {
+	out := make([]BulkItem, len(reqs))
+	for i, req := range reqs {
+		out[i].Reference = req.Reference
+		t, err := s.byReference(ctx, req.Reference)
+		if blnk.IsNotFound(err) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if !s.samePayload(ctx, t, req) {
+			out[i].Err = fmt.Errorf("reference %q was already used for a different transfer", req.Reference)
+			continue
+		}
+		r := s.toReceipt(t)
+		out[i].TransactionID, out[i].Status, out[i].Recorded = r.TransactionID, EntryStatusOf(t.Status), true
+	}
+	return out, nil
 }

@@ -80,7 +80,7 @@ func (s *Service) planExchange(ctx context.Context, op string, in ExchangeInput)
 	if in.To == "" || in.To == in.From {
 		return nil, invalid(op, "a different destination account is required")
 	}
-	rate, ok := new(big.Rat).SetString(strings.TrimSpace(in.Rate))
+	rate, ok := decimalRat(strings.TrimSpace(in.Rate))
 	if !ok || rate.Sign() <= 0 {
 		return nil, invalid(op, "rate %q must be a positive decimal", in.Rate)
 	}
@@ -153,6 +153,9 @@ func (s *Service) planExchange(ctx context.Context, op string, in ExchangeInput)
 
 // resolveIn resolves m in currency cur, rejecting a different explicit currency.
 func (s *Service) resolveIn(op string, m Money, cur string) (Money, error) {
+	if err := s.knownCurrency(op, cur); err != nil {
+		return Money{}, err
+	}
 	return s.resolveInAt(op, m, cur, s.Precision(cur))
 }
 

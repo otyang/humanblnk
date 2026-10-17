@@ -18,10 +18,12 @@ type RefundInput struct {
 	MetaData    map[string]any
 }
 
-// Refund reverses a settled (or confirmed/cancelled pending) transaction once.
+// Refund reverses a posted (APPLIED) transaction once. For a confirmed hold,
+// pass the transaction id Confirm returned, not the hold's.
 // For split transactions created through the queue, pass the queued parent id.
 // Blnk reverses the whole amount, so a transaction that already has partial
-// refunds (RefundPartial) is refused; refund the rest with RefundPartial.
+// refunds (RefundPartial), or a dispute still open or upheld, is refused;
+// refund the rest with RefundPartial.
 func (s walletAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Receipt, error) {
 	const op = "ledger.Wallet.Refund"
 	if txID == "" {
@@ -60,6 +62,13 @@ func (s walletAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Re
 				return nil, mapErr(op, err)
 			}
 		}
+		if l.tx.Status != blnk.StatusApplied {
+			hint := ""
+			if l.tx.Status == blnk.StatusInflight {
+				hint = "; to refund a confirmed hold, pass the transaction id Confirm returned"
+			}
+			return nil, invalid(op, "only posted transactions can be refunded (%s is %s%s)", l.id, l.tx.Status, hint)
+		}
 		reversed, err := s.reversed(ctx, l.tx)
 		if err != nil {
 			return nil, mapErr(op, err)
@@ -67,13 +76,13 @@ func (s walletAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Re
 		if reversed {
 			continue
 		}
-		done, err := s.refundedSoFar(ctx, l.tx, "")
+		c, err := s.claimsOn(ctx, l.tx, "")
 		if err != nil {
 			return nil, mapErr(op, err)
 		}
-		if done.Sign() > 0 {
+		if done := c.total(&l.tx.PreciseAmount.Int); done.Sign() > 0 {
 			return nil, &OpError{Op: op, Kind: ErrAlreadyFinalized, Cause: fmt.Errorf(
-				"transaction %s already has partial refunds (%s); refund the rest with RefundPartial", l.id, s.money(done, s.txPrecision(l.tx), l.tx.Currency))}
+				"transaction %s already has partial refunds or disputes (%s); refund the rest with RefundPartial", l.id, s.money(done, s.txPrecision(l.tx), l.tx.Currency))}
 		}
 		todo = append(todo, l)
 	}
@@ -119,8 +128,8 @@ func (s walletAPI) Refund(ctx context.Context, txID string, in RefundInput) (*Re
 		}
 		if b.Available().Cmp(amt) < 0 {
 			return nil, &OpError{Op: op, Kind: ErrInsufficientFunds, Cause: fmt.Errorf(
-				"account %s has %s %s available but must return %s", id, s.money(b.Available(), s.Precision(b.Currency), b.Currency).Display,
-				strings.ToUpper(b.Currency), s.money(amt, s.Precision(b.Currency), b.Currency).Display)}
+				"account %s has %s %s available but must return %s", id, s.money(b.Available(), s.precisionOf(b), b.Currency).Display,
+				strings.ToUpper(b.Currency), s.money(amt, s.precisionOf(b), b.Currency).Display)}
 		}
 	}
 
@@ -238,21 +247,43 @@ func refundSides(t *blnk.Transaction) (from, to []AccountID) {
 	return add(nil, t.Destination, t.Destinations), add(nil, t.Source, t.Sources)
 }
 
-// GetTransaction returns a transaction by its Blnk id.
+// GetTransaction returns a transaction by its Blnk id. For a scheduled
+// transfer whose time has come it returns the outcome Blnk recorded
+// (posted, or rejected for lack of funds), whose ParentTransaction is txID.
 func (s walletAPI) GetTransaction(ctx context.Context, txID string) (*Receipt, error) {
+	const op = "ledger.Wallet.GetTransaction"
 	t, err := s.byID(ctx, txID)
 	if err != nil {
-		return nil, mapErr("ledger.Wallet.GetTransaction", err)
+		return nil, mapErr(op, err)
+	}
+	if t, err = s.ranOrSelf(ctx, t); err != nil {
+		return nil, mapErr(op, err)
 	}
 	return s.toReceipt(t), nil
 }
 
+// ranOrSelf is t's outcome once a scheduled t has run, else t.
+func (s *Service) ranOrSelf(ctx context.Context, t *blnk.Transaction) (*blnk.Transaction, error) {
+	out, err := s.scheduledOutcome(ctx, t)
+	if err != nil || out == nil {
+		return t, err
+	}
+	if out.ParentTransaction == "" {
+		out.ParentTransaction = t.GetID()
+	}
+	return out, nil
+}
+
 // GetTransactionByReference tries the reference as given, then with Blnk's "_q"
-// suffix used for records produced by the queue.
+// suffix used for records produced by the queue. Like GetTransaction, it
+// returns a scheduled transfer's outcome once it has run.
 func (s walletAPI) GetTransactionByReference(ctx context.Context, reference string) (*Receipt, error) {
 	const op = "ledger.Wallet.GetTransactionByReference"
 	t, err := s.byReference(ctx, reference)
 	if err != nil {
+		return nil, mapErr(op, err)
+	}
+	if t, err = s.ranOrSelf(ctx, t); err != nil {
 		return nil, mapErr(op, err)
 	}
 	return s.toReceipt(t), nil
@@ -272,8 +303,8 @@ const metaRefunded = "refunded_precise"
 
 // RefundPartial sends part of a posted transaction back: destination → source,
 // linked to the original with meta_data.refund_of. Refunds beyond the original
-// amount (counting the partial refunds linked to it) are rejected, as is a
-// transaction already reversed with Refund; the original's
+// amount (counting the partial refunds linked to it and disputes still open
+// or upheld) are rejected, as is a transaction already reversed with Refund; the original's
 // meta_data.refunded_precise records the total refunded. Use Refund for
 // Blnk's one-shot full reversal.
 //
@@ -305,14 +336,15 @@ func (s walletAPI) RefundPartial(ctx context.Context, txID string, in PartialRef
 	} else if !blnk.IsNotFound(err) {
 		return nil, mapErr(op, err)
 	}
-	refunded, err := s.refundedSoFar(ctx, orig, in.Reference)
+	c, err := s.claimsOn(ctx, orig, in.Reference)
 	if err != nil {
 		return nil, mapErr(op, err)
 	}
-	left := new(big.Int).Sub(&orig.PreciseAmount.Int, refunded)
+	refunded := c.refunded
+	left := new(big.Int).Sub(&orig.PreciseAmount.Int, c.total(&orig.PreciseAmount.Int))
 	if amt.PreciseAmount.Cmp(left) > 0 {
 		return nil, &OpError{Op: op, Kind: ErrAmountExceeded,
-			Cause: fmt.Errorf("%s exceeds the %s not yet refunded", amt, s.money(left, amt.Precision, amt.Currency))}
+			Cause: fmt.Errorf("%s exceeds the %s not yet refunded or disputed", amt, s.money(left, amt.Precision, amt.Currency))}
 	}
 
 	md := map[string]any{"refund_of": txID, "refund_reason": in.Reason}

@@ -58,8 +58,14 @@ func (s walletAPI) Split(ctx context.Context, in SplitInput) (*Receipt, error) {
 			Narration:           firstNonEmpty(p.Narration, in.Description),
 		}
 	}
-	if err := s.checkActive(ctx, op, []AccountID{in.From}, to...); err != nil {
+	bals, err := s.loadActive(ctx, op, nil, []AccountID{in.From}, to...)
+	if err != nil {
 		return nil, err
+	}
+	for _, t := range to {
+		if err := subAccounts(op, bals, in.From, t); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.checkLimits(ctx, op, in.From, total.PreciseAmount); err != nil {
 		return nil, err
@@ -100,7 +106,7 @@ func (s *Service) splitAmounts(op string, total Money, parts []SplitPart) ([]*bi
 			rest = i
 			continue
 		case p.Percent != "":
-			pct, ok := new(big.Rat).SetString(strings.TrimSuffix(strings.TrimSpace(p.Percent), "%"))
+			pct, ok := decimalRat(strings.TrimSuffix(strings.TrimSpace(p.Percent), "%"))
 			if !ok || pct.Sign() <= 0 || pct.Cmp(big.NewRat(100, 1)) > 0 {
 				return nil, invalid(op, "part %d: invalid percent %q", i, p.Percent)
 			}

@@ -90,7 +90,23 @@ type Leg struct {
 type BulkReceipt struct {
 	BatchID string
 	Status  string // applied | inflight | processing
-	Count   int
+	// Count is how many items Blnk recorded. A batch that isn't Atomic drops
+	// the items it can't post (e.g. for funds), so check it against
+	// len(Items), or check each item's Recorded.
+	Count int
+	// Items is each item's outcome, in the order given. Empty for Async
+	// batches, whose outcome arrives by webhook.
+	Items    []BulkItem
+	Replayed bool // every item was already recorded by an earlier call
+}
+
+// BulkItem is the outcome of one item of a Bulk batch.
+type BulkItem struct {
+	Reference     string
+	TransactionID string      // the item's transaction (its parent id when it has a fee)
+	Status        EntryStatus // posted or pending; empty when not recorded
+	Recorded      bool        // false: Blnk didn't record it
+	Err           error       // why it isn't recorded as given, when known
 }
 
 func (s *Service) inflightReceipt(txID string, r *blnk.UpdateInflightResponse) *Receipt {

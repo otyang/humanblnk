@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -182,7 +183,7 @@ type HistoryPage struct {
 
 // managedMeta are the metadata keys this package owns on accounts. Callers
 // can't set them through OpenAccountInput.MetaData.
-var managedMeta = []string{"status", "status_reason", "status_changed_at", metaKind, "external_id"}
+var managedMeta = []string{"status", "status_reason", "status_changed_at", metaKind, "external_id", metaPrecision}
 
 // OpenAccount creates a customer account (a Blnk balance) in Config.LedgerID or
 // in.LedgerID, marked active. The ledger must exist. With ExternalID it is
@@ -208,7 +209,8 @@ func (s *Service) openAccount(ctx context.Context, op string, in OpenAccountInpu
 	if ledgerID == "" {
 		return nil, invalid(op, "ledger id is required (set Config.LedgerID)")
 	}
-	if strings.TrimSpace(in.Currency) == "" {
+	in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
+	if in.Currency == "" {
 		return nil, invalid(op, "currency is required")
 	}
 	if err := s.knownCurrency(op, in.Currency); err != nil {
@@ -233,12 +235,13 @@ func (s *Service) openAccount(ctx context.Context, op string, in OpenAccountInpu
 		md = blnk.MetaData{}
 	}
 	md["status"] = "active"
+	md[metaPrecision] = strconv.FormatInt(s.Precision(in.Currency), 10)
 	if in.ExternalID != "" {
 		md["external_id"] = in.ExternalID
 	}
 	b, err := s.c.CreateBalance(ctx, blnk.CreateBalanceRequest{
 		LedgerID:   string(ledgerID),
-		Currency:   strings.ToUpper(in.Currency),
+		Currency:   in.Currency,
 		IdentityID: in.IdentityID,
 		MetaData:   md,
 	})

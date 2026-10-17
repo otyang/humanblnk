@@ -384,7 +384,7 @@ section('refund', 'Refunds', f'''
 group('Wallet · Savings and payroll')
 section('pots', 'Savings pots and standing orders', f'''
 {code('pots')}
-<p>A pot is a sub-account in the same currency and identity, with an optional goal. Blnk has no native recurrence, so a standing order is a set of scheduled transfers sharing <code>meta_data.recurring_reference</code>; calling <code>Schedule</code> again with the same input is safe.</p>
+<p>A pot is a sub-account in the same currency and identity, with an optional goal. Blnk has no native recurrence, so a standing order is a set of scheduled transfers sharing <code>meta_data.recurring_reference</code>; calling <code>Schedule</code> again with the same input is safe. Blnk’s queue posts each one when it falls due, so its workers must be running. Money moves only between a pot and its parent account.</p>
 ''', 'Ada saves for rent automatically every month.')
 
 section('payroll', 'Payroll', f'''
@@ -450,7 +450,7 @@ section('freeze', 'Freeze and close', f'''
 <p>A whole ledger can be frozen too. Then no money can leave any of its customer accounts, while deposits into them and postings to house accounts carry on:</p>
 {code('freezeledger')}
 <p><code>ops.CloseAccount</code> is final: a closed account is never reopened (open a new one). It needs a <code>Reason</code>, a <code>RequestedBy</code> and an <code>ApprovedBy</code> who is someone else, and refuses while anything is pending or scheduled, while a pot under the account is open, or while an escrow it pays into or out of still holds money. Then it moves any remaining balance to <code>SweepTo</code> and marks the account closed. A frozen account can still be closed, but nothing can be swept out of a frozen ledger, and a closed account can’t be frozen or unfrozen. Money sent to a closed account later (a late provider refund, say) is refused with <code>ErrAccountClosed</code>; hold it with <code>HoldInSuspense</code>, then claim it for the customer’s new account or return it to the provider.</p>
-<p>Each <code>Service</code> caches a ledger’s status for <code>Config.LedgerStatusTTL</code> (30 seconds by default), so a freeze made by another process applies within that time. Pending transactions created before the freeze can still be confirmed.</p>
+<p>Each <code>Service</code> caches a ledger’s status for <code>Config.LedgerStatusTTL</code> (30 seconds by default), so a freeze made by another process applies within that time. Pending transactions created before the freeze can still be confirmed. <code>FreezeAccount</code> also holds the account’s available balance, so scheduled transfers that fall due while it is frozen are rejected by Blnk; <code>UnfreezeAccount</code> releases it.</p>
 ''')
 
 
@@ -484,7 +484,7 @@ section('versions', 'Blnk versions and known limits', f'''
 <li><strong>Fee legs.</strong> A movement with a fee is stored as legs (<code>ref-1</code>, <code>ref-2</code>) with no parent record. The library rebuilds the parent for lookups and retries, and disputes or refunds pick the recipient’s leg, but raw Blnk queries and reconciliation see legs. A pending one is confirmed in full (or one leg at a time), never partially.</li>
 <li><strong>House account ids.</strong> Blnk stores <code>@FeeIncome</code>-style accounts by balance id; receipts and history show the id, statements show the name. Read them through <code>ops.GetHouseAccount</code>; <code>wallet.GetAccount</code> refuses them.</li>
 <li><strong>Ledger keys.</strong> Blnk has no unique ledger names, so two processes creating the same <code>Key</code> at once can both succeed; the oldest then wins and the other is marked <code>duplicate</code>. Create ledgers at provisioning time.</li>
-<li><strong>Account and ledger status</strong> are enforced by this library, not by Blnk, so movements Blnk posts by itself (scheduled transfers, auto-capture, hold expiry) and calls made to Blnk directly aren’t checked. Each process caches a ledger’s status for <code>LedgerStatusTTL</code>.</li>
+<li><strong>Account and ledger status</strong> are enforced by this library, not by Blnk, so movements Blnk posts by itself (auto-capture, hold expiry) and calls made to Blnk directly aren’t checked. Scheduled transfers are stopped by the balance hold a freeze places, not by a check. Each process caches a ledger’s status for <code>LedgerStatusTTL</code>.</li>
 <li><strong>Concurrent partial refunds</strong> of one transaction can both pass the remaining-amount check; serialise them.</li>
 <li><strong>Balance alerts</strong> fire after every update while the condition holds; debounce them.</li>
 </ul>

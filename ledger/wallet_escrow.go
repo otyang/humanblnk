@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/otyang/humanblnk/blnk"
@@ -56,17 +57,6 @@ func (s walletAPI) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, err
 		return nil, invalid(op, "a beneficiary different from the payer is required")
 	}
 
-	// A retry finds the funding transaction and returns the escrow it funded.
-	if t, err := s.byReference(ctx, in.Reference); err == nil {
-		if kind, _ := t.MetaData["txn_type"].(string); kind != "escrow_fund" || t.Source != string(in.Payer) {
-			return nil, &OpError{Op: op, Kind: ErrDuplicateReference,
-				Cause: fmt.Errorf("reference %q belongs to another transaction", in.Reference)}
-		}
-		return s.Wallet().GetEscrow(ctx, AccountID(t.Destination))
-	} else if !blnk.IsNotFound(err) {
-		return nil, mapErr(op, err)
-	}
-
 	payer, err := s.loadAccount(ctx, op, in.Payer)
 	if err != nil {
 		return nil, err
@@ -74,6 +64,19 @@ func (s walletAPI) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, err
 	amount, err := s.resolveIn(op, in.Amount, payer.Currency)
 	if err != nil {
 		return nil, err
+	}
+
+	// A retry finds the funding transaction and returns the escrow it
+	// funded, if it is the same escrow.
+	if t, err := s.byReference(ctx, in.Reference); err == nil {
+		if kind, _ := t.MetaData["txn_type"].(string); kind != "escrow_fund" || t.Source != string(in.Payer) ||
+			t.PreciseAmount.Cmp(amount.PreciseAmount) != 0 || str(t.MetaData["escrow_beneficiary"]) != string(in.Beneficiary) {
+			return nil, &OpError{Op: op, Kind: ErrDuplicateReference,
+				Cause: fmt.Errorf("reference %q belongs to another transaction or escrow", in.Reference)}
+		}
+		return s.Wallet().GetEscrow(ctx, AccountID(t.Destination))
+	} else if !blnk.IsNotFound(err) {
+		return nil, mapErr(op, err)
 	}
 	// Check what the funding transfer would check before opening the escrow
 	// account, so a refused escrow doesn't leave an empty account behind.
@@ -106,7 +109,7 @@ func (s walletAPI) OpenEscrow(ctx context.Context, in EscrowInput) (*Escrow, err
 		acct, err := s.c.CreateBalance(ctx, blnk.CreateBalanceRequest{
 			LedgerID: payer.LedgerID, Currency: payer.Currency, IdentityID: payer.IdentityID,
 			MetaData: blnk.MetaData{
-				metaKind: string(EscrowAccount), "status": "active",
+				metaKind: string(EscrowAccount), "status": "active", metaPrecision: strconv.FormatInt(amount.Precision, 10),
 				"escrow_payer": string(in.Payer), "escrow_beneficiary": string(in.Beneficiary),
 				"escrow_reference": in.Reference, "escrow_amount": amount.PreciseAmount.String(),
 			},
@@ -168,7 +171,7 @@ func (s *Service) settleEscrow(ctx context.Context, op string, escrowID AccountI
 	}
 	amount := in.Amount
 	if !amount.isSet() {
-		amount = s.money(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
+		amount = s.money(&b.Balance.Int, s.precisionOf(b), b.Currency)
 		if amount.Sign() <= 0 {
 			return nil, invalid(op, "escrow %s has nothing left", escrowID)
 		}

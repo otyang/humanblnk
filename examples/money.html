@@ -244,6 +244,7 @@ Tether 1000000 {2 false}
 built in is unchanged: Tether USD
 account precision: 10000 shows: 0.0000</pre></figure>
 <aside class="warn">Keep a currency's precision fixed once money has moved. Blnk sums <code>precise_amount</code> on balances, so mixing precisions corrupts the totals.</aside>
+<p>Each account records the precision it was opened with (<code>meta_data.precision</code>). Its balances are always read at that precision, so they stay right if the configuration changes later. Money is never posted to it at another one: a <code>Service</code> configured with a different precision for its currency refuses every movement on it with <code>ErrInvalidInput</code>, and the message names the precision to set back. Accounts opened after the change use the new precision.</p>
 <h2 id="what-your-service-uses-svc-currency"><a href="#what-your-service-uses-svc-currency">What your service uses: svc.Currency</a></h2>
 <p><code>currency.Get</code> is the built-in list. <code>svc.Currency</code> and <code>svc.Currencies</code> are what your service actually uses, with <code>Config.Currencies</code> applied. Read names, symbols and rules from the Service when you show balances, so your overrides are respected. Balances don't carry the name or symbol: look them up by <code>acct.Currency</code>.</p>
 <figure class="code"><figcaption>Show a balance with its symbol and name</figcaption><pre><code>acct, err := svc.<span class="t">Wallet</span>().<span class="t">GetAccount</span>(ctx, adaNGN.<span class="t">ID</span>)
@@ -254,7 +255,8 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;currencies this service
 <figure class="output"><figcaption>Output</figcaption><pre>₦15250.50 (Nigerian Naira)
 currencies this service knows: 180</pre></figure>
 <h2 id="unknown-currencies"><a href="#unknown-currencies">Unknown currencies</a></h2>
-<p>A code that is neither built in nor in <code>Config.Currencies</code> is refused with <code>ErrInvalidInput</code> when opening accounts, parsing amounts and moving money, so a typo can't open an account. Set <code>Config.UnknownCurrency: ledger.AllowUnknown</code> to accept any code at <code>Config.DefaultPrecision</code> (default 100).</p>
+<p>A code that is neither built in nor in <code>Config.Currencies</code> is refused with <code>ErrInvalidInput</code> when opening accounts, parsing amounts and moving money, so a typo can't open an account. Set <code>Config.UnknownCurrency: ledger.AllowUnknown</code> to accept any code at <code>Config.DefaultPrecision</code> (default 100). <code>DefaultPrecision</code> applies only to such codes, never to a built-in one.</p>
+<p>An account opened earlier in a code that is no longer configured keeps working for calls that take no amount: <code>Refund</code>, <code>Confirm</code>, <code>Cancel</code> and the sweep when closing it. Anything that takes an amount needs the currency configured again.</p>
 <figure class="code"><pre><code>_, err = svc.<span class="t">Wallet</span>().<span class="t">OpenAccount</span>(ctx, ledger.<span class="t">OpenAccountInput</span>{<span class="t">Currency</span>: <span class="s">&quot;NGM&quot;</span>})
 fmt.<span class="t">Println</span>(errors.<span class="t">Is</span>(err, ledger.<span class="t">ErrInvalidInput</span>), err)
 
@@ -269,7 +271,7 @@ fmt.<span class="t">Println</span>(<span class="s">&quot;allowed:&quot;</span>, 
 true
 allowed: NGM 100</pre></figure>
 <h2 id="configuration-mistakes"><a href="#configuration-mistakes">Configuration mistakes</a></h2>
-<p>Mistakes in <code>Config.Currencies</code> don't stop <code>ledger.New</code>. The bad entries are left out and <code>svc.Check</code> reports all of them, so call it at start-up.</p>
+<p>Mistakes in <code>Config.Currencies</code> don't stop <code>ledger.New</code>, but a currency whose entry has a mistake is refused everywhere, with the mistake as the error, until it is fixed. It is never quietly run on the built-in entry, whose precision may be exactly what the entry meant to change. <code>svc.Check</code> reports every mistake, so call it at start-up. <code>Kind</code> may be written in any case.</p>
 <figure class="code"><pre><code>bad := ledger.<span class="t">New</span>(client, ledger.<span class="t">Config</span>{
 	<span class="t">LedgerID</span>: ledgerID,
 	<span class="t">Currencies</span>: []currency.<span class="t">Currency</span>{

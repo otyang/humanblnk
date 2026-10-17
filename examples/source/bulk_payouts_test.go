@@ -70,16 +70,25 @@ func TestBulkPayouts(t *testing.T) {
 
 	begin("bulk-payouts/non-atomic")
 	// sample: bulk-payouts/non-atomic
-	// Without Atomic, each item stands alone and a bad one is skipped.
-	b, err := wallet.Bulk(ctx, ledger.BulkTransferInput{Items: []ledger.TransferInput{
+	// Without Atomic, Blnk posts items in order and stops at the first it
+	// can't post. The ones before it stay posted.
+	bonuses := ledger.BulkTransferInput{Items: []ledger.TransferInput{
 		{From: chidi, To: tundeNGN, Amount: ledger.Amount("10000", currency.NGN), Fee: ledger.NoFee, Reference: "bonus_1"},
 		{From: chidi, To: adaNGN, Amount: ledger.Amount("900000", currency.NGN), Fee: ledger.NoFee, Reference: "bonus_2"},
-	}})
-	check(err)
-	fmt.Println(b.Status, "count:", b.Count)
+	}}
+	b, err := wallet.Bulk(ctx, bonuses)
+	fmt.Println("refused:", errors.Is(err, ledger.ErrInsufficientFunds))
+	fmt.Println(b.Status, "count:", b.Count, "of", len(bonuses.Items))
+	for _, it := range b.Items {
+		fmt.Println(" ", it.Reference, "recorded:", it.Recorded, it.Status)
+	}
 
-	_, err = wallet.GetTransactionByReference(ctx, "bonus_2")
-	fmt.Println("bonus_2 not posted:", errors.Is(err, ledger.ErrNotFound))
+	// Lower bonus_2 to what Chidi Stores can pay, and send the same batch
+	// again: bonus_1 is replayed, not paid twice.
+	bonuses.Items[1].Amount = ledger.Amount("5000", currency.NGN)
+	b, err = wallet.Bulk(ctx, bonuses)
+	check(err)
+	fmt.Println("retry:", b.Status, "count:", b.Count, "Tunde:", bulkBalance(wallet, tundeNGN))
 	// end
 	end()
 

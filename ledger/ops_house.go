@@ -108,7 +108,7 @@ func (s *Service) glDef(indicator string) GLDef {
 }
 
 func (s *Service) toHouseAccount(b *blnk.Balance) *HouseAccount {
-	precision := s.Precision(b.Currency)
+	precision := s.precisionOf(b)
 	def := s.glDef(b.Indicator)
 	a := &HouseAccount{
 		ID: b.BalanceID, Indicator: b.Indicator, LedgerID: LedgerID(b.LedgerID),

@@ -18,6 +18,7 @@ type txn struct {
 	expiresAt time.Time // inflight auto-void
 	commitAt  time.Time // inflight auto-commit
 	runAt     time.Time // scheduled
+	ran       bool      // scheduled: its queue copy (the outcome) has been written
 	refunded  bool
 	batch     string
 }
@@ -126,6 +127,10 @@ func (s *Server) plan(in blnk.CreateTransactionRequest) (*txn, []leg, error) {
 		if l.src == l.dst {
 			return nil, nil, fail(400, blnk.CodeTxnValidation, "source and destination are the same balance")
 		}
+	}
+	if in.SkipQueue {
+		// Like Core 0.15, skip_queue posts at once and ignores scheduled_for.
+		in.ScheduledFor = ""
 	}
 	if !in.AllowOverdraft && in.ScheduledFor == "" && src.available().Cmp(total) < 0 {
 		return nil, nil, fail(400, blnk.CodeInsufficientFunds, "insufficient funds in source balance %s", in.Source)
@@ -316,16 +321,30 @@ func (s *Server) runDue() {
 	for _, id := range append([]string(nil), s.order...) {
 		t := s.txns[id]
 		switch {
-		case t.Status == blnk.StatusScheduled && !t.runAt.After(s.now):
-			legs := s.legsOf(t)
+		case t.Status == blnk.StatusScheduled && !t.ran && !t.runAt.After(s.now):
+			// Like Core 0.15, the scheduled record stays SCHEDULED; the
+			// queue writes the outcome as a copy referenced "<ref>_q".
+			t.ran = true
+			c := &txn{Transaction: t.view()}
+			c.TransactionID, c.Reference, c.ParentTransaction = s.id("txn"), t.Reference+"_q", t.TransactionID
+			c.ScheduledFor = blnk.Time{}
+			c.CreatedAt, c.EffectiveDate = blnk.Time{Time: s.now}, blnk.Time{Time: s.now}
+			if c.MetaData == nil {
+				c.MetaData = blnk.MetaData{}
+			}
+			c.MetaData["QUEUED_PARENT_TRANSACTION"] = t.TransactionID
+			c.precise.Set(&t.precise)
+			legs := s.legsOf(c)
 			if !t.AllowOverdraft && legs[0].src.available().Cmp(&t.precise) < 0 {
-				t.Status = blnk.StatusRejected
-				s.emit(eventFor(t.Status), t.view())
+				c.Status = blnk.StatusRejected
+				c.MetaData["blnk_rejection_reason"] = "failed to apply transaction to balances: insufficient funds in source balance"
+				s.store(c)
+				s.emit(eventFor(c.Status), c.view())
 				continue
 			}
-			t.Status = blnk.StatusApplied
-			t.EffectiveDate = blnk.Time{Time: s.now} // counts from when it posted
-			s.apply(t, legs, false)
+			c.Status = blnk.StatusApplied
+			s.store(c)
+			s.apply(c, legs, false)
 		case t.Status == blnk.StatusInflight && !t.voided && t.remaining().Sign() > 0:
 			if !t.commitAt.IsZero() && !t.commitAt.After(s.now) {
 				_, _ = s.inflightAction(id, blnk.ActionCommit, nil)
@@ -408,11 +427,20 @@ func (s *Server) bulk(in blnk.BulkTransactionRequest) (any, int, error) {
 			ids = append(ids, t.ids()...)
 		}
 	} else {
-		for _, r := range in.Transactions {
+		// Like Core 0.15, a batch that isn't atomic stops at the first item
+		// it can't post and reports it; the items before it stay posted.
+		for i, r := range in.Transactions {
 			r.Inflight = in.Inflight
-			if t, err := s.createTxn(r, batch); err == nil {
-				ids = append(ids, t.ids()...)
+			t, err := s.createTxn(r, batch)
+			if err != nil {
+				s.batches[batch] = ids
+				e, _ := err.(*apiErr)
+				if e == nil {
+					return nil, 0, err
+				}
+				return nil, 0, fail(e.status, e.code, "failed to queue transactions[%d] (Reference: %s): %s. Previous transactions were not rolled back.", i, r.Reference, e.msg)
 			}
+			ids = append(ids, t.ids()...)
 		}
 	}
 	s.batches[batch] = ids

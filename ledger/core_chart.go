@@ -44,6 +44,11 @@ const (
 
 	// ProviderFeesAccount: expense. Fees providers deduct at settlement.
 	ProviderFeesAccount = "@ProviderFees"
+
+	// FrozenFundsAccount: where a frozen account's balance is held (never
+	// posted) so scheduled transfers can't spend it. Only ever has inflight
+	// amounts; its posted balance stays zero.
+	FrozenFundsAccount = "@FrozenFunds"
 )
 
 // AccountKind tells customer accounts from the sub-accounts opened under them.
@@ -101,6 +106,7 @@ var Chart = map[string]GLDef{
 	AdjustmentsAccount:     {GLEquity, CreditNormal},
 	BankOperatingAccount:   {GLAsset, DebitNormal},
 	ProviderFeesAccount:    {GLExpense, DebitNormal},
+	FrozenFundsAccount:     {GLLiability, CreditNormal},
 }
 
 // ChartEntry returns what indicator is: its Chart entry, else an asset for a

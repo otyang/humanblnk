@@ -616,13 +616,17 @@ func TestBulkPricesWithOneLookupPerSender(t *testing.T) {
 	if _, err := svc.Wallet().Bulk(context.Background(), ledger.BulkTransferInput{Items: items}); err != nil {
 		t.Fatal(err)
 	}
-	gets := 0
+	gets := 0 // balance lookups; the items are read back by reference afterwards
+	var bulk recorded
 	for _, r := range f.reqs {
-		if r.Method == "GET" {
+		if r.Method == "GET" && strings.HasPrefix(r.Path, "/balances/") {
 			gets++
 		}
+		if r.Method == "POST" && r.Path == "/transactions/bulk" {
+			bulk = r
+		}
 	}
-	tx := f.last().Body["transactions"].([]any)[0].(map[string]any)
+	tx := bulk.Body["transactions"].([]any)[0].(map[string]any)
 	if gets != 1 || tx["precise_amount"].(float64) != 1100 {
 		t.Fatalf("gets=%d first item=%v", gets, tx)
 	}

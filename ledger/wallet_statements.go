@@ -30,7 +30,11 @@ func (s *Service) balanceAt(ctx context.Context, op, balanceID string, t time.Ti
 	if err != nil {
 		return Money{}, mapErr(op, err)
 	}
-	return s.money(&h.Balance.Balance.Int, s.Precision(h.Balance.Currency), h.Balance.Currency), nil
+	b, err := s.c.GetBalance(ctx, balanceID) // a snapshot doesn't carry the account's precision
+	if err != nil {
+		return Money{}, mapErr(op, err)
+	}
+	return s.money(&h.Balance.Balance.Int, s.precisionOf(b), h.Balance.Currency), nil
 }
 
 // Statement is an account statement for [From, To): opening balance, every
@@ -81,7 +85,7 @@ func (s *Service) statement(ctx context.Context, op string, b *blnk.Balance, fro
 		return nil, invalid(op, "from must be before to")
 	}
 	accountID := b.BalanceID
-	cur, prec := strings.ToUpper(b.Currency), s.Precision(b.Currency)
+	cur, prec := strings.ToUpper(b.Currency), s.precisionOf(b)
 	m := func(v *big.Int) Money { return s.money(v, prec, cur) }
 
 	opening, err := s.balanceAt(ctx, op, accountID, from.Add(-time.Nanosecond))
@@ -114,8 +118,12 @@ func (s *Service) statement(ctx context.Context, op string, b *blnk.Balance, fro
 			if isSplitParent(t) {
 				continue // its legs are listed individually
 			}
+			ref := t.Reference
+			if t.QueuedParent() != "" {
+				ref = strings.TrimSuffix(ref, "_q") // the queue's copy: show the caller's reference
+			}
 			line := StatementLine{
-				Date: effective(t), Reference: t.Reference, Description: t.Description,
+				Date: effective(t), Reference: ref, Description: t.Description,
 				Credit: zero, Debit: zero, Receipt: *s.toReceipt(t),
 			}
 			amt := &t.PreciseAmount.Int

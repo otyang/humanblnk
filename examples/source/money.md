@@ -149,6 +149,8 @@ Change any of them with `Config.Currencies`. Each entry replaces the whole curre
 
 > warn: Keep a currency's precision fixed once money has moved. Blnk sums `precise_amount` on balances, so mixing precisions corrupts the totals.
 
+Each account records the precision it was opened with (`meta_data.precision`). Its balances are always read at that precision, so they stay right if the configuration changes later. Money is never posted to it at another one: a `Service` configured with a different precision for its currency refuses every movement on it with `ErrInvalidInput`, and the message names the precision to set back. Accounts opened after the change use the new precision.
+
 ## What your service uses: svc.Currency
 
 `currency.Get` is the built-in list. `svc.Currency` and `svc.Currencies` are what your service actually uses, with `Config.Currencies` applied. Read names, symbols and rules from the Service when you show balances, so your overrides are respected. Balances don't carry the name or symbol: look them up by `acct.Currency`.
@@ -157,13 +159,15 @@ Change any of them with `Config.Currencies`. Each entry replaces the whole curre
 
 ## Unknown currencies
 
-A code that is neither built in nor in `Config.Currencies` is refused with `ErrInvalidInput` when opening accounts, parsing amounts and moving money, so a typo can't open an account. Set `Config.UnknownCurrency: ledger.AllowUnknown` to accept any code at `Config.DefaultPrecision` (default 100).
+A code that is neither built in nor in `Config.Currencies` is refused with `ErrInvalidInput` when opening accounts, parsing amounts and moving money, so a typo can't open an account. Set `Config.UnknownCurrency: ledger.AllowUnknown` to accept any code at `Config.DefaultPrecision` (default 100). `DefaultPrecision` applies only to such codes, never to a built-in one.
+
+An account opened earlier in a code that is no longer configured keeps working for calls that take no amount: `Refund`, `Confirm`, `Cancel` and the sweep when closing it. Anything that takes an amount needs the currency configured again.
 
 @sample unknown
 
 ## Configuration mistakes
 
-Mistakes in `Config.Currencies` don't stop `ledger.New`. The bad entries are left out and `svc.Check` reports all of them, so call it at start-up.
+Mistakes in `Config.Currencies` don't stop `ledger.New`, but a currency whose entry has a mistake is refused everywhere, with the mistake as the error, until it is fixed. It is never quietly run on the built-in entry, whose precision may be exactly what the entry meant to change. `svc.Check` reports every mistake, so call it at start-up. `Kind` may be written in any case.
 
 @sample config-errors
 

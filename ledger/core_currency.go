@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/currency"
 )
 
@@ -24,20 +26,29 @@ const (
 )
 
 // buildCurrencies puts cfg.Currencies over the built-in list; each entry
-// replaces the whole currency. Entries with mistakes are left out and
-// reported in the error, which Service.Check returns.
-func buildCurrencies(cfg []currency.Currency) (map[string]currency.Currency, error) {
+// replaces the whole currency. A code whose entry has a mistake is broken:
+// it is refused everywhere (not quietly run on the built-in entry, whose
+// precision may be the very thing the entry meant to change) until the
+// entry is fixed. Every mistake is reported in the error, which
+// Service.Check returns.
+func buildCurrencies(cfg []currency.Currency) (map[string]currency.Currency, map[string]error, error) {
 	all := currency.All()
 	out := make(map[string]currency.Currency, len(all)+len(cfg))
 	for _, c := range all {
 		out[c.Code] = c
 	}
 	var errs []error
+	broken := map[string]error{}
 	seen := map[string]bool{}
 	for i, c := range cfg {
 		c.Code = strings.ToUpper(strings.TrimSpace(c.Code))
 		bad := func(format string, a ...any) {
-			errs = append(errs, fmt.Errorf("Config.Currencies[%d] %s: "+format, append([]any{i, c.Code}, a...)...))
+			err := fmt.Errorf("Config.Currencies[%d] %s: "+format, append([]any{i, c.Code}, a...)...)
+			errs = append(errs, err)
+			if c.Code != "" {
+				broken[c.Code] = err
+				delete(out, c.Code)
+			}
 		}
 		switch _, pow10 := decimalPlaces(c.Precision); {
 		case c.Code == "":
@@ -56,6 +67,7 @@ func buildCurrencies(cfg []currency.Currency) (map[string]currency.Currency, err
 			bad("Display.Decimals %d is negative", c.Display.Decimals)
 			continue
 		}
+		c.Kind = currency.Kind(strings.ToLower(strings.TrimSpace(string(c.Kind))))
 		switch c.Kind {
 		case "":
 			c.Kind = currency.Fiat
@@ -71,9 +83,11 @@ func buildCurrencies(cfg []currency.Currency) (map[string]currency.Currency, err
 			c.Symbol = c.Code
 		}
 		seen[c.Code] = true
-		out[c.Code] = c
+		if broken[c.Code] == nil {
+			out[c.Code] = c
+		}
 	}
-	return out, errors.Join(errs...)
+	return out, broken, errors.Join(errs...)
 }
 
 // Currency returns the currency for code (any case): built in, or as changed
@@ -124,9 +138,13 @@ func (s *Service) DisplayRule(code string) currency.Display {
 	return currency.Display{Decimals: dp}
 }
 
-// knownCurrency refuses an unknown currency unless Config.UnknownCurrency is
+// knownCurrency refuses a currency whose Config.Currencies entry has a
+// mistake, and an unknown currency unless Config.UnknownCurrency is
 // AllowUnknown.
 func (s *Service) knownCurrency(op, code string) error {
+	if err := s.broken[strings.ToUpper(strings.TrimSpace(code))]; err != nil {
+		return &OpError{Op: op, Kind: ErrInvalidInput, Cause: err}
+	}
 	if s.cfg.UnknownCurrency == AllowUnknown {
 		return nil
 	}
@@ -144,4 +162,31 @@ func builtinRule(code string, precision int64) currency.Display {
 	}
 	dp, _ := decimalPlaces(precision)
 	return currency.Display{Decimals: dp}
+}
+
+// metaPrecision records on each account the precision it was opened with.
+const metaPrecision = "precision"
+
+// precisionOf is the precision b's amounts are held at: the one recorded
+// when it was opened, else (house accounts, accounts from before the
+// record) the currency's.
+func (s *Service) precisionOf(b *blnk.Balance) int64 {
+	if p, err := strconv.ParseInt(str(b.MetaData[metaPrecision]), 10, 64); err == nil && p > 0 {
+		return p
+	}
+	return s.Precision(b.Currency)
+}
+
+// samePrecision refuses to move money on an account opened at a different
+// precision from the one this Service now uses for its currency: Blnk sums
+// precise amounts whatever their precision, so mixing them corrupts the
+// balance.
+func (s *Service) samePrecision(op string, b *blnk.Balance) error {
+	have, now := s.precisionOf(b), s.Precision(b.Currency)
+	if have == now {
+		return nil
+	}
+	return &OpError{Op: op, Kind: ErrInvalidInput, Cause: fmt.Errorf(
+		"account %s holds %s at precision %d but this service uses %d; set its precision back to %d in Config.Currencies",
+		b.BalanceID, strings.ToUpper(b.Currency), have, now, have)}
 }

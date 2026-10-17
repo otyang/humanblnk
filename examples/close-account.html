@@ -170,7 +170,7 @@ check(err)
 fmt.<span class="t">Println</span>(<span class="s">&quot;now:&quot;</span>, closed.<span class="t">Status</span>, closed.<span class="t">Balance</span>.<span class="t">Display</span>)</code></pre></figure>
 <figure class="output"><figcaption>Output</figcaption><pre>open pot: true
 escrow holding money: true
-ledger.Ops.CloseAccount: ledger: account has pending (INFLIGHT) activity: escrow bln_000022 still holds 8000 NGN; release or refund it first
+ledger.Ops.CloseAccount: ledger: account has pending (INFLIGHT) activity: escrow bln_000023 still holds 8000 NGN; release or refund it first
 now: closed 0.00</pre></figure>
 <ul><li>A pot is an account, so it is closed with the same call. Give its parent as <code>SweepTo</code> when it has money in it.</li><li>An escrow blocks the closure whether the account is the payer or the beneficiary. An escrow that has been fully released or refunded doesn't.</li></ul>
 <h2 id="after-the-closure"><a href="#after-the-closure">After the closure</a></h2>

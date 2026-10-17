@@ -22,6 +22,24 @@ change the API; such changes are listed under **Changed**.
 - Unknown currency codes are refused with `ErrInvalidInput` by `OpenAccount`,
   `OpenCustomer`, `Parse` and every movement. Set
   `Config.UnknownCurrency: ledger.AllowUnknown` for the old behaviour.
+  `Config.DefaultPrecision` applies only to such codes.
+- A `Config.Currencies` entry with a mistake (say a mistyped `Kind`) makes
+  its currency refused everywhere until it is fixed, instead of running on
+  the built-in entry. `Kind` is accepted in any case.
+- `Bulk` reports each item: `BulkReceipt.Items` (new `BulkItem`), and
+  `Count` is the number of items Blnk recorded, not the number of
+  transactions with their fee legs. A batch that isn't atomic and stops part
+  way returns the error together with a receipt (`Status: "partial"`)
+  listing what was posted. Sending the same batch again replays what was
+  recorded and sends only the rest.
+- `FreezeAccount` holds the account's available balance on the new house
+  account `@FrozenFunds`, so scheduled transfers that fall due while it is
+  frozen are rejected by Blnk. `UnfreezeAccount` releases it; `Confirm` and
+  `Cancel` refuse it (`ErrWrongKind`).
+- Pots move money only to and from their parent account, and escrow
+  accounts only through `ReleaseEscrow` and `RefundEscrow`. Deposits,
+  withdrawals, transfers, holds, splits, exchanges and bulk items that use
+  them otherwise are refused with `ErrWrongKind`.
 
 ### Added
 - Package `currency`: every current ISO 4217 code plus BTC, ETH, SOL, TRX,
@@ -36,6 +54,31 @@ change the API; such changes are listed under **Changed**.
   the test suite, and the output shown is what it printed.
 
 ### Fixed
+- Scheduled transfers (`Schedule`, `TransferInput.ScheduledFor`) posted at
+  once on Blnk Core: Core ignores `scheduled_for` on a transaction sent
+  with `skip_queue`. They now always go through Blnk's queue. A standing
+  order with `Count: 12` no longer takes all twelve payments on the day it
+  is made. `GetTransaction` and `GetTransactionByReference` return a
+  scheduled transfer's outcome once it has run, and `CloseAccount` no
+  longer counts scheduled transfers that have already run.
+- A payment could be paid back twice: disputed after a full refund, or
+  disputed twice. Refunds, partial refunds and disputes now count against
+  the same amount; a dispute with no `Amount` takes what is left.
+- A dispute couldn't be opened when the recipient was frozen.
+- Each account now records the precision it was opened with
+  (`meta_data.precision`) and is always read at it, so changing a
+  currency's precision no longer misreads existing balances. Movements on
+  an account at another precision are refused.
+- `Refund` didn't check that the transaction was posted.
+- Amounts, rates and percentages accepted fractions (`"200/2"`), hex
+  (`"0x10"`) and binary (`"0b11"`). Only plain decimals are accepted.
+- A currency code with spaces (`"NGN "`) was checked trimmed but stored
+  as given.
+- `OpenEscrow` in a currency that isn't configured opened the escrow
+  account before refusing; a retry with the same reference but another
+  amount or beneficiary returned the old escrow.
+- A ledger status read that started before this process froze or
+  unfroze the ledger could cache the old status.
 - A savings pot's goal had an empty `Display` when returned by `OpenPot` and
   `ListPots`.
 - Money could reach a frozen or closed account: `Hold` now checks its

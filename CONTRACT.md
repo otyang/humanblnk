@@ -833,7 +833,14 @@ type BulkTransferInput struct {
 type BulkReceipt struct {
 	BatchID string
 	Status  string // applied | inflight | processing
-	Count   int
+	// Count is how many items Blnk recorded. A batch that isn't Atomic drops
+	// the items it can't post (e.g. for funds), so check it against
+	// len(Items), or check each item's Recorded.
+	Count int
+	// Items is each item's outcome, in the order given. Empty for Async
+	// batches, whose outcome arrives by webhook.
+	Items    []BulkItem
+	Replayed bool // every item was already recorded by an earlier call
 }
 
 // RecurringInput schedules the same transfer Count times.
@@ -1390,6 +1397,7 @@ type Service struct {
 	cfg Config
 
 	currencies map[string]currency.Currency // built-in list merged with Config.Currencies, fixed at New
+	broken     map[string]error             // codes whose Config.Currencies entry has a mistake: refused
 	configErr  error                        // mistakes in Config, reported by Check
 
 	ruleMu sync.Mutex
@@ -1397,7 +1405,9 @@ type Service struct {
 
 	indicators sync.Map // "@Name|CUR" → balance id; indicator balances never move
 	ledgers    sync.Map // LedgerID → *ledgerEntry; ledgers are never deleted
-	ledgerKeys sync.Map // CreateLedgerInput.Key → *sync.Mutex, one Create per key at a time
+	ledgerMu   sync.Mutex
+	ledgerGens map[LedgerID]uint64 // bumped by forgetLedger, under ledgerMu
+	ledgerKeys sync.Map            // CreateLedgerInput.Key → *sync.Mutex, one Create per key at a time
 }
 
 // Config controls how the Service maps domain operations onto Blnk.
@@ -1471,6 +1481,15 @@ type OpError struct {
 ## Other
 
 ```go
+// BulkItem is the outcome of one item of a Bulk batch.
+type BulkItem struct {
+	Reference     string
+	TransactionID string      // the item's transaction (its parent id when it has a fee)
+	Status        EntryStatus // posted or pending; empty when not recorded
+	Recorded      bool        // false: Blnk didn't record it
+	Err           error       // why it isn't recorded as given, when known
+}
+
 // ExchangeQuote previews Exchange: what is sold, bought and charged, and the
 // paying account's available balance after.
 type ExchangeQuote struct {
@@ -1531,6 +1550,11 @@ const (
 
 	// ProviderFeesAccount: expense. Fees providers deduct at settlement.
 	ProviderFeesAccount = "@ProviderFees"
+
+	// FrozenFundsAccount: where a frozen account's balance is held (never
+	// posted) so scheduled transfers can't spend it. Only ever has inflight
+	// amounts; its posted balance stays zero.
+	FrozenFundsAccount = "@FrozenFunds"
 )
 
 // Event names Blnk sends to the global webhook.

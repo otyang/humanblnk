@@ -53,7 +53,7 @@ func (s walletAPI) LimitUsage(ctx context.Context, id AccountID) (*LimitUsage, e
 }
 
 func (s *Service) usage(ctx context.Context, op string, b *blnk.Balance) (*LimitUsage, error) {
-	prec, cur := s.Precision(b.Currency), strings.ToUpper(b.Currency)
+	prec, cur := s.precisionOf(b), strings.ToUpper(b.Currency)
 	zero := s.money(new(big.Int), prec, cur)
 	u := &LimitUsage{Limit: s.limitFor(b), DailyUsed: zero, MonthlyUsed: zero}
 	if u.Limit == nil || (u.Limit.Daily == "" && u.Limit.Monthly == "") {
@@ -113,7 +113,7 @@ func (s *Service) checkLimits(ctx context.Context, op string, accountID AccountI
 	if lim == nil {
 		return nil
 	}
-	prec, cur := s.Precision(b.Currency), strings.ToUpper(b.Currency)
+	prec, cur := s.precisionOf(b), strings.ToUpper(b.Currency)
 	exceeded := func(what, capStr string, used *big.Int) error {
 		c, err := parseDecimal(capStr, prec)
 		if err != nil {

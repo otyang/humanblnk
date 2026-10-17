@@ -2,6 +2,8 @@ package ledger
 
 import (
 	"context"
+	"crypto/rand"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -9,16 +11,88 @@ import (
 	"github.com/otyang/humanblnk/blnk"
 )
 
-// FreezeAccount marks the account frozen: every movement touching it is refused
-// (ErrAccountFrozen). Blnk itself doesn't block on status; this layer does,
-// on every movement. A closed account can't be frozen.
+// FreezeAccount marks the account frozen: every movement through this
+// package touching it is refused (ErrAccountFrozen). A closed account can't
+// be frozen.
+//
+// Blnk doesn't block on status, and runs scheduled transfers (Schedule) on
+// its own. So FreezeAccount also holds the account's whole available
+// balance on FrozenFundsAccount: a scheduled transfer that comes due while
+// the account is frozen finds nothing to spend and Blnk rejects it.
+// UnfreezeAccount releases the hold. The balance itself doesn't change.
+//
+// Holds created with HoldInput.CaptureAt were authorised before the freeze
+// and still capture on time, as a card authorisation does; Cancel them if
+// they must not. A scheduled transfer created with AllowOverdraft still
+// posts. Freezing again is safe: the hold isn't doubled.
 func (s opsAPI) FreezeAccount(ctx context.Context, id AccountID, reason string) error {
-	return s.setAccountStatus(ctx, "ledger.Ops.FreezeAccount", id, "frozen", reason)
+	const op = "ledger.Ops.FreezeAccount"
+	if err := s.setAccountStatus(ctx, op, id, "frozen", reason); err != nil {
+		return err
+	}
+	return s.holdFrozen(ctx, op, id, reason)
 }
 
-// UnfreezeAccount marks a frozen account active again. A closed account stays closed.
+// UnfreezeAccount marks a frozen account active again and releases the hold
+// FreezeAccount placed. A closed account stays closed.
 func (s opsAPI) UnfreezeAccount(ctx context.Context, id AccountID) error {
-	return s.setAccountStatus(ctx, "ledger.Ops.UnfreezeAccount", id, "active", "")
+	const op = "ledger.Ops.UnfreezeAccount"
+	if err := s.releaseFrozen(ctx, op, id); err != nil {
+		return err
+	}
+	return s.setAccountStatus(ctx, op, id, "active", "")
+}
+
+// metaFreezeHold records on a frozen account the hold FreezeAccount placed.
+const metaFreezeHold = "freeze_hold"
+
+// holdFrozen holds a frozen account's available balance on
+// FrozenFundsAccount, unless a hold from an earlier FreezeAccount is still
+// in place.
+func (s *Service) holdFrozen(ctx context.Context, op string, id AccountID, reason string) error {
+	b, err := s.c.GetBalance(ctx, string(id))
+	if err != nil {
+		return mapErr(op, err)
+	}
+	if prev := str(b.MetaData[metaFreezeHold]); prev != "" {
+		if t, err := s.c.GetTransaction(ctx, prev); err == nil && t.Status == blnk.StatusInflight && t.Inflight {
+			return nil // already held
+		}
+	}
+	avail := b.Available()
+	if avail.Sign() <= 0 {
+		return nil
+	}
+	amount := s.money(avail, s.precisionOf(b), b.Currency)
+	var nonce [6]byte
+	_, _ = rand.Read(nonce[:])
+	req := s.baseReq(amount, fmt.Sprintf("freeze_%s_%d_%x", id, s.cfg.Now().Unix(), nonce),
+		"Frozen: "+firstNonEmpty(reason, "account frozen"), nil, "freeze")
+	req.Source, req.Destination, req.Inflight = string(id), FrozenFundsAccount, true
+	r, err := s.post(ctx, op, req)
+	if err != nil {
+		return fmt.Errorf("account %s is frozen, but its balance could not be held against scheduled transfers: %w", id, err)
+	}
+	_, err = s.c.UpdateMetadata(ctx, string(id), blnk.MetaData{metaFreezeHold: r.TransactionID})
+	return mapErr(op, err)
+}
+
+// releaseFrozen voids the hold FreezeAccount placed on id, if any.
+func (s *Service) releaseFrozen(ctx context.Context, op string, id AccountID) error {
+	b, err := s.loadAccount(ctx, op, id)
+	if err != nil {
+		return err
+	}
+	hold := str(b.MetaData[metaFreezeHold])
+	if hold == "" {
+		return nil
+	}
+	_, err = s.c.UpdateInflight(ctx, hold, blnk.UpdateInflightRequest{Status: blnk.ActionVoid, SkipQueue: !s.cfg.UseQueue})
+	if err != nil && !blnk.IsNotFound(err) && !errors.Is(mapErr(op, err), ErrNotPending) && !errors.Is(mapErr(op, err), ErrAlreadyFinalized) {
+		return mapErr(op, err)
+	}
+	_, err = s.c.UpdateMetadata(ctx, string(id), blnk.MetaData{metaFreezeHold: ""})
+	return mapErr(op, err)
 }
 
 func (s *Service) setAccountStatus(ctx context.Context, op string, id AccountID, status, reason string) error {
@@ -36,6 +110,32 @@ func (s *Service) setAccountStatus(ctx context.Context, op string, id AccountID,
 	return mapErr(op, err)
 }
 
+// subAccounts refuses a customer movement between from and to (either may
+// be empty: a deposit has no customer sender) that misuses a pot or an
+// escrow account. An escrow account's money moves only through
+// ReleaseEscrow and RefundEscrow, which pay whoever the escrow names. A
+// pot's money moves only to and from its parent account, so it can't be
+// used to pay others, or withdrawn, around the parent's limits.
+func subAccounts(op string, bals map[AccountID]*blnk.Balance, from, to AccountID) error {
+	for _, side := range [][2]AccountID{{from, to}, {to, from}} {
+		b := bals[side[0]]
+		if b == nil {
+			continue
+		}
+		switch AccountKind(str(b.MetaData[metaKind])) {
+		case EscrowAccount:
+			return &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf(
+				"%s is an escrow account; its money moves only with ReleaseEscrow or RefundEscrow", side[0])}
+		case PotAccount:
+			if parent := AccountID(str(b.MetaData["parent_account"])); side[1] != parent {
+				return &OpError{Op: op, Kind: ErrWrongKind, Cause: fmt.Errorf(
+					"%s is a savings pot; money moves only between it and its parent account %s", side[0], parent)}
+			}
+		}
+	}
+	return nil
+}
+
 // checkActive rejects a movement touching a frozen, blocked or closed
 // customer account, or taking money out of an account whose ledger is frozen.
 // from are the accounts money leaves, to the ones it reaches. House accounts
@@ -46,6 +146,13 @@ func (s *Service) checkActive(ctx context.Context, op string, from []AccountID, 
 
 // checkActiveWith is checkActive reusing balances the caller already read.
 func (s *Service) checkActiveWith(ctx context.Context, op string, known map[AccountID]*blnk.Balance, from []AccountID, to ...AccountID) error {
+	_, err := s.loadActive(ctx, op, known, from, to...)
+	return err
+}
+
+// loadActive is checkActiveWith returning the customer accounts it read.
+func (s *Service) loadActive(ctx context.Context, op string, known map[AccountID]*blnk.Balance, from []AccountID, to ...AccountID) (map[AccountID]*blnk.Balance, error) {
+	got := map[AccountID]*blnk.Balance{}
 	sending := make(map[AccountID]bool, len(from))
 	for _, id := range from {
 		sending[id] = true
@@ -60,34 +167,41 @@ func (s *Service) checkActiveWith(ctx context.Context, op string, known map[Acco
 		if b == nil {
 			var err error
 			if b, err = s.c.GetBalance(ctx, string(id)); err != nil {
-				return mapErr(op, err)
+				return nil, mapErr(op, err)
 			}
 		}
 		if strings.HasPrefix(b.Indicator, "@") {
 			continue // a house account given by its balance id
 		}
+		got[id] = b
+		if err := s.samePrecision(op, b); err != nil {
+			return nil, err
+		}
 		switch st, _ := b.MetaData["status"].(string); st {
 		case "frozen", "blocked":
-			return &OpError{Op: op, Kind: ErrAccountFrozen, Cause: fmt.Errorf("account %s is %s", id, st)}
+			return nil, &OpError{Op: op, Kind: ErrAccountFrozen, Cause: fmt.Errorf("account %s is %s", id, st)}
 		case "closed":
-			return &OpError{Op: op, Kind: ErrAccountClosed, Cause: fmt.Errorf("account %s is closed", id)}
+			return nil, &OpError{Op: op, Kind: ErrAccountClosed, Cause: fmt.Errorf("account %s is closed", id)}
 		}
 		if !sending[id] || b.LedgerID == "" {
 			continue
 		}
 		lg, err := s.ledgerFor(ctx, op, LedgerID(b.LedgerID), false)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if lg.Status == "frozen" {
-			return &OpError{Op: op, Kind: ErrLedgerFrozen, Cause: fmt.Errorf("ledger %s of account %s is frozen", b.LedgerID, id)}
+			return nil, &OpError{Op: op, Kind: ErrLedgerFrozen, Cause: fmt.Errorf("ledger %s of account %s is frozen", b.LedgerID, id)}
 		}
 	}
-	return nil
+	return got, nil
 }
 
-// FreezeLedger marks the ledger frozen: no money can leave its customer accounts.
-// Money can still come in.
+// FreezeLedger marks the ledger frozen: no money can leave its customer
+// accounts through this package. Money can still come in. Unlike
+// FreezeAccount it holds no balances, so transfers Blnk already has
+// scheduled (Schedule) still post; freeze the accounts themselves to stop
+// those.
 func (s opsAPI) FreezeLedger(ctx context.Context, id LedgerID, reason string) error {
 	return s.setLedgerStatus(ctx, "ledger.Ops.FreezeLedger", id, "frozen", reason)
 }
@@ -155,12 +269,22 @@ func (s opsAPI) CloseAccount(ctx context.Context, accountID AccountID, in CloseI
 	if err := fourEyes(op, "closure", in.RequestedBy, in.ApprovedBy); err != nil {
 		return nil, err
 	}
+	if err := s.closeBlockers(ctx, op, accountID); err != nil {
+		return nil, err
+	}
+	// A frozen account's freeze hold isn't pending activity: release it so
+	// the balance can be swept. Nothing can be scheduled on it any more.
+	if str(b.MetaData[metaFreezeHold]) != "" {
+		if err := s.releaseFrozen(ctx, op, accountID); err != nil {
+			return nil, err
+		}
+		if b, err = s.loadAccount(ctx, op, accountID); err != nil {
+			return nil, err
+		}
+	}
 	if b.InflightDebitBalance.Sign() != 0 || b.InflightCreditBalance.Sign() != 0 {
 		return nil, &OpError{Op: op, Kind: ErrPendingActivity,
 			Cause: fmt.Errorf("confirm or cancel pending transactions on %s first", accountID)}
-	}
-	if err := s.closeBlockers(ctx, op, accountID); err != nil {
-		return nil, err
 	}
 	switch b.Balance.Sign() {
 	case -1:
@@ -184,7 +308,7 @@ func (s opsAPI) CloseAccount(ctx context.Context, accountID AccountID, in CloseI
 		if err := s.checkActive(ctx, op, nil, in.SweepTo); err != nil {
 			return nil, err
 		}
-		amount := s.money(&b.Balance.Int, s.Precision(b.Currency), b.Currency)
+		amount := s.money(&b.Balance.Int, s.precisionOf(b), b.Currency)
 		// Built directly so a frozen account can still be swept on closure.
 		req, err := s.transferReq(TransferInput{
 			From: accountID, To: in.SweepTo, Amount: amount, Reference: in.Reference,
@@ -212,20 +336,23 @@ func (s opsAPI) CloseAccount(ctx context.Context, accountID AccountID, in CloseI
 // this layer couldn't stop them later), pots still open under it, and escrows
 // still holding money that would pay into or out of it.
 func (s *Service) closeBlockers(ctx context.Context, op string, id AccountID) error {
-	sched, _, err := s.c.FilterTransactions(ctx, blnk.FilterRequest{
-		Filters: []blnk.Filter{
-			{Field: "balance_id", Operator: "eq", Value: string(id)},
-			{Field: "status", Operator: "eq", Value: blnk.StatusScheduled},
-		},
-		Limit: 1,
+	sched, err := s.filterAll(ctx, []blnk.Filter{
+		{Field: "balance_id", Operator: "eq", Value: string(id)},
+		{Field: "status", Operator: "eq", Value: blnk.StatusScheduled},
 	})
 	if err != nil {
 		return mapErr(op, err)
 	}
-	if len(sched) > 0 {
-		return &OpError{Op: op, Kind: ErrPendingActivity, Cause: fmt.Errorf(
-			"account %s has scheduled transfers (e.g. %s, due %s); they must post or be removed first",
-			id, sched[0].Reference, sched[0].ScheduledFor.Format(time.RFC3339))}
+	for i := range sched {
+		ran, err := s.scheduledOutcome(ctx, &sched[i])
+		if err != nil {
+			return mapErr(op, err)
+		}
+		if ran == nil {
+			return &OpError{Op: op, Kind: ErrPendingActivity, Cause: fmt.Errorf(
+				"account %s has scheduled transfers (e.g. %s, due %s); they must post or be removed first",
+				id, sched[i].Reference, sched[i].ScheduledFor.Format(time.RFC3339))}
+		}
 	}
 	pots, err := s.Wallet().FindAccounts(ctx, AccountQuery{Kind: PotAccount, MetaData: map[string]string{"parent_account": string(id)}, Limit: 100})
 	if err != nil {

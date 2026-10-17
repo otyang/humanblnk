@@ -28,16 +28,17 @@ A pot is an account under a customer account. It takes its parent's currency, le
 
 ## Moving money in and out
 
-There is no special call. A pot is an account, so money moves with `Transfer`, in either direction.
+There is no special call. A pot is an account, so money moves with `Transfer`, in either direction, between the pot and its parent account.
 
 @sample move
 
 - Pass a fee as for any transfer: `ledger.NoFee` here, or let `Config.Fees` price it. See [Fees](fees.html).
 - Pots aren't limited, but a transfer out of Ada's main account counts against her [limits](limits.html).
+- Money moves only between a pot and its parent. A deposit straight into a pot, a withdrawal from it, or a transfer between a pot and anyone else is refused with `ErrWrongKind`, so a pot can't be used to get around the parent's limits.
 
 ## A standing order: wallet.Schedule
 
-`Schedule` creates every occurrence at once, as a Blnk scheduled transaction. Blnk posts each one itself when its time comes.
+`Schedule` creates every occurrence at once, as a Blnk scheduled transaction. Blnk's queue posts each one itself when its time comes, so Blnk's workers must be running.
 
 @sample schedule | ₦25,000 into the rent pot on the 1st of every month for a year
 
@@ -88,11 +89,13 @@ In production, Blnk posts each occurrence at its time. In tests, move the in-mem
 
 An occurrence that runs when Ada's balance is too low is refused by Blnk with status `REJECTED`. The later occurrences are not affected.
 
+Blnk keeps each occurrence as `SCHEDULED` and records what happened when it ran as a copy referenced `<reference>_q`. `GetTransaction` and `GetTransactionByReference` return that outcome once the occurrence has run: its `Reference` ends in `_q` and its `ParentTransaction` is the occurrence. Statements show the occurrence's own reference.
+
 @sample short | Ada is ₦15,000 short on 1 December
 
 Watch for `ledger.EventTransactionRejected` on your [webhook](webhooks.html) to tell Ada her saving was skipped. To make it up, send a one-off transfer.
 
-> warn: humanblnk has no call to cancel scheduled occurrences, and `Cancel` only works on pending (INFLIGHT) transactions. An account with occurrences still scheduled can't be closed. Choose `Count` with this in mind. Blnk posts occurrences itself, so freezing an account doesn't stop them either.
+> warn: humanblnk has no call to cancel scheduled occurrences, and `Cancel` only works on pending (INFLIGHT) transactions. An account with occurrences still to run can't be closed. Choose `Count` with this in mind. Freezing the account makes the occurrences that come due while it is frozen fail for lack of funds; see [Freeze accounts](freeze.html).
 
 ## What happens in Blnk
 

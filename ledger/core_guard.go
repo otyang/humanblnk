@@ -116,6 +116,7 @@ func (s *Service) ledgerFor(ctx context.Context, op string, id LedgerID, forOpen
 		}
 	}
 	if info == nil {
+		gen := s.ledgerGen(id)
 		l, err := s.c.GetLedger(ctx, string(id))
 		if blnk.IsNotFound(err) {
 			return nil, &OpError{Op: op, Kind: ErrLedgerNotFound, Cause: fmt.Errorf("ledger %s does not exist", id)}
@@ -124,7 +125,11 @@ func (s *Service) ledgerFor(ctx context.Context, op string, id LedgerID, forOpen
 			return nil, mapErr(op, err)
 		}
 		info = toLedgerInfo(l)
-		s.ledgers.Store(id, &ledgerEntry{info: info, at: s.cfg.Now()})
+		s.ledgerMu.Lock()
+		if s.ledgerGens[id] == gen { // no status change since the read began
+			s.ledgers.Store(id, &ledgerEntry{info: info, at: s.cfg.Now()})
+		}
+		s.ledgerMu.Unlock()
 	}
 	if forOpen && info.Status == "duplicate" {
 		return nil, invalid(op, "ledger %s is a duplicate of %s; use that one", id, info.DuplicateOf)
@@ -132,8 +137,24 @@ func (s *Service) ledgerFor(ctx context.Context, op string, id LedgerID, forOpen
 	return info, nil
 }
 
-// forgetLedger drops a cached ledger after this Service changed its status.
-func (s *Service) forgetLedger(id LedgerID) { s.ledgers.Delete(id) }
+// forgetLedger drops a cached ledger after this Service changed its status,
+// and stops a read already in flight from caching the old status.
+func (s *Service) forgetLedger(id LedgerID) {
+	s.ledgerMu.Lock()
+	defer s.ledgerMu.Unlock()
+	if s.ledgerGens == nil {
+		s.ledgerGens = map[LedgerID]uint64{}
+	}
+	s.ledgerGens[id]++
+	s.ledgers.Delete(id)
+}
+
+// ledgerGen is how many times id's cached status has been dropped.
+func (s *Service) ledgerGen(id LedgerID) uint64 {
+	s.ledgerMu.Lock()
+	defer s.ledgerMu.Unlock()
+	return s.ledgerGens[id]
+}
 
 // fourEyes enforces the maker-checker rule on manual money movements: one
 // person asks, another approves, and both names are recorded. The library

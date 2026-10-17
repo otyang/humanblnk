@@ -234,3 +234,18 @@ func (s *Service) payeeLeg(ctx context.Context, op string, t *blnk.Transaction) 
 	}
 	return leg, nil
 }
+
+// scheduledOutcome returns what became of a scheduled transaction once its
+// time came: Core keeps the scheduled record as SCHEDULED for good and
+// writes the outcome (APPLIED, or REJECTED for lack of funds) as a copy
+// referenced "<ref>_q". It returns nil while the transaction hasn't run.
+func (s *Service) scheduledOutcome(ctx context.Context, t *blnk.Transaction) (*blnk.Transaction, error) {
+	if t.Status != blnk.StatusScheduled {
+		return nil, nil
+	}
+	q, err := s.c.GetTransactionByReference(ctx, t.Reference+"_q")
+	if blnk.IsNotFound(err) {
+		return nil, nil
+	}
+	return q, err
+}

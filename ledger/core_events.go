@@ -100,7 +100,7 @@ func (s *Service) ParseWebhook(r *http.Request, cfg WebhookConfig) (*Event, erro
 		if err != nil {
 			return nil, mapErr(op, err)
 		}
-		e.Alert.Threshold = s.money(e.Alert.Threshold.PreciseAmount, s.Precision(b.Currency), b.Currency)
+		e.Alert.Threshold = s.money(e.Alert.Threshold.PreciseAmount, s.precisionOf(b), b.Currency)
 	}
 	return e, nil
 }
