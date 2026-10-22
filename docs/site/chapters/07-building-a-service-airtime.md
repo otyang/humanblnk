@@ -4,7 +4,7 @@
 (VTpass, say) can deliver, decline, or not answer in time.
 
 This chapter shows the shape every business feature takes: its own package
-that **imports `ledger`**, never the other way round. `ledger` knows nothing
+that **imports `humanblnk`**, never the other way round. `humanblnk` knows nothing
 about airtime; the airtime package decides what to take and when.
 
 ## The design: a hold around the provider call
@@ -19,7 +19,7 @@ first, not taken outright:
    held, and settle it when the provider's webhook or a status check answers.
 
 The money goes to the provider's clearing account,
-`ledger.ClearingAccount("vtpass")`: what HumanBlnk owes the provider, or how much
+`humanblnk.ClearingAccount("vtpass")`: what HumanBlnk owes the provider, or how much
 of a prepaid float is used.
 
 ## Step 1: depend on interfaces
@@ -69,5 +69,5 @@ depending on the phone number:
   provider's request id, so a retry never sends airtime twice.
 - **No hold expiry:** if Blnk expired the hold while the provider had in fact
   delivered, the airtime would be free.
-- **A fee or commission:** make `To` a split with `ledger.Many(...)`. Splits
+- **A fee or commission:** make `To` a split with `humanblnk.Many(...)`. Splits
   capture only in full, which is all `Settle` does.

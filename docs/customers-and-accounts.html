@@ -63,8 +63,8 @@
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">owner := &#34;&#34;
 found, err := books.Identities.FindByCustomer(ctx, customerID)
 switch {
-case errors.Is(err, ledger.ErrNotFound):
-    owner, err = books.Identities.Create(ctx, ledger.Meta{&#34;customer_id&#34;: customerID})
+case errors.Is(err, humanblnk.ErrNotFound):
+    owner, err = books.Identities.Create(ctx, humanblnk.Meta{&#34;customer_id&#34;: customerID})
     if err != nil {
         log.Fatal(err)
     }
@@ -77,18 +77,18 @@ default:
 // Save owner on your customer record now, before opening accounts.</code></pre></figure>
 <h2 id="step-2-open-her-wallets"><a class="anchor" href="#step-2-open-her-wallets">Step 2: open her wallets</a></h2>
 <p><code>OpenForCustomer</code> <strong>is</strong> safe to repeat. A customer has at most one account per ledger and currency, and calling it again returns that one. So you can call it whenever you need Ada&#39;s wallet, instead of storing ids everywhere.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">ngn, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">ngn, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
 if err != nil {
     log.Fatal(err)
 }
-again, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+again, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
 if err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;NGN wallet&#34;, ngn.ID, &#34;| opened again:&#34;, again.ID, &#34;| same:&#34;, ngn.ID == again.ID)
 
 // 3. A dollar wallet is a second account.
-usd, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.USD})
+usd, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.USD})
 if err != nil {
     log.Fatal(err)
 }
@@ -100,7 +100,7 @@ fmt.Println(&#34;USD wallet&#34;, usd.ID)</code></pre></figure>
 <tr><td><code>Ledger</code></td><td>optional: empty is the <code>WithAccountLedger</code> one. Use your Savings ledger for a savings account. Must be a customer ledger.</td></tr>
 </tbody></table></div>
 <h2 id="step-3-read-balances"><a class="anchor" href="#step-3-read-balances">Step 3: read balances</a></h2>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">accounts, total, err := books.Accounts.List(ctx, ledger.AccountQuery{Owner: owner})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">accounts, total, err := books.Accounts.List(ctx, humanblnk.AccountQuery{Owner: owner})
 if err != nil {
     log.Fatal(err)
 }
@@ -123,7 +123,7 @@ fmt.Printf(&#34;Get %s: Total %s, Held %s, Available %s\n&#34;, acct.ID, acct.To
 <p>Always decide &#34;can she pay?&#34; on <code>Available</code>, read with <code>Get</code>. <code>List</code> is quicker for many accounts, but its <code>Available</code> leaves queued debits out.</p>
 <h2 id="step-4-tag-the-owner-later"><a class="anchor" href="#step-4-tag-the-owner-later">Step 4: tag the owner later</a></h2>
 <p><code>UpdateMeta</code> merges: keys you don&#39;t send keep their values. References only, never personal data.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">meta, err := books.Identities.UpdateMeta(ctx, owner, ledger.Meta{&#34;tier&#34;: &#34;gold&#34;})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">meta, err := books.Identities.UpdateMeta(ctx, owner, humanblnk.Meta{&#34;tier&#34;: &#34;gold&#34;})
 if err != nil {
     log.Fatal(err)
 }
@@ -134,15 +134,15 @@ fmt.Println(&#34;owner meta:&#34;, meta)</code></pre></figure>
 if err != nil {
     log.Fatal(err)
 }
-pool, err := books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: ledger.Meta{&#34;purpose&#34;: &#34;escrow&#34;}})
+pool, err := books.Accounts.CreateInternal(ctx, humanblnk.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: humanblnk.Meta{&#34;purpose&#34;: &#34;escrow&#34;}})
 if err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;escrow pool&#34;, pool.ID)</code></pre></figure>
 <p>The rules hold both ways, so mistakes fail early:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Currency: demo.NGN})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Currency: demo.NGN})
 fmt.Println(&#34;customer account without an owner:&#34;, err)
-_, err = books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
+_, err = books.Accounts.CreateInternal(ctx, humanblnk.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
 fmt.Println(&#34;internal account in the wallets ledger:&#34;, err)</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Call</th><th>Result</th></tr></thead><tbody>
@@ -162,8 +162,8 @@ import (
     &#34;fmt&#34;
     &#34;log&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
 )
 
 func main() {
@@ -174,8 +174,8 @@ func main() {
     owner := &#34;&#34;
     found, err := books.Identities.FindByCustomer(ctx, customerID)
     switch {
-    case errors.Is(err, ledger.ErrNotFound):
-        owner, err = books.Identities.Create(ctx, ledger.Meta{&#34;customer_id&#34;: customerID})
+    case errors.Is(err, humanblnk.ErrNotFound):
+        owner, err = books.Identities.Create(ctx, humanblnk.Meta{&#34;customer_id&#34;: customerID})
         if err != nil {
             log.Fatal(err)
         }
@@ -188,25 +188,25 @@ func main() {
     // Save owner on your customer record now, before opening accounts.
 
     // 2. Her naira wallet. Opening it again returns the same account.
-    ngn, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+    ngn, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
     if err != nil {
         log.Fatal(err)
     }
-    again, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+    again, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
     if err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;NGN wallet&#34;, ngn.ID, &#34;| opened again:&#34;, again.ID, &#34;| same:&#34;, ngn.ID == again.ID)
 
     // 3. A dollar wallet is a second account.
-    usd, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.USD})
+    usd, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.USD})
     if err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;USD wallet&#34;, usd.ID)
 
     // 4. All her accounts, and one balance.
-    accounts, total, err := books.Accounts.List(ctx, ledger.AccountQuery{Owner: owner})
+    accounts, total, err := books.Accounts.List(ctx, humanblnk.AccountQuery{Owner: owner})
     if err != nil {
         log.Fatal(err)
     }
@@ -221,7 +221,7 @@ func main() {
     fmt.Printf(&#34;Get %s: Total %s, Held %s, Available %s\n&#34;, acct.ID, acct.Total, acct.Held, acct.Available)
 
     // 5. Tag the owner later; keys you don&#39;t send keep their values.
-    meta, err := books.Identities.UpdateMeta(ctx, owner, ledger.Meta{&#34;tier&#34;: &#34;gold&#34;})
+    meta, err := books.Identities.UpdateMeta(ctx, owner, humanblnk.Meta{&#34;tier&#34;: &#34;gold&#34;})
     if err != nil {
         log.Fatal(err)
     }
@@ -233,16 +233,16 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    pool, err := books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: ledger.Meta{&#34;purpose&#34;: &#34;escrow&#34;}})
+    pool, err := books.Accounts.CreateInternal(ctx, humanblnk.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: humanblnk.Meta{&#34;purpose&#34;: &#34;escrow&#34;}})
     if err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;escrow pool&#34;, pool.ID)
 
     // The rules hold both ways.
-    _, err = books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Currency: demo.NGN})
+    _, err = books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Currency: demo.NGN})
     fmt.Println(&#34;customer account without an owner:&#34;, err)
-    _, err = books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
+    _, err = books.Accounts.CreateInternal(ctx, humanblnk.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
     fmt.Println(&#34;internal account in the wallets ledger:&#34;, err)
 }</code></pre></figure>
 </div>
@@ -255,8 +255,8 @@ USD wallet bln_43e7c258-a642-48a8-b640-e8bbb336ba87
 Get bln_29be359a-dd9e-4710-897d-f9d0e62d9a98: Total 0.00, Held 0.00, Available 0.00
 owner meta: map[customer_id:cus_ada_1792634712487858000 tier:gold]
 escrow pool bln_cac9aee4-41cc-461c-a516-4a97a9058816
-customer account without an owner: ledger: invalid request: a customer account needs an owner
-internal account in the wallets ledger: ledger: invalid request: ldg_9aa81032-0b45-49a0-bba3-79411336e08a holds customer accounts: use OpenForCustomer</code></pre></figure>
+customer account without an owner: humanblnk: invalid request: a customer account needs an owner
+internal account in the wallets ledger: humanblnk: invalid request: ldg_9aa81032-0b45-49a0-bba3-79411336e08a holds customer accounts: use OpenForCustomer</code></pre></figure>
 </div>
 </div>
 

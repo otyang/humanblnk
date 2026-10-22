@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/docs/examples/demo"
-	"github.com/otyang/humanblnk/ledger"
 )
 
 func main() {
@@ -19,8 +19,8 @@ func main() {
 	owner := ""
 	found, err := books.Identities.FindByCustomer(ctx, customerID)
 	switch {
-	case errors.Is(err, ledger.ErrNotFound):
-		owner, err = books.Identities.Create(ctx, ledger.Meta{"customer_id": customerID})
+	case errors.Is(err, humanblnk.ErrNotFound):
+		owner, err = books.Identities.Create(ctx, humanblnk.Meta{"customer_id": customerID})
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -35,18 +35,18 @@ func main() {
 
 	// 2. Her naira wallet. Opening it again returns the same account.
 	// snippet:open
-	ngn, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+	ngn, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
 	if err != nil {
 		log.Fatal(err)
 	}
-	again, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+	again, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("NGN wallet", ngn.ID, "| opened again:", again.ID, "| same:", ngn.ID == again.ID)
 
 	// 3. A dollar wallet is a second account.
-	usd, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.USD})
+	usd, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.USD})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func main() {
 
 	// 4. All her accounts, and one balance.
 	// snippet:balances
-	accounts, total, err := books.Accounts.List(ctx, ledger.AccountQuery{Owner: owner})
+	accounts, total, err := books.Accounts.List(ctx, humanblnk.AccountQuery{Owner: owner})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func main() {
 
 	// 5. Tag the owner later; keys you don't send keep their values.
 	// snippet:meta
-	meta, err := books.Identities.UpdateMeta(ctx, owner, ledger.Meta{"tier": "gold"})
+	meta, err := books.Identities.UpdateMeta(ctx, owner, humanblnk.Meta{"tier": "gold"})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	pool, err := books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: ledger.Meta{"purpose": "escrow"}})
+	pool, err := books.Accounts.CreateInternal(ctx, humanblnk.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: humanblnk.Meta{"purpose": "escrow"}})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -95,9 +95,9 @@ func main() {
 
 	// The rules hold both ways.
 	// snippet:rules
-	_, err = books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Currency: demo.NGN})
+	_, err = books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Currency: demo.NGN})
 	fmt.Println("customer account without an owner:", err)
-	_, err = books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
+	_, err = books.Accounts.CreateInternal(ctx, humanblnk.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
 	fmt.Println("internal account in the wallets ledger:", err)
 	// end-snippet
 }

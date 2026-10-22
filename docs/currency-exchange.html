@@ -60,7 +60,7 @@
 <p>One transaction can&#39;t do this: a transaction is in one currency. So it&#39;s <strong>two</strong> transactions, recorded atomically with <code>RecordAll</code>.</p>
 <h2 id="humanblnk-s-fx-desk"><a class="anchor" href="#humanblnk-s-fx-desk">HumanBlnk&#39;s FX desk</a></h2>
 <p>The other side of each half is HumanBlnk&#39;s own account for currency it buys and sells. Make it a system account, kept in a variable so a typo can&#39;t create another one. As a system account it may go below zero, so it never blocks an exchange.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">var fxDesk = ledger.SystemAccount(&#34;FXDesk&#34;)</code></pre></figure>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">var fxDesk = humanblnk.SystemAccount(&#34;FXDesk&#34;)</code></pre></figure>
 <h2 id="the-exchange"><a class="anchor" href="#the-exchange">The exchange</a></h2>
 <p>The naira amount is a credit to Ada, so it rounds down. The rate goes in <code>Meta</code> on both halves, for statements and audits.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">sell := money.MustParse(&#34;100&#34;, demo.USD)
@@ -70,16 +70,16 @@ if err != nil {
     log.Fatal(err)
 }
 id := &#34;fx_&#34; + demo.Run
-exchange := []ledger.Transaction{
+exchange := []humanblnk.Transaction{
     {
-        Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;sell&#34;),
-        From: ledger.Single(ledger.AccountRef(usdWallet.ID), sell), To: ledger.Single(fxDesk, sell),
-        Description: &#34;Sell USD&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+        Ref:  humanblnk.Reference(&#34;fx&#34;, id, &#34;sell&#34;),
+        From: humanblnk.Single(humanblnk.AccountRef(usdWallet.ID), sell), To: humanblnk.Single(fxDesk, sell),
+        Description: &#34;Sell USD&#34;, Meta: humanblnk.Meta{&#34;rate&#34;: rate.String()},
     },
     {
-        Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;buy&#34;),
-        From: ledger.Single(fxDesk, buy), To: ledger.Single(ledger.AccountRef(ngnWallet.ID), buy),
-        Description: &#34;Buy NGN&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+        Ref:  humanblnk.Reference(&#34;fx&#34;, id, &#34;buy&#34;),
+        From: humanblnk.Single(fxDesk, buy), To: humanblnk.Single(humanblnk.AccountRef(ngnWallet.ID), buy),
+        Description: &#34;Buy NGN&#34;, Meta: humanblnk.Meta{&#34;rate&#34;: rate.String()},
     },
 }
 entries, err := books.Transactions.RecordAll(ctx, exchange)
@@ -100,7 +100,7 @@ fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN
 <h2 id="retries-and-failures"><a class="anchor" href="#retries-and-failures">Retries and failures</a></h2>
 <p>A retry after a timeout moves nothing twice:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Transactions.RecordAll(ctx, exchange)
-fmt.Println(&#34;retried:&#34;, errors.Is(err, ledger.ErrDuplicate))</code></pre></figure>
+fmt.Println(&#34;retried:&#34;, errors.Is(err, humanblnk.ErrDuplicate))</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Result</th><th>Means</th></tr></thead><tbody>
 <tr><td><code>ErrDuplicate</code>, with the entries</td><td>the whole exchange already happened</td></tr>
@@ -120,21 +120,21 @@ import (
     &#34;fmt&#34;
     &#34;log&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
     &#34;github.com/otyang/humanblnk/money&#34;
     &#34;github.com/shopspring/decimal&#34;
 )
 
 // fxDesk is HumanBlnk&#39;s own account for currency it buys and sells: a system
 // account, kept in a variable so a typo can&#39;t create another.
-var fxDesk = ledger.SystemAccount(&#34;FXDesk&#34;)
+var fxDesk = humanblnk.SystemAccount(&#34;FXDesk&#34;)
 
 func main() {
     ctx, books := demo.Setup()
     usdWallet := demo.Customer(ctx, books, &#34;ada&#34;, demo.USD)
     owner := usdWallet.Owner
-    ngnWallet, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+    ngnWallet, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
     if err != nil {
         log.Fatal(err)
     }
@@ -148,16 +148,16 @@ func main() {
         log.Fatal(err)
     }
     id := &#34;fx_&#34; + demo.Run
-    exchange := []ledger.Transaction{
+    exchange := []humanblnk.Transaction{
         {
-            Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;sell&#34;),
-            From: ledger.Single(ledger.AccountRef(usdWallet.ID), sell), To: ledger.Single(fxDesk, sell),
-            Description: &#34;Sell USD&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+            Ref:  humanblnk.Reference(&#34;fx&#34;, id, &#34;sell&#34;),
+            From: humanblnk.Single(humanblnk.AccountRef(usdWallet.ID), sell), To: humanblnk.Single(fxDesk, sell),
+            Description: &#34;Sell USD&#34;, Meta: humanblnk.Meta{&#34;rate&#34;: rate.String()},
         },
         {
-            Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;buy&#34;),
-            From: ledger.Single(fxDesk, buy), To: ledger.Single(ledger.AccountRef(ngnWallet.ID), buy),
-            Description: &#34;Buy NGN&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+            Ref:  humanblnk.Reference(&#34;fx&#34;, id, &#34;buy&#34;),
+            From: humanblnk.Single(fxDesk, buy), To: humanblnk.Single(humanblnk.AccountRef(ngnWallet.ID), buy),
+            Description: &#34;Buy NGN&#34;, Meta: humanblnk.Meta{&#34;rate&#34;: rate.String()},
         },
     }
     entries, err := books.Transactions.RecordAll(ctx, exchange)
@@ -171,15 +171,15 @@ func main() {
 
     // The app retries after a timeout: nothing moves twice.
     _, err = books.Transactions.RecordAll(ctx, exchange)
-    fmt.Println(&#34;retried:&#34;, errors.Is(err, ledger.ErrDuplicate))
+    fmt.Println(&#34;retried:&#34;, errors.Is(err, humanblnk.ErrDuplicate))
 
     // Selling more than she has: neither half applies.
     tooMuch := money.MustParse(&#34;500&#34;, demo.USD)
-    _, err = books.Transactions.RecordAll(ctx, []ledger.Transaction{
-        {Ref: ledger.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;sell&#34;), From: ledger.Single(ledger.AccountRef(usdWallet.ID), tooMuch), To: ledger.Single(fxDesk, tooMuch), Description: &#34;Sell USD&#34;},
-        {Ref: ledger.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;buy&#34;), From: ledger.Single(fxDesk, money.MustParse(&#34;775125&#34;, demo.NGN)), To: ledger.Single(ledger.AccountRef(ngnWallet.ID), money.MustParse(&#34;775125&#34;, demo.NGN)), Description: &#34;Buy NGN&#34;},
+    _, err = books.Transactions.RecordAll(ctx, []humanblnk.Transaction{
+        {Ref: humanblnk.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;sell&#34;), From: humanblnk.Single(humanblnk.AccountRef(usdWallet.ID), tooMuch), To: humanblnk.Single(fxDesk, tooMuch), Description: &#34;Sell USD&#34;},
+        {Ref: humanblnk.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;buy&#34;), From: humanblnk.Single(fxDesk, money.MustParse(&#34;775125&#34;, demo.NGN)), To: humanblnk.Single(humanblnk.AccountRef(ngnWallet.ID), money.MustParse(&#34;775125&#34;, demo.NGN)), Description: &#34;Buy NGN&#34;},
     })
-    fmt.Println(&#34;too much:&#34;, errors.Is(err, ledger.ErrInsufficientFunds))
+    fmt.Println(&#34;too much:&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))
     fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))
 }</code></pre></figure>
 </div>

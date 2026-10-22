@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/docs/examples/demo"
-	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 )
 
@@ -17,17 +17,17 @@ import (
 // charge. paystackRef is Paystack's own id for it, so a retried webhook
 // carries the same one.
 // snippet:deposit
-func deposit(ctx context.Context, books *ledger.Ledger, wallet ledger.Account, paystackRef, amount string) (ledger.Entry, error) {
+func deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
 	m, err := money.Parse(amount, wallet.Currency) // the amount the webhook carried
 	if err != nil {
-		return ledger.Entry{}, err
+		return humanblnk.Entry{}, err
 	}
-	return books.Transactions.Record(ctx, ledger.Transaction{
-		Ref:         ledger.Reference("deposit", "paystack", paystackRef),
-		From:        ledger.Single(ledger.ClearingAccount("paystack"), m), // Paystack owes HumanBlnk this
-		To:          ledger.Single(ledger.AccountRef(wallet.ID), m),
+	return books.Transactions.Record(ctx, humanblnk.Transaction{
+		Ref:         humanblnk.Reference("deposit", "paystack", paystackRef),
+		From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), m), // Paystack owes HumanBlnk this
+		To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
 		Description: "Bank transfer",
-		Meta:        ledger.Meta{"provider": "paystack", "provider_ref": paystackRef},
+		Meta:        humanblnk.Meta{"provider": "paystack", "provider_ref": paystackRef},
 	})
 }
 
@@ -50,7 +50,7 @@ func main() {
 	// snippet:retry
 	again, err := deposit(ctx, books, ada, psRef, "25000")
 	switch {
-	case errors.Is(err, ledger.ErrDuplicate):
+	case errors.Is(err, humanblnk.ErrDuplicate):
 		fmt.Println("retried webhook: already recorded as", again.ID, "- answer 200 OK and move on")
 	case err != nil:
 		log.Fatal(err)
@@ -61,12 +61,12 @@ func main() {
 	// A forged or buggy webhook reusing the reference for another amount.
 	// snippet:forged
 	_, err = deposit(ctx, books, ada, psRef, "99999")
-	fmt.Println("same reference, different amount:", errors.Is(err, ledger.ErrReferenceUsed))
+	fmt.Println("same reference, different amount:", errors.Is(err, humanblnk.ErrReferenceUsed))
 	// end-snippet
 
 	// Look a deposit up by your reference, e.g. from a support tool.
 	// snippet:lookup
-	found, err := books.Transactions.GetByReference(ctx, ledger.Reference("deposit", "paystack", psRef))
+	found, err := books.Transactions.GetByReference(ctx, humanblnk.Reference("deposit", "paystack", psRef))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,10 +77,10 @@ func main() {
 	// and Paystack no longer owes it. The clearing account returns to zero.
 	// snippet:settle
 	settled := money.MustParse("25000", demo.NGN)
-	if _, err := books.Transactions.Record(ctx, ledger.Transaction{
-		Ref:         ledger.Reference("settlement", "paystack", "stl_"+demo.Run),
-		From:        ledger.Single(ledger.World, settled),
-		To:          ledger.Single(ledger.ClearingAccount("paystack"), settled),
+	if _, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+		Ref:         humanblnk.Reference("settlement", "paystack", "stl_"+demo.Run),
+		From:        humanblnk.Single(humanblnk.World, settled),
+		To:          humanblnk.Single(humanblnk.ClearingAccount("paystack"), settled),
 		Description: "Paystack settlement",
 	}); err != nil {
 		log.Fatal(err)

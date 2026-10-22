@@ -1,7 +1,7 @@
 # Setting up
 
 Blnk groups accounts into **ledgers** (humanblnk calls them books, keeping the
-name `ledger` for the whole system). HumanBlnk needs only a few, made **once**:
+word ledger for the whole system). HumanBlnk needs only a few, made **once**:
 
 | Ledger | Holds |
 | --- | --- |
@@ -25,7 +25,7 @@ you're not sure the setup already ran, look first with
 
 ## Step 2: build the Ledger at start-up
 
-Every time your service starts, build one `*ledger.Ledger` from the ids in
+Every time your service starts, build one `*humanblnk.Ledger` from the ids in
 your config, and share it. Everything hangs off it:
 
 {{code 01-setup/main.go startup}}

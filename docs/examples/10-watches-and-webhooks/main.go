@@ -11,9 +11,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/docs/examples/demo"
-	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 )
 
@@ -23,7 +23,7 @@ const secret = "change-me"
 // webhook is the handler you mount at the URL Blnk sends webhooks to.
 // snippet:handler
 func webhook(w http.ResponseWriter, r *http.Request) {
-	ev, err := ledger.VerifyWebhook(secret, r, 5*time.Minute)
+	ev, err := humanblnk.VerifyWebhook(secret, r, 5*time.Minute)
 	if err != nil {
 		http.Error(w, "bad signature", http.StatusUnauthorized) // never act on its body
 		fmt.Println("  rejected:", err)
@@ -47,8 +47,8 @@ func main() {
 
 	// 1. Tell Blnk to fire "balance.monitor" while Ada's balance is under ₦1,000.
 	// snippet:watch
-	low, err := books.Watches.Create(ctx, ledger.Watch{
-		Account: ledger.AccountRef(ada.ID), Field: ledger.WatchBalance, Op: ledger.WatchBelow,
+	low, err := books.Watches.Create(ctx, humanblnk.Watch{
+		Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
 		Threshold: money.MustParse("1000", demo.NGN), Description: "low balance alert",
 	})
 	if err != nil {
@@ -59,14 +59,14 @@ func main() {
 
 	// Move the line: Change makes the new watch before deleting the old one.
 	// snippet:manage
-	low, err = books.Watches.Change(ctx, low.ID, ledger.Watch{
-		Account: ledger.AccountRef(ada.ID), Field: ledger.WatchBalance, Op: ledger.WatchBelow,
+	low, err = books.Watches.Change(ctx, low.ID, humanblnk.Watch{
+		Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
 		Threshold: money.MustParse("2000", demo.NGN), Description: "low balance alert",
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	watches, _ := books.Watches.List(ctx, ledger.AccountRef(ada.ID))
+	watches, _ := books.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
 	fmt.Println("watches on Ada:", len(watches), "| threshold now", watches[0].Threshold)
 	// end-snippet
 

@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/docs/examples/demo"
-	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 	"github.com/shopspring/decimal"
 )
@@ -16,15 +16,15 @@ import (
 // transfer builds Ada-pays-Bola with HumanBlnk's 1.5% fee on top, as one split:
 // Bola is never paid without the fee being recorded, or the other way round.
 // snippet:transfer
-func transfer(id string, from, to ledger.Account, amount money.Money) ledger.Transaction {
+func transfer(id string, from, to humanblnk.Account, amount money.Money) humanblnk.Transaction {
 	fee, _ := amount.Percent(decimal.RequireFromString("1.5"), money.Up)
 	total, _ := amount.Add(fee)
-	return ledger.Transaction{
-		Ref:  ledger.Reference("transfer", id),
-		From: ledger.Single(ledger.AccountRef(from.ID), total),
-		To: ledger.Many(
-			ledger.Posting{Account: ledger.AccountRef(to.ID), Amount: amount},
-			ledger.Posting{Account: ledger.FeeIncome, Amount: fee},
+	return humanblnk.Transaction{
+		Ref:  humanblnk.Reference("transfer", id),
+		From: humanblnk.Single(humanblnk.AccountRef(from.ID), total),
+		To: humanblnk.Many(
+			humanblnk.Posting{Account: humanblnk.AccountRef(to.ID), Amount: amount},
+			humanblnk.Posting{Account: humanblnk.FeeIncome, Amount: fee},
 		),
 		Description: "Transfer to Bola",
 	}
@@ -68,13 +68,13 @@ func main() {
 	p, _ = books.Transactions.Preview(ctx, big)
 	fmt.Println("too much, would apply:", p.WouldApply, "| because:", p.Rejection)
 	_, err = books.Transactions.Record(ctx, big)
-	fmt.Println("recording it anyway: insufficient funds?", errors.Is(err, ledger.ErrInsufficientFunds))
+	fmt.Println("recording it anyway: insufficient funds?", errors.Is(err, humanblnk.ErrInsufficientFunds))
 	// end-snippet
 
 	// 4. Ada's history: money out of her wallet, newest first. (Money into
 	// it is a second query with To set.)
 	// snippet:history
-	out, n, err := books.Transactions.List(ctx, ledger.EntryQuery{From: ledger.AccountRef(ada.ID), Limit: 10})
+	out, n, err := books.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
 	if err != nil {
 		log.Fatal(err)
 	}

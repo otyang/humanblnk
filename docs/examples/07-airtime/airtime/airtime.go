@@ -1,5 +1,5 @@
 // Package airtime sells airtime, paid from the customer's wallet. It is the
-// shape every business service takes: it imports ledger, names the small
+// shape every business service takes: it imports humanblnk, names the small
 // part of it it uses as an interface, and keeps its own rules.
 package airtime
 
@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/otyang/humanblnk/ledger"
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/money"
 )
 
@@ -17,9 +17,9 @@ import (
 // and a test can pass a fake.
 // snippet:interfaces
 type Holds interface {
-	Place(ctx context.Context, t ledger.Transaction, expires time.Time) (ledger.HoldID, error)
-	Capture(ctx context.Context, h ledger.HoldID, amount money.Money) (ledger.Entry, error)
-	Cancel(ctx context.Context, h ledger.HoldID) error
+	Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
+	Capture(ctx context.Context, h humanblnk.HoldID, amount money.Money) (humanblnk.Entry, error)
+	Cancel(ctx context.Context, h humanblnk.HoldID) error
 }
 
 // Provider sends airtime (VTpass, Reloadly, …). id is ours and the same on
@@ -51,8 +51,8 @@ func New(h Holds, p Provider, providerName string) *Service {
 
 // Purchase is one sale.
 type Purchase struct {
-	ID     string            // ours, unique per purchase, the same on every retry
-	Wallet ledger.AccountRef // the customer's wallet
+	ID     string               // ours, unique per purchase, the same on every retry
+	Wallet humanblnk.AccountRef // the customer's wallet
 	Phone  string
 	Amount money.Money
 }
@@ -60,16 +60,16 @@ type Purchase struct {
 // Buy takes the money and sends the airtime. It is safe to call again with
 // the same Purchase.
 // snippet:buy
-func (s *Service) Buy(ctx context.Context, p Purchase) (ledger.HoldID, error) {
-	hold, err := s.holds.Place(ctx, ledger.Transaction{
-		Ref:         ledger.Reference("airtime", p.ID),
-		From:        ledger.Single(p.Wallet, p.Amount),
-		To:          ledger.Single(ledger.ClearingAccount(s.name), p.Amount),
+func (s *Service) Buy(ctx context.Context, p Purchase) (humanblnk.HoldID, error) {
+	hold, err := s.holds.Place(ctx, humanblnk.Transaction{
+		Ref:         humanblnk.Reference("airtime", p.ID),
+		From:        humanblnk.Single(p.Wallet, p.Amount),
+		To:          humanblnk.Single(humanblnk.ClearingAccount(s.name), p.Amount),
 		Description: "Airtime " + p.Phone,
-		Meta:        ledger.Meta{"phone": p.Phone, "provider": s.name},
+		Meta:        humanblnk.Meta{"phone": p.Phone, "provider": s.name},
 	}, time.Time{}) // no expiry: only the provider's answer settles it
 	if err != nil {
-		return "", err // ledger.ErrInsufficientFunds: tell the customer
+		return "", err // humanblnk.ErrInsufficientFunds: tell the customer
 	}
 	err = s.provider.Buy(ctx, p.ID, p.Phone, p.Amount)
 	switch {
@@ -87,7 +87,7 @@ func (s *Service) Buy(ctx context.Context, p Purchase) (ledger.HoldID, error) {
 // Settle finishes a purchase once the provider has answered: from Buy, its
 // webhook, or a status check.
 // snippet:settle
-func (s *Service) Settle(ctx context.Context, hold ledger.HoldID, delivered bool) error {
+func (s *Service) Settle(ctx context.Context, hold humanblnk.HoldID, delivered bool) error {
 	if !delivered {
 		return s.holds.Cancel(ctx, hold)
 	}

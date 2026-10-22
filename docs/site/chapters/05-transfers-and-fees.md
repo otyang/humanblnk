@@ -24,7 +24,7 @@ but moves nothing and leaves the reference unused:
 {{code 05-transfers/main.go preview}}
 
 When it wouldn't apply, the reason is in `p.Rejection` and `err` is nil.
-`errors.Is(p.Rejection, ledger.ErrInsufficientFunds)` works.
+`errors.Is(p.Rejection, humanblnk.ErrInsufficientFunds)` works.
 
 > **A preview is not a reservation.** Another payment can spend the money between `Preview` and `Record`, and `Record` checks funds again. To reserve money, use a hold (chapter 6).
 
@@ -35,7 +35,7 @@ The same transaction, for real:
 {{code 05-transfers/main.go record}}
 
 If Ada can't afford it, the dry run says why, and `Record` refuses with
-`ledger.ErrInsufficientFunds`. Nothing moves:
+`humanblnk.ErrInsufficientFunds`. Nothing moves:
 
 {{code 05-transfers/main.go toomuch}}
 

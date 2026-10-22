@@ -1,8 +1,8 @@
 # Cheat sheet
 
-Everything on one page. Import `github.com/otyang/humanblnk/ledger`; every type
-below is `ledger.X`. Build one `*ledger.Ledger` at start-up with
-`ledger.New(client, ledger.WithAccountLedger(id), ledger.WithCustomerLedgers(ids...))`
+Everything on one page. Import `github.com/otyang/humanblnk`; every type
+below is `humanblnk.X`. Build one `*humanblnk.Ledger` at start-up with
+`humanblnk.New(client, humanblnk.WithAccountLedger(id), humanblnk.WithCustomerLedgers(ids...))`
 (chapter 1).
 
 ## Services
@@ -16,26 +16,26 @@ below is `ledger.X`. Build one `*ledger.Ledger` at start-up with
 | `books.Watches` | `Create(ctx, Watch)`, `Get(ctx, WatchID)`, `List(ctx, account)`, `Change(ctx, WatchID, Watch)`, `Delete(ctx, WatchID)` |
 | `books.Reconciliation` | `AddRule`, `ChangeRule`, `RemoveRule`, `Upload(ctx, source, filename, r)`, `Run(ctx, StatementID, Run)`, `RunLines(ctx, []StatementLine, Run)`, `Result(ctx, RunID)` |
 | `books.Books` | `Create(ctx, name, meta)`, `Get(ctx, id)`, `List(ctx, limit, offset)`, `Rename(ctx, id, name)` |
-| package function | `ledger.VerifyWebhook(secret, r, tolerance) (Event, error)` |
+| package function | `humanblnk.VerifyWebhook(secret, r, tolerance) (Event, error)` |
 
 ## Naming accounts
 
 | Helper | Gives | For |
 | --- | --- | --- |
-| `ledger.AccountRef("bln_…")` | that account | a customer or internal account, by id |
-| `ledger.World` | `@World` | outside HumanBlnk: deposits come from it, payouts go to it |
-| `ledger.FeeIncome` | `@FeeIncome` | fees HumanBlnk earned |
-| `ledger.Adjustments` | `@Adjustments` | staff corrections |
-| `ledger.ClearingAccount("paystack")` | `@PaystackClearing` | money a provider owes HumanBlnk, or HumanBlnk owes it |
-| `ledger.SystemAccount("FXDesk")` | `@FXDesk` | any other system account; keep it in a variable |
+| `humanblnk.AccountRef("bln_…")` | that account | a customer or internal account, by id |
+| `humanblnk.World` | `@World` | outside HumanBlnk: deposits come from it, payouts go to it |
+| `humanblnk.FeeIncome` | `@FeeIncome` | fees HumanBlnk earned |
+| `humanblnk.Adjustments` | `@Adjustments` | staff corrections |
+| `humanblnk.ClearingAccount("paystack")` | `@PaystackClearing` | money a provider owes HumanBlnk, or HumanBlnk owes it |
+| `humanblnk.SystemAccount("FXDesk")` | `@FXDesk` | any other system account; keep it in a variable |
 
 ## Building requests
 
 | Helper or type | |
 | --- | --- |
-| `ledger.Reference("payout", "po_123")` | `"payout:po_123"`: build it from your own ids |
-| `ledger.Single(account, amount)` | one posting |
-| `ledger.Many(ledger.Posting{…}, …)` | several postings, for one side of a split |
+| `humanblnk.Reference("payout", "po_123")` | `"payout:po_123"`: build it from your own ids |
+| `humanblnk.Single(account, amount)` | one posting |
+| `humanblnk.Many(humanblnk.Posting{…}, …)` | several postings, for one side of a split |
 | `Transaction` | `Ref`, `From`, `To`, `Description`, `Meta` |
 | `Reversal` | `Ref`, `Entry`, `Amount`, `Reason` |
 | `CustomerAccount` | `Owner`, `Currency`, `Ledger` |
@@ -59,7 +59,7 @@ Entry statuses: `StatusApplied` (money moved), `StatusHeld` (a hold),
 ## Ids
 
 `HoldID`, `WatchID`, `StatementID`, `RuleID` and `RunID` are strings; convert
-an id you stored, as in `ledger.HoldID(s)`. Owner (`idt_…`) and ledger
+an id you stored, as in `humanblnk.HoldID(s)`. Owner (`idt_…`) and ledger
 (`ldg_…`) ids are plain strings.
 
 ## Money

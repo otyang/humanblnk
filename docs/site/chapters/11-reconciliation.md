@@ -41,7 +41,7 @@ It runs in the background, so poll:
 Bigger reports are uploaded: CSV or JSON with the columns `id`, `amount`,
 `currency`, `reference`, `description` and `date` (RFC 3339), with amounts
 in major units (`10000`, not kobo). Then run it with
-`Reconciliation.Run(ctx, statement, ledger.Run{…})`.
+`Reconciliation.Run(ctx, statement, humanblnk.Run{…})`.
 
 {{code 11-reconciliation/main.go upload}}
 

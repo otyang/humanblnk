@@ -7,7 +7,7 @@ Paystack settles the money into HumanBlnk's bank account.
 ## Where the money comes from
 
 When the webhook arrives, Paystack has the money, not HumanBlnk. So the deposit
-comes **from Paystack's clearing account**, `ledger.ClearingAccount("paystack")`
+comes **from Paystack's clearing account**, `humanblnk.ClearingAccount("paystack")`
 (`@PaystackClearing`). It goes below zero: Paystack owes HumanBlnk that much. When
 Paystack settles, it returns to zero, so a balance left in a clearing account
 is money still in transit.
@@ -20,13 +20,13 @@ This is what your Paystack webhook handler does with a successful charge:
 
 | `Transaction` field | |
 | --- | --- |
-| `Ref` | required. Built with `ledger.Reference` from **your own ids**, never a random value. Here it's Paystack's id for the charge, so a retried webhook carries the same one. |
-| `From`, `To` | postings: `ledger.Single(account, amount)`, or `ledger.Many(...)` for a split (chapter 5) |
+| `Ref` | required. Built with `humanblnk.Reference` from **your own ids**, never a random value. Here it's Paystack's id for the charge, so a retried webhook carries the same one. |
+| `From`, `To` | postings: `humanblnk.Single(account, amount)`, or `humanblnk.Many(...)` for a split (chapter 5) |
 | `Description` | required |
 | `Meta` | optional references, such as the provider's id |
 
-`ledger.AccountRef(wallet.ID)` names a customer's account;
-`ledger.ClearingAccount(...)`, `ledger.World` and `ledger.FeeIncome` name
+`humanblnk.AccountRef(wallet.ID)` names a customer's account;
+`humanblnk.ClearingAccount(...)`, `humanblnk.World` and `humanblnk.FeeIncome` name
 system accounts.
 
 ## Step 2: the retried webhook

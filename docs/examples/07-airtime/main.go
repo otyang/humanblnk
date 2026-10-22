@@ -8,9 +8,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/docs/examples/07-airtime/airtime"
 	"github.com/otyang/humanblnk/docs/examples/demo"
-	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 )
 
@@ -37,9 +37,9 @@ func main() {
 	// snippet:wire
 	air := airtime.New(books.Holds, provider{}, "vtpass")
 
-	buy := func(id, phone string) (ledger.HoldID, error) {
+	buy := func(id, phone string) (humanblnk.HoldID, error) {
 		return air.Buy(ctx, airtime.Purchase{
-			ID: id + "_" + demo.Run, Wallet: ledger.AccountRef(ada.ID), Phone: phone,
+			ID: id + "_" + demo.Run, Wallet: humanblnk.AccountRef(ada.ID), Phone: phone,
 			Amount: money.MustParse("1000", demo.NGN),
 		})
 	}
@@ -62,8 +62,8 @@ func main() {
 
 	// More than she has.
 	_, err = air.Buy(ctx, airtime.Purchase{
-		ID: "air_4_" + demo.Run, Wallet: ledger.AccountRef(ada.ID), Phone: "08031234567",
+		ID: "air_4_" + demo.Run, Wallet: humanblnk.AccountRef(ada.ID), Phone: "08031234567",
 		Amount: money.MustParse("50000", demo.NGN),
 	})
-	fmt.Println("too much:", errors.Is(err, ledger.ErrInsufficientFunds))
+	fmt.Println("too much:", errors.Is(err, humanblnk.ErrInsufficientFunds))
 }

@@ -56,7 +56,7 @@
   <article>
     <p class="eyebrow">Chapter 1 · Foundations</p>
     <h1 id="setting-up"><a class="anchor" href="#setting-up">Setting up</a></h1>
-<p>Blnk groups accounts into <strong>ledgers</strong> (humanblnk calls them books, keeping the name <code>ledger</code> for the whole system). HumanBlnk needs only a few, made <strong>once</strong>:</p>
+<p>Blnk groups accounts into <strong>ledgers</strong> (humanblnk calls them books, keeping the word ledger for the whole system). HumanBlnk needs only a few, made <strong>once</strong>:</p>
 <div class="table"><table>
 <thead><tr><th>Ledger</th><th>Holds</th></tr></thead><tbody>
 <tr><td>Customer Wallets</td><td>every customer&#39;s spending accounts, in every currency</td></tr>
@@ -66,7 +66,7 @@
 <p>Add a ledger only for a different kind of money. Never make one per customer or per currency. You never create the General Ledger or the system accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts): Blnk makes them the first time a transaction uses them.</p>
 <h2 id="step-1-create-the-ledgers-once"><a class="anchor" href="#step-1-create-the-ledgers-once">Step 1: create the ledgers, once</a></h2>
 <p>Run this from a setup script or migration, <strong>not</strong> when your service starts. <code>Books.Create</code> isn&#39;t safe to repeat: each call makes another ledger. If you&#39;re not sure the setup already ran, look first with <code>Books.List(ctx, 10, 0)</code>.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">setup := ledger.New(client)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">setup := humanblnk.New(client)
 suffix := time.Now().Format(&#34;150405&#34;) // only so this example can run twice
 wallets, err := setup.Books.Create(ctx, &#34;Customer Wallets &#34;+suffix, nil)
 if err != nil {
@@ -85,10 +85,10 @@ fmt.Println(&#34;  WALLETS_LEDGER =&#34;, wallets.ID)
 fmt.Println(&#34;  SAVINGS_LEDGER =&#34;, savings.ID)
 fmt.Println(&#34;  OPS_LEDGER     =&#34;, ops.ID)</code></pre></figure>
 <h2 id="step-2-build-the-ledger-at-start-up"><a class="anchor" href="#step-2-build-the-ledger-at-start-up">Step 2: build the Ledger at start-up</a></h2>
-<p>Every time your service starts, build one <code>*ledger.Ledger</code> from the ids in your config, and share it. Everything hangs off it:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">books := ledger.New(client,
-    ledger.WithAccountLedger(wallets.ID),   // where customer wallets open
-    ledger.WithCustomerLedgers(savings.ID), // other customer-only ledgers
+<p>Every time your service starts, build one <code>*humanblnk.Ledger</code> from the ids in your config, and share it. Everything hangs off it:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">books := humanblnk.New(client,
+    humanblnk.WithAccountLedger(wallets.ID),   // where customer wallets open
+    humanblnk.WithCustomerLedgers(savings.ID), // other customer-only ledgers
 )
 
 // The services hang off it.
@@ -119,8 +119,8 @@ import (
     &#34;os&#34;
     &#34;time&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/blnk&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
 )
 
 func main() {
@@ -132,7 +132,7 @@ func main() {
     client := blnk.New(url) // add blnk.WithAPIKey(key) when Blnk runs in secure mode
 
     // --- Once, at setup (a script or migration, never at start-up) ---
-    setup := ledger.New(client)
+    setup := humanblnk.New(client)
     suffix := time.Now().Format(&#34;150405&#34;) // only so this example can run twice
     wallets, err := setup.Books.Create(ctx, &#34;Customer Wallets &#34;+suffix, nil)
     if err != nil {
@@ -152,9 +152,9 @@ func main() {
     fmt.Println(&#34;  OPS_LEDGER     =&#34;, ops.ID)
 
     // --- At start-up, every time: one Ledger for the whole service ---
-    books := ledger.New(client,
-        ledger.WithAccountLedger(wallets.ID),   // where customer wallets open
-        ledger.WithCustomerLedgers(savings.ID), // other customer-only ledgers
+    books := humanblnk.New(client,
+        humanblnk.WithAccountLedger(wallets.ID),   // where customer wallets open
+        humanblnk.WithCustomerLedgers(savings.ID), // other customer-only ledgers
     )
 
     // The services hang off it.

@@ -59,15 +59,15 @@
 <p><strong>Scenario:</strong> Ada sends Bola ₦10,000. HumanBlnk charges a 1.5% fee on top. The app shows Ada what will happen before she confirms, and refuses if she can&#39;t afford it.</p>
 <h2 id="step-1-build-the-transfer-as-one-split"><a class="anchor" href="#step-1-build-the-transfer-as-one-split">Step 1: build the transfer as one split</a></h2>
 <p>The payment to Bola and HumanBlnk&#39;s fee are <strong>one</strong> transaction with two postings on the <code>To</code> side. It applies in full or not at all: Bola is never paid without the fee being recorded, or the other way round.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func transfer(id string, from, to ledger.Account, amount money.Money) ledger.Transaction {
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func transfer(id string, from, to humanblnk.Account, amount money.Money) humanblnk.Transaction {
     fee, _ := amount.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
     total, _ := amount.Add(fee)
-    return ledger.Transaction{
-        Ref:  ledger.Reference(&#34;transfer&#34;, id),
-        From: ledger.Single(ledger.AccountRef(from.ID), total),
-        To: ledger.Many(
-            ledger.Posting{Account: ledger.AccountRef(to.ID), Amount: amount},
-            ledger.Posting{Account: ledger.FeeIncome, Amount: fee},
+    return humanblnk.Transaction{
+        Ref:  humanblnk.Reference(&#34;transfer&#34;, id),
+        From: humanblnk.Single(humanblnk.AccountRef(from.ID), total),
+        To: humanblnk.Many(
+            humanblnk.Posting{Account: humanblnk.AccountRef(to.ID), Amount: amount},
+            humanblnk.Posting{Account: humanblnk.FeeIncome, Amount: fee},
         ),
         Description: &#34;Transfer to Bola&#34;,
     }
@@ -83,7 +83,7 @@ fmt.Println(&#34;would apply:&#34;, p.WouldApply)
 for _, c := range p.Changes {
     fmt.Printf(&#34;  %s: %s -&gt; %s\n&#34;, c.Account, c.AvailableBefore, c.AvailableAfter)
 }</code></pre></figure>
-<p>When it wouldn&#39;t apply, the reason is in <code>p.Rejection</code> and <code>err</code> is nil. <code>errors.Is(p.Rejection, ledger.ErrInsufficientFunds)</code> works.</p>
+<p>When it wouldn&#39;t apply, the reason is in <code>p.Rejection</code> and <code>err</code> is nil. <code>errors.Is(p.Rejection, humanblnk.ErrInsufficientFunds)</code> works.</p>
 <aside class="note"><p><strong>A preview is not a reservation.</strong> Another payment can spend the money between <code>Preview</code> and <code>Record</code>, and <code>Record</code> checks funds again. To reserve money, use a hold (chapter 6).</p></aside>
 <h2 id="step-3-record-it"><a class="anchor" href="#step-3-record-it">Step 3: record it</a></h2>
 <p>The same transaction, for real:</p>
@@ -93,14 +93,14 @@ if err != nil {
 }
 fmt.Printf(&#34;recorded %s: %s from Ada, %d postings to\n&#34;, e.ID, e.Amount, len(e.To))
 fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, books, bola.ID))</code></pre></figure>
-<p>If Ada can&#39;t afford it, the dry run says why, and <code>Record</code> refuses with <code>ledger.ErrInsufficientFunds</code>. Nothing moves:</p>
+<p>If Ada can&#39;t afford it, the dry run says why, and <code>Record</code> refuses with <code>humanblnk.ErrInsufficientFunds</code>. Nothing moves:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">big := transfer(&#34;tr_big_&#34;+demo.Run, ada, bola, money.MustParse(&#34;100000&#34;, demo.NGN))
 p, _ = books.Transactions.Preview(ctx, big)
 fmt.Println(&#34;too much, would apply:&#34;, p.WouldApply, &#34;| because:&#34;, p.Rejection)
 _, err = books.Transactions.Record(ctx, big)
-fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, ledger.ErrInsufficientFunds))</code></pre></figure>
+fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))</code></pre></figure>
 <h2 id="step-4-her-history"><a class="anchor" href="#step-4-her-history">Step 4: her history</a></h2>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">out, n, err := books.Transactions.List(ctx, ledger.EntryQuery{From: ledger.AccountRef(ada.ID), Limit: 10})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">out, n, err := books.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
 if err != nil {
     log.Fatal(err)
 }
@@ -121,23 +121,23 @@ import (
     &#34;fmt&#34;
     &#34;log&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
     &#34;github.com/otyang/humanblnk/money&#34;
     &#34;github.com/shopspring/decimal&#34;
 )
 
 // transfer builds Ada-pays-Bola with HumanBlnk&#39;s 1.5% fee on top, as one split:
 // Bola is never paid without the fee being recorded, or the other way round.
-func transfer(id string, from, to ledger.Account, amount money.Money) ledger.Transaction {
+func transfer(id string, from, to humanblnk.Account, amount money.Money) humanblnk.Transaction {
     fee, _ := amount.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
     total, _ := amount.Add(fee)
-    return ledger.Transaction{
-        Ref:  ledger.Reference(&#34;transfer&#34;, id),
-        From: ledger.Single(ledger.AccountRef(from.ID), total),
-        To: ledger.Many(
-            ledger.Posting{Account: ledger.AccountRef(to.ID), Amount: amount},
-            ledger.Posting{Account: ledger.FeeIncome, Amount: fee},
+    return humanblnk.Transaction{
+        Ref:  humanblnk.Reference(&#34;transfer&#34;, id),
+        From: humanblnk.Single(humanblnk.AccountRef(from.ID), total),
+        To: humanblnk.Many(
+            humanblnk.Posting{Account: humanblnk.AccountRef(to.ID), Amount: amount},
+            humanblnk.Posting{Account: humanblnk.FeeIncome, Amount: fee},
         ),
         Description: &#34;Transfer to Bola&#34;,
     }
@@ -174,11 +174,11 @@ func main() {
     p, _ = books.Transactions.Preview(ctx, big)
     fmt.Println(&#34;too much, would apply:&#34;, p.WouldApply, &#34;| because:&#34;, p.Rejection)
     _, err = books.Transactions.Record(ctx, big)
-    fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, ledger.ErrInsufficientFunds))
+    fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))
 
     // 4. Ada&#39;s history: money out of her wallet, newest first. (Money into
     // it is a second query with To set.)
-    out, n, err := books.Transactions.List(ctx, ledger.EntryQuery{From: ledger.AccountRef(ada.ID), Limit: 10})
+    out, n, err := books.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
     if err != nil {
         log.Fatal(err)
     }
@@ -194,7 +194,7 @@ func main() {
   bln_f308c9b3-5ad0-444a-a8e9-3a0ccc80c2fe: 300.00 -&gt; 450.00
 recorded txn_b2806c40-671a-422a-9d0d-2cea4c5e77b5: 10150.00 from Ada, 2 postings to
 Ada: 39850.00 NGN | Bola: 10000.00 NGN
-too much, would apply: false | because: ledger: insufficient funds: failed to apply transaction to balances: insufficient funds in source balance
+too much, would apply: false | because: humanblnk: insufficient funds: failed to apply transaction to balances: insufficient funds in source balance
 recording it anyway: insufficient funds? true
 2 entries out of Ada&#39;s wallet:
   transfer:tr_1792634714614537000-1  10000.00  APPLIED

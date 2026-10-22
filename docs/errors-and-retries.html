@@ -60,15 +60,15 @@
 <h2 id="what-each-error-means"><a class="anchor" href="#what-each-error-means">What each error means</a></h2>
 <div class="table"><table>
 <thead><tr><th>Error</th><th>Means</th><th>What to do</th></tr></thead><tbody>
-<tr><td><code>ledger.ErrInsufficientFunds</code></td><td>the source account can&#39;t cover it</td><td>tell the customer; nothing moved</td></tr>
-<tr><td><code>ledger.ErrDuplicate</code></td><td>this exact write already happened, applied</td><td>treat as <strong>success</strong>; the existing entry comes back with it</td></tr>
-<tr><td><code>ledger.ErrReferenceUsed</code></td><td>the reference holds something that didn&#39;t apply: a different transaction, or this one rolled back</td><td>nothing moved under it; record again under a <strong>new</strong> reference, or investigate if you didn&#39;t expect it</td></tr>
-<tr><td><code>ledger.ErrNotFound</code></td><td>no such account, entry or hold</td><td>check the id</td></tr>
-<tr><td><code>ledger.ErrUnbalanced</code></td><td><code>From</code> and <code>To</code> don&#39;t add up to the same amount</td><td>fix the postings</td></tr>
-<tr><td><code>ledger.ErrAlreadyReversed</code></td><td>nothing (or not that much) is left to reverse</td><td>nothing to do; pass a <code>Ref</code> to get your own reversal back on a retry</td></tr>
-<tr><td><code>ledger.ErrHoldSettled</code></td><td>the hold was already captured, cancelled or expired</td><td>look at what happened before acting again</td></tr>
-<tr><td><code>ledger.ErrInvalid</code></td><td>refused before reaching Blnk: missing reference, negative amount, wrong ledger, …</td><td>a bug in the caller; don&#39;t retry</td></tr>
-<tr><td><code>ledger.ErrReadBack</code></td><td><code>RecordAll</code> <strong>applied</strong>, but reading the entries back failed</td><td>don&#39;t record it again; look the entries up by reference</td></tr>
+<tr><td><code>humanblnk.ErrInsufficientFunds</code></td><td>the source account can&#39;t cover it</td><td>tell the customer; nothing moved</td></tr>
+<tr><td><code>humanblnk.ErrDuplicate</code></td><td>this exact write already happened, applied</td><td>treat as <strong>success</strong>; the existing entry comes back with it</td></tr>
+<tr><td><code>humanblnk.ErrReferenceUsed</code></td><td>the reference holds something that didn&#39;t apply: a different transaction, or this one rolled back</td><td>nothing moved under it; record again under a <strong>new</strong> reference, or investigate if you didn&#39;t expect it</td></tr>
+<tr><td><code>humanblnk.ErrNotFound</code></td><td>no such account, entry or hold</td><td>check the id</td></tr>
+<tr><td><code>humanblnk.ErrUnbalanced</code></td><td><code>From</code> and <code>To</code> don&#39;t add up to the same amount</td><td>fix the postings</td></tr>
+<tr><td><code>humanblnk.ErrAlreadyReversed</code></td><td>nothing (or not that much) is left to reverse</td><td>nothing to do; pass a <code>Ref</code> to get your own reversal back on a retry</td></tr>
+<tr><td><code>humanblnk.ErrHoldSettled</code></td><td>the hold was already captured, cancelled or expired</td><td>look at what happened before acting again</td></tr>
+<tr><td><code>humanblnk.ErrInvalid</code></td><td>refused before reaching Blnk: missing reference, negative amount, wrong ledger, …</td><td>a bug in the caller; don&#39;t retry</td></tr>
+<tr><td><code>humanblnk.ErrReadBack</code></td><td><code>RecordAll</code> <strong>applied</strong>, but reading the entries back failed</td><td>don&#39;t record it again; look the entries up by reference</td></tr>
 <tr><td><code>money.ErrCurrencyMismatch</code></td><td>an amount&#39;s currency doesn&#39;t match the account&#39;s</td><td>a bug in the caller</td></tr>
 <tr><td><code>money.ErrUnknownCurrency</code></td><td>a <code>Money</code> that was never set, or an unknown code</td><td>a bug in the caller</td></tr>
 </tbody></table></div>
@@ -89,12 +89,12 @@
 <tr><td>every read (<code>Get</code>, <code>List</code>, <code>GetByReference</code>, <code>Preview</code>)</td><td>yes</td><td></td></tr>
 </tbody></table></div>
 <h2 id="references-in-one-rule"><a class="anchor" href="#references-in-one-rule">References, in one rule</a></h2>
-<p>Build every reference from <strong>your own ids</strong>, with <code>ledger.Reference</code>:</p>
+<p>Build every reference from <strong>your own ids</strong>, with <code>humanblnk.Reference</code>:</p>
 <div class="table"><table>
 <thead><tr><th>Call</th><th>Reference</th></tr></thead><tbody>
-<tr><td><code>ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef)</code></td><td><code>deposit:paystack:ps_123</code></td></tr>
-<tr><td><code>ledger.Reference(&#34;transfer&#34;, transferID)</code></td><td><code>transfer:tr_42</code></td></tr>
-<tr><td><code>ledger.Reference(&#34;payout&#34;, payoutID)</code></td><td><code>payout:po_7</code></td></tr>
+<tr><td><code>humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef)</code></td><td><code>deposit:paystack:ps_123</code></td></tr>
+<tr><td><code>humanblnk.Reference(&#34;transfer&#34;, transferID)</code></td><td><code>transfer:tr_42</code></td></tr>
+<tr><td><code>humanblnk.Reference(&#34;payout&#34;, payoutID)</code></td><td><code>payout:po_7</code></td></tr>
 </tbody></table></div>
 <p>Never use a random value or a timestamp: a retry must produce the same reference, so Blnk can refuse to apply it twice.</p>
 <h2 id="when-a-split-or-batch-fails-partway"><a class="anchor" href="#when-a-split-or-batch-fails-partway">When a split or batch fails partway</a></h2>

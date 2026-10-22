@@ -8,8 +8,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/docs/examples/demo"
-	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 )
 
@@ -21,15 +21,15 @@ func main() {
 
 	// --- A withdrawal to Ada's bank account ---
 	// snippet:place
-	payout := ledger.Transaction{
-		Ref:         ledger.Reference("payout", "po_1_"+demo.Run),
-		From:        ledger.Single(ledger.AccountRef(ada.ID), ngn("20000")),
-		To:          ledger.Single(ledger.World, ngn("20000")), // leaving HumanBlnk
+	payout := humanblnk.Transaction{
+		Ref:         humanblnk.Reference("payout", "po_1_"+demo.Run),
+		From:        humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn("20000")),
+		To:          humanblnk.Single(humanblnk.World, ngn("20000")), // leaving HumanBlnk
 		Description: "Withdrawal to GTBank ****1234",
 	}
 	hold, err := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
 	if err != nil {
-		log.Fatal(err) // ledger.ErrInsufficientFunds: tell Ada
+		log.Fatal(err) // humanblnk.ErrInsufficientFunds: tell Ada
 	}
 	acct, _ := books.Accounts.Get(ctx, ada.ID)
 	fmt.Printf("held %s: Total %s, Held %s, Available %s\n", hold, acct.Total, acct.Held, acct.Available)
@@ -54,9 +54,9 @@ func main() {
 
 	// --- A withdrawal the bank rejects ---
 	// snippet:rejected
-	h2, err := books.Holds.Place(ctx, ledger.Transaction{
-		Ref:  ledger.Reference("payout", "po_2_"+demo.Run),
-		From: ledger.Single(ledger.AccountRef(ada.ID), ngn("5000")), To: ledger.Single(ledger.World, ngn("5000")),
+	h2, err := books.Holds.Place(ctx, humanblnk.Transaction{
+		Ref:  humanblnk.Reference("payout", "po_2_"+demo.Run),
+		From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn("5000")), To: humanblnk.Single(humanblnk.World, ngn("5000")),
 		Description: "Withdrawal to a closed account",
 	}, time.Time{}) // no expiry: only the bank's answer settles it
 	if err != nil {
@@ -68,14 +68,14 @@ func main() {
 	fmt.Println("bank rejected, cancelled | Ada:", demo.Available(ctx, books, ada.ID))
 	fmt.Println("cancel again:", books.Holds.Cancel(ctx, h2)) // safe to repeat
 	_, err = books.Holds.Capture(ctx, h2, money.Money{})
-	fmt.Println("capture after cancel is settled:", errors.Is(err, ledger.ErrHoldSettled))
+	fmt.Println("capture after cancel is settled:", errors.Is(err, humanblnk.ErrHoldSettled))
 	// end-snippet
 
 	// --- A partial capture: a ride, estimated then charged ---
 	// snippet:partial
-	h3, err := books.Holds.Place(ctx, ledger.Transaction{
-		Ref:  ledger.Reference("ride", "rd_"+demo.Run),
-		From: ledger.Single(ledger.AccountRef(ada.ID), ngn("6000")), To: ledger.Single(ledger.SystemAccount("RidesClearing"), ngn("6000")),
+	h3, err := books.Holds.Place(ctx, humanblnk.Transaction{
+		Ref:  humanblnk.Reference("ride", "rd_"+demo.Run),
+		From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn("6000")), To: humanblnk.Single(humanblnk.SystemAccount("RidesClearing"), ngn("6000")),
 		Description: "Ride estimate",
 	}, time.Now().Add(2*time.Hour))
 	if err != nil {

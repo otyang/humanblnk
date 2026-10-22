@@ -60,9 +60,9 @@
 <p>Refunds, corrections, chargebacks and bounced payouts all use one call: <code>Transactions.Reverse</code>. It moves money back the way an entry moved it.</p>
 <h2 id="the-order"><a class="anchor" href="#the-order">The order</a></h2>
 <p>A merchant is a customer too, with a wallet of its own:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">order, err := books.Transactions.Record(ctx, ledger.Transaction{
-    Ref:  ledger.Reference(&#34;order&#34;, &#34;ord_1_&#34;+demo.Run),
-    From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;15000&#34;)), To: ledger.Single(ledger.AccountRef(shop.ID), ngn(&#34;15000&#34;)),
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">order, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+    Ref:  humanblnk.Reference(&#34;order&#34;, &#34;ord_1_&#34;+demo.Run),
+    From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;15000&#34;)), To: humanblnk.Single(humanblnk.AccountRef(shop.ID), ngn(&#34;15000&#34;)),
     Description: &#34;Order #1&#34;,
 })
 if err != nil {
@@ -70,7 +70,7 @@ if err != nil {
 }
 fmt.Println(&#34;paid | Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| shop:&#34;, demo.Available(ctx, books, shop.ID))</code></pre></figure>
 <h2 id="a-partial-refund"><a class="anchor" href="#a-partial-refund">A partial refund</a></h2>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">oneItem := ledger.Reversal{Ref: &#34;refund:ord_1:item_2_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;5000&#34;), Reason: &#34;item returned&#34;}
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">oneItem := humanblnk.Reversal{Ref: &#34;refund:ord_1:item_2_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;5000&#34;), Reason: &#34;item returned&#34;}
 r1, err := books.Transactions.Reverse(ctx, oneItem)
 if err != nil {
     log.Fatal(err)
@@ -90,29 +90,29 @@ fmt.Println(&#34;clicked again, same refund:&#34;, r1again.ID == r1.ID, err)</co
 <p>Without a <code>Ref</code>, a retried full reversal can only answer <code>ErrAlreadyReversed</code>: it can&#39;t tell its own refund from someone else&#39;s. Always pass one.</p>
 <h2 id="never-more-than-was-paid"><a class="anchor" href="#never-more-than-was-paid">Never more than was paid</a></h2>
 <p>Reversals of one entry, full and partial, can never add up to more than it moved, even when two run at the same time (they take turns).</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;refund:ord_1:too_much_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;20000&#34;), Reason: &#34;mistake&#34;})
-fmt.Println(&#34;more than is left:&#34;, errors.Is(err, ledger.ErrAlreadyReversed))</code></pre></figure>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;refund:ord_1:too_much_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;20000&#34;), Reason: &#34;mistake&#34;})
+fmt.Println(&#34;more than is left:&#34;, errors.Is(err, humanblnk.ErrAlreadyReversed))</code></pre></figure>
 <h2 id="cancel-the-rest"><a class="anchor" href="#cancel-the-rest">Cancel the rest</a></h2>
 <p>A full reversal after partial ones undoes only what&#39;s left. Once nothing is left, <code>Reverse</code> is <code>ErrAlreadyReversed</code>.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">rest, err := books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;refund:ord_1:cancel_&#34; + demo.Run, Entry: order.ID, Reason: &#34;order cancelled&#34;})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">rest, err := books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;refund:ord_1:cancel_&#34; + demo.Run, Entry: order.ID, Reason: &#34;order cancelled&#34;})
 if err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;cancelled, refunded&#34;, rest.Amount, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| shop:&#34;, demo.Available(ctx, books, shop.ID))
-_, err = books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;refund:ord_1:again_&#34; + demo.Run, Entry: order.ID, Reason: &#34;again&#34;})
-fmt.Println(&#34;nothing left to refund:&#34;, errors.Is(err, ledger.ErrAlreadyReversed))</code></pre></figure>
+_, err = books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;refund:ord_1:again_&#34; + demo.Run, Entry: order.ID, Reason: &#34;again&#34;})
+fmt.Println(&#34;nothing left to refund:&#34;, errors.Is(err, humanblnk.ErrAlreadyReversed))</code></pre></figure>
 <h2 id="a-bounced-payout"><a class="anchor" href="#a-bounced-payout">A bounced payout</a></h2>
 <p>A payout recorded straight to <code>@World</code> that the bank returns is reversed the same way. The money comes back from <code>@World</code>, which as a system account may go below zero:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">payout, err := books.Transactions.Record(ctx, ledger.Transaction{
-    Ref:  ledger.Reference(&#34;payout&#34;, &#34;po_&#34;+demo.Run),
-    From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;8000&#34;)), To: ledger.Single(ledger.World, ngn(&#34;8000&#34;)),
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/08-refunds/main.go" target="_blank" rel="noopener">08-refunds/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">payout, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+    Ref:  humanblnk.Reference(&#34;payout&#34;, &#34;po_&#34;+demo.Run),
+    From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;8000&#34;)), To: humanblnk.Single(humanblnk.World, ngn(&#34;8000&#34;)),
     Description: &#34;Withdrawal&#34;,
 })
 if err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;paid out | Ada:&#34;, demo.Available(ctx, books, ada.ID))
-if _, err := books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;bounce:po_&#34; + demo.Run, Entry: payout.ID, Reason: &#34;account closed at the bank&#34;}); err != nil {
+if _, err := books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;bounce:po_&#34; + demo.Run, Entry: payout.ID, Reason: &#34;account closed at the bank&#34;}); err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;bounced back | Ada:&#34;, demo.Available(ctx, books, ada.ID))</code></pre></figure>
@@ -127,8 +127,8 @@ import (
     &#34;fmt&#34;
     &#34;log&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
     &#34;github.com/otyang/humanblnk/money&#34;
 )
 
@@ -140,9 +140,9 @@ func main() {
     ngn := func(v string) money.Money { return money.MustParse(v, demo.NGN) }
 
     // Ada buys three items for 15,000.
-    order, err := books.Transactions.Record(ctx, ledger.Transaction{
-        Ref:  ledger.Reference(&#34;order&#34;, &#34;ord_1_&#34;+demo.Run),
-        From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;15000&#34;)), To: ledger.Single(ledger.AccountRef(shop.ID), ngn(&#34;15000&#34;)),
+    order, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+        Ref:  humanblnk.Reference(&#34;order&#34;, &#34;ord_1_&#34;+demo.Run),
+        From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;15000&#34;)), To: humanblnk.Single(humanblnk.AccountRef(shop.ID), ngn(&#34;15000&#34;)),
         Description: &#34;Order #1&#34;,
     })
     if err != nil {
@@ -151,7 +151,7 @@ func main() {
     fmt.Println(&#34;paid | Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| shop:&#34;, demo.Available(ctx, books, shop.ID))
 
     // One item comes back: a partial refund. Ref is your id for this refund.
-    oneItem := ledger.Reversal{Ref: &#34;refund:ord_1:item_2_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;5000&#34;), Reason: &#34;item returned&#34;}
+    oneItem := humanblnk.Reversal{Ref: &#34;refund:ord_1:item_2_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;5000&#34;), Reason: &#34;item returned&#34;}
     r1, err := books.Transactions.Reverse(ctx, oneItem)
     if err != nil {
         log.Fatal(err)
@@ -163,29 +163,29 @@ func main() {
     fmt.Println(&#34;clicked again, same refund:&#34;, r1again.ID == r1.ID, err)
 
     // Refunding more than is left is refused.
-    _, err = books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;refund:ord_1:too_much_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;20000&#34;), Reason: &#34;mistake&#34;})
-    fmt.Println(&#34;more than is left:&#34;, errors.Is(err, ledger.ErrAlreadyReversed))
+    _, err = books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;refund:ord_1:too_much_&#34; + demo.Run, Entry: order.ID, Amount: ngn(&#34;20000&#34;), Reason: &#34;mistake&#34;})
+    fmt.Println(&#34;more than is left:&#34;, errors.Is(err, humanblnk.ErrAlreadyReversed))
 
     // The order is cancelled: a full reversal undoes what&#39;s left (10,000).
-    rest, err := books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;refund:ord_1:cancel_&#34; + demo.Run, Entry: order.ID, Reason: &#34;order cancelled&#34;})
+    rest, err := books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;refund:ord_1:cancel_&#34; + demo.Run, Entry: order.ID, Reason: &#34;order cancelled&#34;})
     if err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;cancelled, refunded&#34;, rest.Amount, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| shop:&#34;, demo.Available(ctx, books, shop.ID))
-    _, err = books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;refund:ord_1:again_&#34; + demo.Run, Entry: order.ID, Reason: &#34;again&#34;})
-    fmt.Println(&#34;nothing left to refund:&#34;, errors.Is(err, ledger.ErrAlreadyReversed))
+    _, err = books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;refund:ord_1:again_&#34; + demo.Run, Entry: order.ID, Reason: &#34;again&#34;})
+    fmt.Println(&#34;nothing left to refund:&#34;, errors.Is(err, humanblnk.ErrAlreadyReversed))
 
     // A payout that bounced: the bank returns the money days later.
-    payout, err := books.Transactions.Record(ctx, ledger.Transaction{
-        Ref:  ledger.Reference(&#34;payout&#34;, &#34;po_&#34;+demo.Run),
-        From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;8000&#34;)), To: ledger.Single(ledger.World, ngn(&#34;8000&#34;)),
+    payout, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+        Ref:  humanblnk.Reference(&#34;payout&#34;, &#34;po_&#34;+demo.Run),
+        From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;8000&#34;)), To: humanblnk.Single(humanblnk.World, ngn(&#34;8000&#34;)),
         Description: &#34;Withdrawal&#34;,
     })
     if err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;paid out | Ada:&#34;, demo.Available(ctx, books, ada.ID))
-    if _, err := books.Transactions.Reverse(ctx, ledger.Reversal{Ref: &#34;bounce:po_&#34; + demo.Run, Entry: payout.ID, Reason: &#34;account closed at the bank&#34;}); err != nil {
+    if _, err := books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: &#34;bounce:po_&#34; + demo.Run, Entry: payout.ID, Reason: &#34;account closed at the bank&#34;}); err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;bounced back | Ada:&#34;, demo.Available(ctx, books, ada.ID))

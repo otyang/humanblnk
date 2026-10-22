@@ -28,7 +28,7 @@ every watch.
 
 ## Step 3: receive webhooks safely
 
-Blnk signs each webhook with its `server.secret_key`. `ledger.VerifyWebhook`
+Blnk signs each webhook with its `server.secret_key`. `humanblnk.VerifyWebhook`
 checks the signature and the age, then decodes it. Never act on a body that
 fails the check. This is the handler you mount at the URL Blnk sends
 webhooks to:

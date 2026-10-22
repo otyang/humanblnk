@@ -9,8 +9,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/otyang/humanblnk"
 	"github.com/otyang/humanblnk/blnk"
-	"github.com/otyang/humanblnk/ledger"
 )
 
 func main() {
@@ -23,7 +23,7 @@ func main() {
 
 	// --- Once, at setup (a script or migration, never at start-up) ---
 	// snippet:once
-	setup := ledger.New(client)
+	setup := humanblnk.New(client)
 	suffix := time.Now().Format("150405") // only so this example can run twice
 	wallets, err := setup.Books.Create(ctx, "Customer Wallets "+suffix, nil)
 	if err != nil {
@@ -45,9 +45,9 @@ func main() {
 
 	// --- At start-up, every time: one Ledger for the whole service ---
 	// snippet:startup
-	books := ledger.New(client,
-		ledger.WithAccountLedger(wallets.ID),   // where customer wallets open
-		ledger.WithCustomerLedgers(savings.ID), // other customer-only ledgers
+	books := humanblnk.New(client,
+		humanblnk.WithAccountLedger(wallets.ID),   // where customer wallets open
+		humanblnk.WithCustomerLedgers(savings.ID), // other customer-only ledgers
 	)
 
 	// The services hang off it.

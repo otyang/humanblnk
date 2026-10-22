@@ -57,7 +57,7 @@
     <p class="eyebrow">Chapter 7 · Moving money</p>
     <h1 id="building-a-service-airtime"><a class="anchor" href="#building-a-service-airtime">Building a service: airtime</a></h1>
 <p><strong>Scenario:</strong> Ada buys ₦1,000 of airtime from her wallet. The airtime provider (VTpass, say) can deliver, decline, or not answer in time.</p>
-<p>This chapter shows the shape every business feature takes: its own package that <strong>imports <code>ledger</code></strong>, never the other way round. <code>ledger</code> knows nothing about airtime; the airtime package decides what to take and when.</p>
+<p>This chapter shows the shape every business feature takes: its own package that <strong>imports <code>humanblnk</code></strong>, never the other way round. <code>humanblnk</code> knows nothing about airtime; the airtime package decides what to take and when.</p>
 <h2 id="the-design-a-hold-around-the-provider-call"><a class="anchor" href="#the-design-a-hold-around-the-provider-call">The design: a hold around the provider call</a></h2>
 <p>The provider is outside HumanBlnk and can fail or time out, so the money is held first, not taken outright:</p>
 <ol>
@@ -65,13 +65,13 @@
 <li><strong>Call the provider.</strong></li>
 <li>Delivered: <strong>capture</strong>. Declined: <strong>cancel</strong>. No clear answer: leave it held, and settle it when the provider&#39;s webhook or a status check answers.</li>
 </ol>
-<p>The money goes to the provider&#39;s clearing account, <code>ledger.ClearingAccount(&#34;vtpass&#34;)</code>: what HumanBlnk owes the provider, or how much of a prepaid float is used.</p>
+<p>The money goes to the provider&#39;s clearing account, <code>humanblnk.ClearingAccount(&#34;vtpass&#34;)</code>: what HumanBlnk owes the provider, or how much of a prepaid float is used.</p>
 <h2 id="step-1-depend-on-interfaces"><a class="anchor" href="#step-1-depend-on-interfaces">Step 1: depend on interfaces</a></h2>
 <p>The package names the small part of the ledger it uses, so tests can pass a fake. <code>books.Holds</code> satisfies <code>Holds</code>.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">type Holds interface {
-    Place(ctx context.Context, t ledger.Transaction, expires time.Time) (ledger.HoldID, error)
-    Capture(ctx context.Context, h ledger.HoldID, amount money.Money) (ledger.Entry, error)
-    Cancel(ctx context.Context, h ledger.HoldID) error
+    Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
+    Capture(ctx context.Context, h humanblnk.HoldID, amount money.Money) (humanblnk.Entry, error)
+    Cancel(ctx context.Context, h humanblnk.HoldID) error
 }
 
 // Provider sends airtime (VTpass, Reloadly, …). id is ours and the same on
@@ -81,16 +81,16 @@ type Provider interface {
 }</code></pre></figure>
 <h2 id="step-2-buy"><a class="anchor" href="#step-2-buy">Step 2: buy</a></h2>
 <p><code>Buy</code> places the hold, calls the provider, then settles. It&#39;s safe to call again with the same <code>Purchase</code>: <code>Place</code> returns the same hold, and a full capture can&#39;t move money twice.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func (s *Service) Buy(ctx context.Context, p Purchase) (ledger.HoldID, error) {
-    hold, err := s.holds.Place(ctx, ledger.Transaction{
-        Ref:         ledger.Reference(&#34;airtime&#34;, p.ID),
-        From:        ledger.Single(p.Wallet, p.Amount),
-        To:          ledger.Single(ledger.ClearingAccount(s.name), p.Amount),
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func (s *Service) Buy(ctx context.Context, p Purchase) (humanblnk.HoldID, error) {
+    hold, err := s.holds.Place(ctx, humanblnk.Transaction{
+        Ref:         humanblnk.Reference(&#34;airtime&#34;, p.ID),
+        From:        humanblnk.Single(p.Wallet, p.Amount),
+        To:          humanblnk.Single(humanblnk.ClearingAccount(s.name), p.Amount),
         Description: &#34;Airtime &#34; + p.Phone,
-        Meta:        ledger.Meta{&#34;phone&#34;: p.Phone, &#34;provider&#34;: s.name},
+        Meta:        humanblnk.Meta{&#34;phone&#34;: p.Phone, &#34;provider&#34;: s.name},
     }, time.Time{}) // no expiry: only the provider&#39;s answer settles it
     if err != nil {
-        return &#34;&#34;, err // ledger.ErrInsufficientFunds: tell the customer
+        return &#34;&#34;, err // humanblnk.ErrInsufficientFunds: tell the customer
     }
     err = s.provider.Buy(ctx, p.ID, p.Phone, p.Amount)
     switch {
@@ -104,7 +104,7 @@ type Provider interface {
 }</code></pre></figure>
 <h2 id="step-3-settle"><a class="anchor" href="#step-3-settle">Step 3: settle</a></h2>
 <p><code>Settle</code> captures or cancels. The provider&#39;s webhook handler calls it for a purchase that was pending.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func (s *Service) Settle(ctx context.Context, hold ledger.HoldID, delivered bool) error {
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func (s *Service) Settle(ctx context.Context, hold humanblnk.HoldID, delivered bool) error {
     if !delivered {
         return s.holds.Cancel(ctx, hold)
     }
@@ -126,9 +126,9 @@ func (provider) Buy(_ context.Context, id, phone string, _ money.Money) error {
 }</code></pre></figure>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/main.go" target="_blank" rel="noopener">07-airtime/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">air := airtime.New(books.Holds, provider{}, &#34;vtpass&#34;)
 
-buy := func(id, phone string) (ledger.HoldID, error) {
+buy := func(id, phone string) (humanblnk.HoldID, error) {
     return air.Buy(ctx, airtime.Purchase{
-        ID: id + &#34;_&#34; + demo.Run, Wallet: ledger.AccountRef(ada.ID), Phone: phone,
+        ID: id + &#34;_&#34; + demo.Run, Wallet: humanblnk.AccountRef(ada.ID), Phone: phone,
         Amount: money.MustParse(&#34;1000&#34;, demo.NGN),
     })
 }
@@ -149,7 +149,7 @@ if err := air.Settle(ctx, pending, true); err != nil {
 fmt.Println(&#34;settled after the webhook | Ada:&#34;, demo.Available(ctx, books, ada.ID))</code></pre></figure>
 <h2 id="the-whole-service"><a class="anchor" href="#the-whole-service">The whole service</a></h2>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Package airtime sells airtime, paid from the customer&#39;s wallet. It is the
-// shape every business service takes: it imports ledger, names the small
+// shape every business service takes: it imports humanblnk, names the small
 // part of it it uses as an interface, and keeps its own rules.
 package airtime
 
@@ -159,16 +159,16 @@ import (
     &#34;fmt&#34;
     &#34;time&#34;
 
-    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/money&#34;
 )
 
 // Holds is the part of the ledger airtime uses; books.Holds satisfies it,
 // and a test can pass a fake.
 type Holds interface {
-    Place(ctx context.Context, t ledger.Transaction, expires time.Time) (ledger.HoldID, error)
-    Capture(ctx context.Context, h ledger.HoldID, amount money.Money) (ledger.Entry, error)
-    Cancel(ctx context.Context, h ledger.HoldID) error
+    Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
+    Capture(ctx context.Context, h humanblnk.HoldID, amount money.Money) (humanblnk.Entry, error)
+    Cancel(ctx context.Context, h humanblnk.HoldID) error
 }
 
 // Provider sends airtime (VTpass, Reloadly, …). id is ours and the same on
@@ -198,24 +198,24 @@ func New(h Holds, p Provider, providerName string) *Service {
 
 // Purchase is one sale.
 type Purchase struct {
-    ID     string            // ours, unique per purchase, the same on every retry
-    Wallet ledger.AccountRef // the customer&#39;s wallet
+    ID     string               // ours, unique per purchase, the same on every retry
+    Wallet humanblnk.AccountRef // the customer&#39;s wallet
     Phone  string
     Amount money.Money
 }
 
 // Buy takes the money and sends the airtime. It is safe to call again with
 // the same Purchase.
-func (s *Service) Buy(ctx context.Context, p Purchase) (ledger.HoldID, error) {
-    hold, err := s.holds.Place(ctx, ledger.Transaction{
-        Ref:         ledger.Reference(&#34;airtime&#34;, p.ID),
-        From:        ledger.Single(p.Wallet, p.Amount),
-        To:          ledger.Single(ledger.ClearingAccount(s.name), p.Amount),
+func (s *Service) Buy(ctx context.Context, p Purchase) (humanblnk.HoldID, error) {
+    hold, err := s.holds.Place(ctx, humanblnk.Transaction{
+        Ref:         humanblnk.Reference(&#34;airtime&#34;, p.ID),
+        From:        humanblnk.Single(p.Wallet, p.Amount),
+        To:          humanblnk.Single(humanblnk.ClearingAccount(s.name), p.Amount),
         Description: &#34;Airtime &#34; + p.Phone,
-        Meta:        ledger.Meta{&#34;phone&#34;: p.Phone, &#34;provider&#34;: s.name},
+        Meta:        humanblnk.Meta{&#34;phone&#34;: p.Phone, &#34;provider&#34;: s.name},
     }, time.Time{}) // no expiry: only the provider&#39;s answer settles it
     if err != nil {
-        return &#34;&#34;, err // ledger.ErrInsufficientFunds: tell the customer
+        return &#34;&#34;, err // humanblnk.ErrInsufficientFunds: tell the customer
     }
     err = s.provider.Buy(ctx, p.ID, p.Phone, p.Amount)
     switch {
@@ -230,7 +230,7 @@ func (s *Service) Buy(ctx context.Context, p Purchase) (ledger.HoldID, error) {
 
 // Settle finishes a purchase once the provider has answered: from Buy, its
 // webhook, or a status check.
-func (s *Service) Settle(ctx context.Context, hold ledger.HoldID, delivered bool) error {
+func (s *Service) Settle(ctx context.Context, hold humanblnk.HoldID, delivered bool) error {
     if !delivered {
         return s.holds.Cancel(ctx, hold)
     }
@@ -250,9 +250,9 @@ import (
     &#34;errors&#34;
     &#34;fmt&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/07-airtime/airtime&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
     &#34;github.com/otyang/humanblnk/money&#34;
 )
 
@@ -275,9 +275,9 @@ func main() {
     demo.Deposit(ctx, books, ada, &#34;5000&#34;)
     air := airtime.New(books.Holds, provider{}, &#34;vtpass&#34;)
 
-    buy := func(id, phone string) (ledger.HoldID, error) {
+    buy := func(id, phone string) (humanblnk.HoldID, error) {
         return air.Buy(ctx, airtime.Purchase{
-            ID: id + &#34;_&#34; + demo.Run, Wallet: ledger.AccountRef(ada.ID), Phone: phone,
+            ID: id + &#34;_&#34; + demo.Run, Wallet: humanblnk.AccountRef(ada.ID), Phone: phone,
             Amount: money.MustParse(&#34;1000&#34;, demo.NGN),
         })
     }
@@ -299,10 +299,10 @@ func main() {
 
     // More than she has.
     _, err = air.Buy(ctx, airtime.Purchase{
-        ID: &#34;air_4_&#34; + demo.Run, Wallet: ledger.AccountRef(ada.ID), Phone: &#34;08031234567&#34;,
+        ID: &#34;air_4_&#34; + demo.Run, Wallet: humanblnk.AccountRef(ada.ID), Phone: &#34;08031234567&#34;,
         Amount: money.MustParse(&#34;50000&#34;, demo.NGN),
     })
-    fmt.Println(&#34;too much:&#34;, errors.Is(err, ledger.ErrInsufficientFunds))
+    fmt.Println(&#34;too much:&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))
 }</code></pre></figure>
 </div>
 <div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">delivered: &lt;nil&gt; | Ada: 4000.00 NGN
@@ -317,7 +317,7 @@ too much: true</code></pre></figure>
 <li><strong>Its own table</strong> (purchase id, wallet, phone, amount, hold id, status), so the webhook and a retry job can find pending purchases and call <code>Settle</code>.</li>
 <li><strong>A provider that is safe to retry:</strong> send your purchase id as the provider&#39;s request id, so a retry never sends airtime twice.</li>
 <li><strong>No hold expiry:</strong> if Blnk expired the hold while the provider had in fact delivered, the airtime would be free.</li>
-<li><strong>A fee or commission:</strong> make <code>To</code> a split with <code>ledger.Many(...)</code>. Splits capture only in full, which is all <code>Settle</code> does.</li>
+<li><strong>A fee or commission:</strong> make <code>To</code> a split with <code>humanblnk.Many(...)</code>. Splits capture only in full, which is all <code>Settle</code> does.</li>
 </ul>
 
   </article>

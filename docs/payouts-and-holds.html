@@ -64,15 +64,15 @@
 <li>An optional <strong>expiry</strong> cancels the hold if neither happens in time.</li>
 </ol>
 <h2 id="step-1-place-the-hold"><a class="anchor" href="#step-1-place-the-hold">Step 1: place the hold</a></h2>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">payout := ledger.Transaction{
-    Ref:         ledger.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
-    From:        ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
-    To:          ledger.Single(ledger.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">payout := humanblnk.Transaction{
+    Ref:         humanblnk.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
+    From:        humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
+    To:          humanblnk.Single(humanblnk.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
     Description: &#34;Withdrawal to GTBank ****1234&#34;,
 }
 hold, err := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
 if err != nil {
-    log.Fatal(err) // ledger.ErrInsufficientFunds: tell Ada
+    log.Fatal(err) // humanblnk.ErrInsufficientFunds: tell Ada
 }
 acct, _ := books.Accounts.Get(ctx, ada.ID)
 fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Total, acct.Held, acct.Available)
@@ -95,9 +95,9 @@ again, err := books.Holds.Capture(ctx, hold, money.Money{})
 fmt.Println(&#34;captured again:&#34;, again.Amount, err)</code></pre></figure>
 <h2 id="step-3-the-bank-rejects-one"><a class="anchor" href="#step-3-the-bank-rejects-one">Step 3: the bank rejects one</a></h2>
 <p><code>Cancel</code> gives the money back, and is safe to repeat. Capturing after a cancel is <code>ErrHoldSettled</code>:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">h2, err := books.Holds.Place(ctx, ledger.Transaction{
-    Ref:  ledger.Reference(&#34;payout&#34;, &#34;po_2_&#34;+demo.Run),
-    From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;5000&#34;)), To: ledger.Single(ledger.World, ngn(&#34;5000&#34;)),
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">h2, err := books.Holds.Place(ctx, humanblnk.Transaction{
+    Ref:  humanblnk.Reference(&#34;payout&#34;, &#34;po_2_&#34;+demo.Run),
+    From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;5000&#34;)), To: humanblnk.Single(humanblnk.World, ngn(&#34;5000&#34;)),
     Description: &#34;Withdrawal to a closed account&#34;,
 }, time.Time{}) // no expiry: only the bank&#39;s answer settles it
 if err != nil {
@@ -109,7 +109,7 @@ if err := books.Holds.Cancel(ctx, h2); err != nil {
 fmt.Println(&#34;bank rejected, cancelled | Ada:&#34;, demo.Available(ctx, books, ada.ID))
 fmt.Println(&#34;cancel again:&#34;, books.Holds.Cancel(ctx, h2)) // safe to repeat
 _, err = books.Holds.Capture(ctx, h2, money.Money{})
-fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, ledger.ErrHoldSettled))</code></pre></figure>
+fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, humanblnk.ErrHoldSettled))</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Call</th><th>Repeated</th></tr></thead><tbody>
 <tr><td><code>Capture(ctx, hold, sameAmount)</code></td><td>returns the same capture, moves nothing more</td></tr>
@@ -118,9 +118,9 @@ fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, ledger.Er
 </tbody></table></div>
 <h2 id="a-partial-capture"><a class="anchor" href="#a-partial-capture">A partial capture</a></h2>
 <p>The ride reserved ₦6,000 on the estimate; the fare was ₦4,200. ₦4,200 moves and the other ₦1,800 goes back to Ada at once:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">h3, err := books.Holds.Place(ctx, ledger.Transaction{
-    Ref:  ledger.Reference(&#34;ride&#34;, &#34;rd_&#34;+demo.Run),
-    From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;6000&#34;)), To: ledger.Single(ledger.SystemAccount(&#34;RidesClearing&#34;), ngn(&#34;6000&#34;)),
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">h3, err := books.Holds.Place(ctx, humanblnk.Transaction{
+    Ref:  humanblnk.Reference(&#34;ride&#34;, &#34;rd_&#34;+demo.Run),
+    From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;6000&#34;)), To: humanblnk.Single(humanblnk.SystemAccount(&#34;RidesClearing&#34;), ngn(&#34;6000&#34;)),
     Description: &#34;Ride estimate&#34;,
 }, time.Now().Add(2*time.Hour))
 if err != nil {
@@ -146,8 +146,8 @@ import (
     &#34;log&#34;
     &#34;time&#34;
 
+    &#34;github.com/otyang/humanblnk&#34;
     &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
-    &#34;github.com/otyang/humanblnk/ledger&#34;
     &#34;github.com/otyang/humanblnk/money&#34;
 )
 
@@ -158,15 +158,15 @@ func main() {
     ngn := func(v string) money.Money { return money.MustParse(v, demo.NGN) }
 
     // --- A withdrawal to Ada&#39;s bank account ---
-    payout := ledger.Transaction{
-        Ref:         ledger.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
-        From:        ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
-        To:          ledger.Single(ledger.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
+    payout := humanblnk.Transaction{
+        Ref:         humanblnk.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
+        From:        humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
+        To:          humanblnk.Single(humanblnk.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
         Description: &#34;Withdrawal to GTBank ****1234&#34;,
     }
     hold, err := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
     if err != nil {
-        log.Fatal(err) // ledger.ErrInsufficientFunds: tell Ada
+        log.Fatal(err) // humanblnk.ErrInsufficientFunds: tell Ada
     }
     acct, _ := books.Accounts.Get(ctx, ada.ID)
     fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Total, acct.Held, acct.Available)
@@ -187,9 +187,9 @@ func main() {
     fmt.Println(&#34;captured again:&#34;, again.Amount, err)
 
     // --- A withdrawal the bank rejects ---
-    h2, err := books.Holds.Place(ctx, ledger.Transaction{
-        Ref:  ledger.Reference(&#34;payout&#34;, &#34;po_2_&#34;+demo.Run),
-        From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;5000&#34;)), To: ledger.Single(ledger.World, ngn(&#34;5000&#34;)),
+    h2, err := books.Holds.Place(ctx, humanblnk.Transaction{
+        Ref:  humanblnk.Reference(&#34;payout&#34;, &#34;po_2_&#34;+demo.Run),
+        From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;5000&#34;)), To: humanblnk.Single(humanblnk.World, ngn(&#34;5000&#34;)),
         Description: &#34;Withdrawal to a closed account&#34;,
     }, time.Time{}) // no expiry: only the bank&#39;s answer settles it
     if err != nil {
@@ -201,12 +201,12 @@ func main() {
     fmt.Println(&#34;bank rejected, cancelled | Ada:&#34;, demo.Available(ctx, books, ada.ID))
     fmt.Println(&#34;cancel again:&#34;, books.Holds.Cancel(ctx, h2)) // safe to repeat
     _, err = books.Holds.Capture(ctx, h2, money.Money{})
-    fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, ledger.ErrHoldSettled))
+    fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, humanblnk.ErrHoldSettled))
 
     // --- A partial capture: a ride, estimated then charged ---
-    h3, err := books.Holds.Place(ctx, ledger.Transaction{
-        Ref:  ledger.Reference(&#34;ride&#34;, &#34;rd_&#34;+demo.Run),
-        From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;6000&#34;)), To: ledger.Single(ledger.SystemAccount(&#34;RidesClearing&#34;), ngn(&#34;6000&#34;)),
+    h3, err := books.Holds.Place(ctx, humanblnk.Transaction{
+        Ref:  humanblnk.Reference(&#34;ride&#34;, &#34;rd_&#34;+demo.Run),
+        From: humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;6000&#34;)), To: humanblnk.Single(humanblnk.SystemAccount(&#34;RidesClearing&#34;), ngn(&#34;6000&#34;)),
         Description: &#34;Ride estimate&#34;,
     }, time.Now().Add(2*time.Hour))
     if err != nil {

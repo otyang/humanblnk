@@ -7,5 +7,5 @@ USD wallet bln_43e7c258-a642-48a8-b640-e8bbb336ba87
 Get bln_29be359a-dd9e-4710-897d-f9d0e62d9a98: Total 0.00, Held 0.00, Available 0.00
 owner meta: map[customer_id:cus_ada_1792634712487858000 tier:gold]
 escrow pool bln_cac9aee4-41cc-461c-a516-4a97a9058816
-customer account without an owner: ledger: invalid request: a customer account needs an owner
-internal account in the wallets ledger: ledger: invalid request: ldg_9aa81032-0b45-49a0-bba3-79411336e08a holds customer accounts: use OpenForCustomer
+customer account without an owner: humanblnk: invalid request: a customer account needs an owner
+internal account in the wallets ledger: humanblnk: invalid request: ldg_9aa81032-0b45-49a0-bba3-79411336e08a holds customer accounts: use OpenForCustomer

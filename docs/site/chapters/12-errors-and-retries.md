@@ -7,15 +7,15 @@ logs. Always compare with `errors.Is`, never on the message.
 
 | Error | Means | What to do |
 | --- | --- | --- |
-| `ledger.ErrInsufficientFunds` | the source account can't cover it | tell the customer; nothing moved |
-| `ledger.ErrDuplicate` | this exact write already happened, applied | treat as **success**; the existing entry comes back with it |
-| `ledger.ErrReferenceUsed` | the reference holds something that didn't apply: a different transaction, or this one rolled back | nothing moved under it; record again under a **new** reference, or investigate if you didn't expect it |
-| `ledger.ErrNotFound` | no such account, entry or hold | check the id |
-| `ledger.ErrUnbalanced` | `From` and `To` don't add up to the same amount | fix the postings |
-| `ledger.ErrAlreadyReversed` | nothing (or not that much) is left to reverse | nothing to do; pass a `Ref` to get your own reversal back on a retry |
-| `ledger.ErrHoldSettled` | the hold was already captured, cancelled or expired | look at what happened before acting again |
-| `ledger.ErrInvalid` | refused before reaching Blnk: missing reference, negative amount, wrong ledger, … | a bug in the caller; don't retry |
-| `ledger.ErrReadBack` | `RecordAll` **applied**, but reading the entries back failed | don't record it again; look the entries up by reference |
+| `humanblnk.ErrInsufficientFunds` | the source account can't cover it | tell the customer; nothing moved |
+| `humanblnk.ErrDuplicate` | this exact write already happened, applied | treat as **success**; the existing entry comes back with it |
+| `humanblnk.ErrReferenceUsed` | the reference holds something that didn't apply: a different transaction, or this one rolled back | nothing moved under it; record again under a **new** reference, or investigate if you didn't expect it |
+| `humanblnk.ErrNotFound` | no such account, entry or hold | check the id |
+| `humanblnk.ErrUnbalanced` | `From` and `To` don't add up to the same amount | fix the postings |
+| `humanblnk.ErrAlreadyReversed` | nothing (or not that much) is left to reverse | nothing to do; pass a `Ref` to get your own reversal back on a retry |
+| `humanblnk.ErrHoldSettled` | the hold was already captured, cancelled or expired | look at what happened before acting again |
+| `humanblnk.ErrInvalid` | refused before reaching Blnk: missing reference, negative amount, wrong ledger, … | a bug in the caller; don't retry |
+| `humanblnk.ErrReadBack` | `RecordAll` **applied**, but reading the entries back failed | don't record it again; look the entries up by reference |
 | `money.ErrCurrencyMismatch` | an amount's currency doesn't match the account's | a bug in the caller |
 | `money.ErrUnknownCurrency` | a `Money` that was never set, or an unknown code | a bug in the caller |
 
@@ -41,13 +41,13 @@ are safe to repeat.
 
 ## References, in one rule
 
-Build every reference from **your own ids**, with `ledger.Reference`:
+Build every reference from **your own ids**, with `humanblnk.Reference`:
 
 | Call | Reference |
 | --- | --- |
-| `ledger.Reference("deposit", "paystack", paystackRef)` | `deposit:paystack:ps_123` |
-| `ledger.Reference("transfer", transferID)` | `transfer:tr_42` |
-| `ledger.Reference("payout", payoutID)` | `payout:po_7` |
+| `humanblnk.Reference("deposit", "paystack", paystackRef)` | `deposit:paystack:ps_123` |
+| `humanblnk.Reference("transfer", transferID)` | `transfer:tr_42` |
+| `humanblnk.Reference("payout", payoutID)` | `payout:po_7` |
 
 Never use a random value or a timestamp: a retry must produce the same
 reference, so Blnk can refuse to apply it twice.
