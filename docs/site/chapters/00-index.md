@@ -30,7 +30,7 @@ against a real Blnk; your ids will differ.
 
 ## What you need
 
-- Go 1.27.1 or later.
+- Go 1.24 or later.
 - A [Blnk Core](https://docs.blnkfinance.com) 0.15.6 you can reach. The
   examples use `$BLNK_URL`, or `http://localhost:5001` if it's unset. To run
   one locally, with its worker, Postgres and Redis:
@@ -76,4 +76,5 @@ BLNK_URL=https://blnk.example.com go run ./docs/examples/05-transfers
 **Running it:** [10. Watches and webhooks](10-watches-and-webhooks.md) ·
 [11. Reconciliation](11-reconciliation.md) ·
 [12. Errors and retries](12-errors-and-retries.md) ·
-[13. Cheat sheet](13-cheat-sheet.md)
+[13. Testing your service](13-testing.md) ·
+[14. Cheat sheet](14-cheat-sheet.md)

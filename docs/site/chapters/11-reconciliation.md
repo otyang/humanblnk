@@ -15,7 +15,7 @@ Paystack's own id (chapter 4), and Paystack's report carries that id.
 | --- | --- |
 | `Field` | `MatchAmount`, `MatchDate`, `MatchReference`, `MatchDescription`, `MatchCurrency` |
 | `Op` | `MatchEquals`, `MatchGreaterThan`, `MatchLessThan`, `MatchContains` (with `Pattern`) |
-| `Drift` | how far apart they may be: a fraction of the amount for `MatchAmount` (`0.01` is 1%), seconds for `MatchDate` |
+| `Drift` | how far apart they may be: a fraction of the amount for `MatchAmount` (`0.01` is 1%), seconds for `MatchDate`, and for `MatchContains` a percentage of the longer text in edits (`10` is 10%) |
 
 ## Step 2: run it on the report
 

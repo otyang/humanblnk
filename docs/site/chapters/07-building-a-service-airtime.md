@@ -26,7 +26,8 @@ of a prepaid float is used.
 ## Step 1: depend on interfaces
 
 The package names the small part of humanblnk it uses, so tests can pass a
-fake. `hb.Holds` satisfies `Holds`.
+fake. `hb.Holds` satisfies `Holds`. Chapter 13 tests this service against an
+in-memory Blnk instead, so only the provider is faked, not humanblnk.
 
 {{code 07-airtime/airtime/airtime.go interfaces}}
 

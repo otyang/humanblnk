@@ -39,7 +39,7 @@ func CodeErr(code string) error {
 		return types.ErrDuplicate
 	case blnk.CodeAlreadyRefunded:
 		return types.ErrAlreadyReversed
-	case blnk.CodeAlreadyCommitted, blnk.CodeAlreadyVoided, blnk.CodeNotInflight:
+	case blnk.CodeAlreadyCommitted, blnk.CodeAlreadyVoided, blnk.CodeNotInflight, blnk.CodeCommitAmountExceeded:
 		return types.ErrHoldSettled
 	case blnk.CodeTxnNotFound, blnk.CodeBalanceNotFound, blnk.CodeLedgerNotFound, blnk.CodeIdentityNotFound:
 		return types.ErrNotFound

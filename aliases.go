@@ -110,6 +110,21 @@ const (
 	StatusQueued   = types.StatusQueued
 )
 
+// Webhook kinds, in Event.Kind.
+const (
+	EventBalanceMonitor         = types.EventBalanceMonitor
+	EventTransactionApplied     = types.EventTransactionApplied
+	EventTransactionInflight    = types.EventTransactionInflight
+	EventTransactionVoid        = types.EventTransactionVoid
+	EventTransactionRejected    = types.EventTransactionRejected
+	EventTransactionQueued      = types.EventTransactionQueued
+	EventTransactionScheduled   = types.EventTransactionScheduled
+	EventIdentityMetaUpdated    = types.EventIdentityMetaUpdated
+	EventBalanceMetaUpdated     = types.EventBalanceMetaUpdated
+	EventTransactionMetaUpdated = types.EventTransactionMetaUpdated
+	EventLedgerMetaUpdated      = types.EventLedgerMetaUpdated
+)
+
 // Errors. Currency problems are money.ErrCurrencyMismatch and
 // money.ErrUnknownCurrency.
 var (

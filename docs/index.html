@@ -47,7 +47,8 @@
     <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
@@ -70,7 +71,7 @@
 <p>Every line of Go on this site is taken from the example programs in <a href="https://github.com/otyang/humanblnk/tree/main/docs/examples" target="_blank" rel="noopener"><code>docs/examples</code></a>, which are compiled with the rest of the project. If the API changes, an example that no longer fits stops compiling, so what you read here always matches the source. The <strong>Output</strong> tabs show what each example printed against a real Blnk; your ids will differ.</p>
 <h2 id="what-you-need"><a class="anchor" href="#what-you-need">What you need</a></h2>
 <ul>
-<li>Go 1.27.1 or later.</li>
+<li>Go 1.24 or later.</li>
 <li>A <a href="https://docs.blnkfinance.com" target="_blank" rel="noopener">Blnk Core</a> 0.15.6 you can reach. The examples use <code>$BLNK_URL</code>, or <code>http://localhost:5001</code> if it&#39;s unset. To run one locally, with its worker, Postgres and Redis:</li>
 </ul>
 <figure class="code"><figcaption><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-sh">  docker compose -f deploy/docker-compose.yml up -d</code></pre></figure>
@@ -88,7 +89,7 @@
 <h2 id="chapters"><a class="anchor" href="#chapters">Chapters</a></h2>
 <p><strong>Foundations:</strong> <a href="setup.html">1. Setting up</a> · <a href="customers-and-accounts.html">2. Customers and accounts</a> · <a href="money.html">3. Money</a></p>
 <p><strong>Moving money:</strong> <a href="deposits.html">4. Deposits</a> · <a href="transfers-and-fees.html">5. Transfers and fees</a> · <a href="payouts-and-holds.html">6. Payouts and holds</a> · <a href="building-a-service.html">7. Building a service: airtime</a> · <a href="refunds-and-reversals.html">8. Refunds and reversals</a> · <a href="currency-exchange.html">9. Currency exchange</a></p>
-<p><strong>Running it:</strong> <a href="watches-and-webhooks.html">10. Watches and webhooks</a> · <a href="reconciliation.html">11. Reconciliation</a> · <a href="errors-and-retries.html">12. Errors and retries</a> · <a href="cheat-sheet.html">13. Cheat sheet</a></p>
+<p><strong>Running it:</strong> <a href="watches-and-webhooks.html">10. Watches and webhooks</a> · <a href="reconciliation.html">11. Reconciliation</a> · <a href="errors-and-retries.html">12. Errors and retries</a> · <a href="testing.html">13. Testing your service</a> · <a href="cheat-sheet.html">14. Cheat sheet</a></p>
 
   </article>
   <nav class="pager" aria-label="Previous and next">

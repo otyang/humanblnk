@@ -162,15 +162,19 @@ func TestCreatesAreNotRetriedWhenTheyMayHaveApplied(t *testing.T) {
 	} {
 		for _, tc := range []struct {
 			status   int
+			body     string
 			attempts int
 		}{
-			{http.StatusGatewayTimeout, 1}, // may have created it: a retry would make a second
-			{http.StatusServiceUnavailable, 3},
+			{http.StatusGatewayTimeout, "", 1},     // may have created it: a retry would make a second
+			{http.StatusServiceUnavailable, "", 1}, // a proxy's 503 may come after forwarding it
+			{http.StatusServiceUnavailable, `{"error_detail":{"code":"QUEUE_BACKPRESSURE","message":"busy"}}`, 3}, // Blnk's own: it didn't act
+			{http.StatusTooManyRequests, "", 3},
 		} {
 			n := 0
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				n++
 				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
 			}))
 			err := call(blnk.New(srv.URL, blnk.WithRetries(2, time.Millisecond)))
 			srv.Close()
@@ -204,5 +208,20 @@ func TestInflightPreviewRefusesWhenDryRunIgnored(t *testing.T) {
 	_, err := c.Inflight.Preview(context.Background(), "txn_1", blnk.UpdateInflightRequest{Status: blnk.ActionCommit})
 	if err == nil || !strings.Contains(err.Error(), "not honoured") {
 		t.Fatalf("want dry_run-not-honoured error, got %v", err)
+	}
+}
+
+func TestBigIntRefusesFractions(t *testing.T) {
+	for in, want := range map[string]string{`100`: "100", `"100"`: "100", `1e+06`: "1000000", `100.0`: "100", `null`: "0"} {
+		var b blnk.BigInt
+		if err := json.Unmarshal([]byte(in), &b); err != nil || b.String() != want {
+			t.Errorf("%s: %s %v, want %s", in, b.String(), err, want)
+		}
+	}
+	for _, in := range []string{`100.5`, `"1.25"`, `1e-3`} {
+		var b blnk.BigInt
+		if err := json.Unmarshal([]byte(in), &b); err == nil {
+			t.Errorf("%s: accepted as %s", in, b.String())
+		}
 	}
 }

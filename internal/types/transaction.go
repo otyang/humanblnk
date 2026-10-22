@@ -102,3 +102,18 @@ type Event struct {
 	Account AccountRef      // for "balance.monitor": the account it watches
 	Data    json.RawMessage // the event's data as Blnk sent it
 }
+
+// The kinds of webhook Blnk sends, in Event.Kind.
+const (
+	EventBalanceMonitor         = "balance.monitor" // a watch's condition holds
+	EventTransactionApplied     = "transaction.applied"
+	EventTransactionInflight    = "transaction.inflight" // a hold placed
+	EventTransactionVoid        = "transaction.void"     // a hold released
+	EventTransactionRejected    = "transaction.rejected"
+	EventTransactionQueued      = "transaction.queued"
+	EventTransactionScheduled   = "transaction.scheduled"
+	EventIdentityMetaUpdated    = "identity.metadata.updated"
+	EventBalanceMetaUpdated     = "balance.metadata.updated"
+	EventTransactionMetaUpdated = "transaction.metadata.updated"
+	EventLedgerMetaUpdated      = "ledger.metadata.updated"
+)

@@ -47,7 +47,8 @@
     <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html" class="current" aria-current="page"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
@@ -73,7 +74,7 @@ if err != nil {
 <thead><tr><th><code>Criterion</code></th><th></th></tr></thead><tbody>
 <tr><td><code>Field</code></td><td><code>MatchAmount</code>, <code>MatchDate</code>, <code>MatchReference</code>, <code>MatchDescription</code>, <code>MatchCurrency</code></td></tr>
 <tr><td><code>Op</code></td><td><code>MatchEquals</code>, <code>MatchGreaterThan</code>, <code>MatchLessThan</code>, <code>MatchContains</code> (with <code>Pattern</code>)</td></tr>
-<tr><td><code>Drift</code></td><td>how far apart they may be: a fraction of the amount for <code>MatchAmount</code> (<code>0.01</code> is 1%), seconds for <code>MatchDate</code></td></tr>
+<tr><td><code>Drift</code></td><td>how far apart they may be: a fraction of the amount for <code>MatchAmount</code> (<code>0.01</code> is 1%), seconds for <code>MatchDate</code>, and for <code>MatchContains</code> a percentage of the longer text in edits (<code>10</code> is 10%)</td></tr>
 </tbody></table></div>
 <h2 id="step-2-run-it-on-the-report"><a class="anchor" href="#step-2-run-it-on-the-report">Step 2: run it on the report</a></h2>
 <p>Up to 10,000 lines can be sent directly with <code>RunLines</code>:</p>

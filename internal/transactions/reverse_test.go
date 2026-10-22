@@ -60,25 +60,48 @@ func TestFullReversalRepeatReturnsIt(t *testing.T) {
 	}
 }
 
-// Reversing a split undoes every posting in one entry.
+// Reversing a split undoes every posting in one entry. Its sources then mix
+// a customer and @FeeIncome, which may have to go below zero once the fees
+// were swept: so it goes as an atomic batch, one item per source, each
+// allowed to overdraw only if its source is a system account.
 func TestFullReversalOfASplit(t *testing.T) {
 	s, f := newService(t)
 	f.On("GET /transactions/split1", 404, blnkfake.APIError("TXN_NOT_FOUND"))
+	split := `"meta_data":{"ledger_split_postings":"2","reversal_of":"split1","reversal_ref":"refund:o2"}`
 	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
-		if c.Body["filters"].([]any)[0].(map[string]any)["field"] == "parent_transaction" {
+		fl := c.Body["filters"].([]any)[0].(map[string]any)
+		switch {
+		case fl["field"] == "parent_transaction" && fl["value"] == "split1":
 			return 200, `[{"transaction_id":"l1","reference":"pay:2-1","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2"},
 				{"transaction_id":"l2","reference":"pay:2-2","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd","destination":"@FeeIncome"}]`
+		case fl["field"] == "parent_transaction" && fl["value"] == "bulk_1":
+			return 200, `[{"transaction_id":"i1","reference":"reversal:split1:1-1","parent_transaction":"bulk_1","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd2","destination":"bln_usd",` + split + `},
+				{"transaction_id":"i2","reference":"reversal:split1:1-2","parent_transaction":"bulk_1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_fee","destination":"bln_usd",` + split + `}]`
 		}
 		return 200, `[]` // no reversals yet
 	})
-	f.On("POST /transactions", 201, `{"transaction_id":"rv","status":"APPLIED","currency":"USD","precise_amount":10000,"precision":100,"destination":"bln_usd","sources":[{"identifier":"bln_usd2","precise_distribution":"9500"},{"identifier":"@FeeIncome","precise_distribution":"500"}]}`)
+	f.On("POST /transactions/bulk", 201, `{"batch_id":"bulk_1","status":"applied","transaction_count":2}`)
+	f.On("GET /transactions/reference/reversal:split1:1-1", 200, `{"transaction_id":"i1","parent_transaction":"bulk_1",`+split+`}`)
 	e, err := s.Reverse(context.Background(), types.Reversal{Ref: "refund:o2", Entry: "split1", Reason: "x"})
-	if err != nil || len(e.From) != 2 || e.Amount.String() != "100.00" {
+	if err != nil || e.ID != "bulk_1" || len(e.From) != 2 || e.Amount.String() != "100.00" {
 		t.Fatalf("%+v %v", e, err)
 	}
-	got := f.Sent("POST /transactions")[0].Body
-	if got["destination"] != "bln_usd" || len(got["sources"].([]any)) != 2 || got["reference"] != "reversal:split1:1" {
-		t.Fatalf("sent %v", got)
+	if n := len(f.Sent("POST /transactions")); n != 0 {
+		t.Fatalf("sent %d single transactions, want the batch only", n)
+	}
+	batch := f.Sent("POST /transactions/bulk")[0].Body
+	items := batch["transactions"].([]any)
+	if batch["atomic"] != true || len(items) != 2 {
+		t.Fatalf("batch %v", batch)
+	}
+	for i, want := range []struct {
+		ref, source string
+		overdraft   any
+	}{{"reversal:split1:1-1", "bln_usd2", nil}, {"reversal:split1:1-2", "@FeeIncome", true}} {
+		it := items[i].(map[string]any)
+		if it["reference"] != want.ref || it["source"] != want.source || it["destination"] != "bln_usd" || it["allow_overdraft"] != want.overdraft {
+			t.Fatalf("item %d %v, want %+v", i, it, want)
+		}
 	}
 }
 
@@ -149,12 +172,13 @@ func TestRolledBackEntryCantBeReversed(t *testing.T) {
 // do; none of it counts, and a retry with the same Ref reverses again.
 func TestRolledBackSplitReversalDoesntCount(t *testing.T) {
 	s, f := newService(t)
+	f.On("GET /balances/bln_usd3", 200, `{"balance_id":"bln_usd3","currency":"USD","balance":0}`)
 	f.On("GET /transactions/split1", 404, blnkfake.APIError("TXN_NOT_FOUND"))
 	meta := `"meta_data":{"reversal_of":"split1","reversal_ref":"refund:o2","reversal_reason":"x","ledger_split_postings":"2"}`
 	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
 		if c.Body["filters"].([]any)[0].(map[string]any)["field"] == "parent_transaction" {
 			return 200, `[{"transaction_id":"l1","reference":"pay:2-1","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2","meta_data":{"ledger_split_postings":"2"}},
-				{"transaction_id":"l2","reference":"pay:2-2","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd","destination":"@FeeIncome","meta_data":{"ledger_split_postings":"2"}}]`
+				{"transaction_id":"l2","reference":"pay:2-2","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd","destination":"bln_usd3","meta_data":{"ledger_split_postings":"2"}}]`
 		}
 		// Reversal 1's first posting applied, its second failed; Blnk
 		// refunded the first (and queued a copy), all with its metadata.
@@ -163,7 +187,7 @@ func TestRolledBackSplitReversalDoesntCount(t *testing.T) {
 			{"transaction_id":"rbq","reference":"rv1_refund_q","parent_transaction":"rb","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2",` + meta + `}]`
 	})
 	f.On("GET /transactions/reference/rv1_refund", 200, `{"transaction_id":"rb"}`)
-	f.On("POST /transactions", 201, `{"transaction_id":"rv2","status":"APPLIED","currency":"USD","precise_amount":10000,"precision":100,"destination":"bln_usd","sources":[{"identifier":"bln_usd2","precise_distribution":"9500"},{"identifier":"@FeeIncome","precise_distribution":"500"}]}`)
+	f.On("POST /transactions", 201, `{"transaction_id":"rv2","status":"APPLIED","currency":"USD","precise_amount":10000,"precision":100,"destination":"bln_usd","sources":[{"identifier":"bln_usd2","precise_distribution":"9500"},{"identifier":"bln_usd3","precise_distribution":"500"}]}`)
 	e, err := s.Reverse(context.Background(), types.Reversal{Ref: "refund:o2", Entry: "split1", Reason: "x"})
 	if err != nil || e.ID != "rv2" {
 		t.Fatalf("%+v %v", e, err)
@@ -223,5 +247,24 @@ func TestOnlyNumberedReversalsCount(t *testing.T) {
 	e, err := s.Reverse(context.Background(), types.Reversal{Ref: "refund:o1", Entry: "txn_1", Reason: "x"})
 	if err != nil || e.ID != "txn_r" {
 		t.Fatalf("%+v %v: the copy was taken for a reversal", e, err)
+	}
+}
+
+// The client retried a reversal whose first attempt applied: Blnk refuses
+// the reference, and the reversal under it is this one, so it comes back
+// rather than ErrAlreadyReversed.
+func TestFullReversalAppliedByAClientRetry(t *testing.T) {
+	s, f := newService(t)
+	reversals(f, "") // the recount, before the attempt, finds none
+	f.On("POST /transactions", 400, blnkfake.APIError("TXN_DUPLICATE_REFERENCE"))
+	f.On("GET /transactions/reference/reversal:txn_1:1", 200, `{"transaction_id":"txn_r"}`)
+	f.On("GET /transactions/txn_r", 200, `{"transaction_id":"txn_r","reference":"reversal:txn_1:1","status":"APPLIED","currency":"USD","precise_amount":10000,"precision":100,
+		"source":"bln_usd2","destination":"bln_usd","meta_data":{"reversal_of":"txn_1","reversal_ref":"","reversal_reason":"refund"}}`)
+	e, err := s.Reverse(context.Background(), types.Reversal{Entry: "txn_1", Reason: "refund"})
+	if err != nil || e.ID != "txn_r" {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if n := len(f.Sent("POST /transactions")); n != 1 {
+		t.Fatalf("%d attempts, want 1", n)
 	}
 }

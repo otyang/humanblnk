@@ -51,7 +51,8 @@ var chapters = []chapter{
 	{"10-watches-and-webhooks.md", "watches-and-webhooks", "Watches and webhooks", "Running it"},
 	{"11-reconciliation.md", "reconciliation", "Reconciliation", "Running it"},
 	{"12-errors-and-retries.md", "errors-and-retries", "Errors and retries", "Running it"},
-	{"13-cheat-sheet.md", "cheat-sheet", "Cheat sheet", "Running it"},
+	{"13-testing.md", "testing", "Testing your service", "Running it"},
+	{"14-cheat-sheet.md", "cheat-sheet", "Cheat sheet", "Running it"},
 }
 
 // navGroup is one section of the sidebar.

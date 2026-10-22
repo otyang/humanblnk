@@ -53,6 +53,23 @@ func (s *Service) Reverse(ctx context.Context, r types.Reversal) (types.Entry, e
 	if err != nil {
 		return types.Entry{}, err
 	}
+	if original.Status == types.StatusHeld {
+		// A hold: reverse what its capture moved. A single hold's capture
+		// has its own id, which counts as the entry from here on, so the
+		// hold's id and the capture's reach the same reversals.
+		captured, ok, err := s.k.Captured(ctx, original)
+		if err != nil {
+			return types.Entry{}, err
+		}
+		if !ok {
+			return types.Entry{}, core.Invalid("hold %s hasn't been captured: Cancel it to release the money", r.Entry)
+		}
+		original, r.Entry = captured, captured.ID
+	} else if hold, ok, err := s.k.SplitHoldOf(ctx, r.Entry); err != nil {
+		return types.Entry{}, err
+	} else if ok {
+		return types.Entry{}, core.Invalid("%s captures part of split hold %s: reverse the hold", r.Entry, hold)
+	}
 	if original.Status != types.StatusApplied {
 		return types.Entry{}, core.Invalid("entry %s is %s; only applied entries can be reversed (Cancel a hold)", r.Entry, original.Status)
 	}
@@ -71,7 +88,11 @@ func (s *Service) Reverse(ctx context.Context, r types.Reversal) (types.Entry, e
 			return types.Entry{}, err
 		}
 		if ref, ok := prior.byRef[r.Ref]; ok && r.Ref != "" {
-			return s.k.GetEntryByReference(ctx, ref) // this reversal already happened
+			done, err := s.k.GetEntryByReference(ctx, ref) // this reversal already happened
+			if err == nil && r.Amount.Valid() && !done.Amount.Equal(r.Amount) {
+				return types.Entry{}, fmt.Errorf("%w: %s reversed %s %s of %s, not %s", types.ErrReferenceUsed, r.Ref, done.Amount, done.Amount.Code(), r.Entry, r.Amount)
+			}
+			return done, err
 		}
 		left, err := original.Amount.Sub(prior.applied)
 		if err != nil {
@@ -109,8 +130,14 @@ func (s *Service) Reverse(ctx context.Context, r types.Reversal) (types.Entry, e
 		tried = max(prior.highest+1, tried+1)
 		t.Ref = types.Reference("reversal", r.Entry, strconv.Itoa(tried))
 		e, err := s.Record(ctx, t)
+		if errors.Is(err, types.ErrDuplicate) && e.Meta[metaReversalRef] == r.Ref {
+			// This very reversal: the client retried a request whose first
+			// attempt applied. (Without a Ref, another full reversal made at
+			// the same moment is the same reversal too.)
+			return e, nil
+		}
 		if errors.Is(err, types.ErrDuplicate) || errors.Is(err, types.ErrReferenceUsed) {
-			continue // the number is taken; perhaps by this reversal, which the recount finds
+			continue // the number is taken by another reversal; recount and try the next
 		}
 		return e, err
 	}
@@ -132,7 +159,8 @@ func (s *Service) reversalsOf(ctx context.Context, e types.Entry) (reversals, er
 	for offset := 0; ; offset += 100 {
 		txs, _, err := s.k.C.Transactions.Filter(ctx, blnk.FilterRequest{
 			Filters: []blnk.Filter{{Field: "meta_data." + metaReversalOf, Operator: "eq", Value: e.ID}},
-			Limit:   100, Offset: offset,
+			// Oldest first, so a reversal made while paging only adds to the end.
+			SortBy: "created_at", SortOrder: "asc", Limit: 100, Offset: offset,
 		})
 		if err != nil {
 			return out, core.MapErr(err)

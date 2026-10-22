@@ -107,7 +107,17 @@ type Option func(*Client)
 func WithAPIKey(key string) Option { return func(c *Client) { c.apiKey = key } }
 
 // WithHTTPClient replaces the default *http.Client.
-func WithHTTPClient(h *http.Client) Option { return func(c *Client) { c.http = h } }
+//
+// The Client keeps the API key on its own host by refusing redirects
+// elsewhere, unless h sets its own CheckRedirect, which then decides. nil
+// keeps the default client.
+func WithHTTPClient(h *http.Client) Option {
+	return func(c *Client) {
+		if h != nil {
+			c.http = h
+		}
+	}
+}
 
 // WithRetries sets how many times retryable failures are retried
 // (423 lock contention, 429 rate limit, 503 queue backpressure, 502/504 and
@@ -324,7 +334,7 @@ func (c *Client) doRaw(ctx context.Context, method, path, contentType string, pa
 		}
 
 		apiErr := parseAPIError(resp.StatusCode, raw)
-		if retryable(resp.StatusCode) && (repeatable || refused(resp.StatusCode)) {
+		if retryable(resp.StatusCode) && (repeatable || refused(apiErr)) {
 			lastErr = apiErr
 			retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 			continue
@@ -354,11 +364,19 @@ func parseRetryAfter(h string, now time.Time) time.Duration {
 	return min(max(d, 0), maxRetryAfter)
 }
 
-// refused reports whether a retryable status shows Blnk turned the request
-// away without acting on it (as opposed to a gateway that may have passed it on).
-func refused(status int) bool {
-	return status == http.StatusLocked || status == http.StatusTooManyRequests ||
-		status == http.StatusServiceUnavailable
+// refused reports whether a retryable answer shows Blnk turned the request
+// away without acting on it, as opposed to a gateway that may have passed it
+// on. A 423 or 429 is never sent after acting. A 503 is trusted only when it
+// is Blnk's own queue backpressure: a proxy can answer 503 after forwarding
+// the request (Envoy's "upstream reset", say).
+func refused(e *APIError) bool {
+	switch e.Status {
+	case http.StatusLocked, http.StatusTooManyRequests:
+		return true
+	case http.StatusServiceUnavailable:
+		return e.Code == CodeQueueBackpressure
+	}
+	return false
 }
 
 func esc(s string) string { return url.PathEscape(s) }

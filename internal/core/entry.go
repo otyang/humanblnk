@@ -1,12 +1,15 @@
 package core
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"math/big"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/internal/types"
@@ -42,6 +45,10 @@ func (k *Core) GetEntry(ctx context.Context, id string) (types.Entry, error) {
 		return types.Entry{}, MapErr(err)
 	}
 	e, err := Gather(id, children)
+	if errors.Is(err, errNotASplit) {
+		// The children of a batch, say: id names no entry.
+		return types.Entry{}, fmt.Errorf("%w: %s is not an entry: %w", types.ErrNotFound, id, err)
+	}
 	if err != nil {
 		return types.Entry{}, err
 	}
@@ -65,17 +72,35 @@ func (k *Core) MarkRolledBack(ctx context.Context, e types.Entry, ids ...string)
 		return e, nil
 	}
 	for _, id := range ids {
-		_, err := k.C.Transactions.GetByReference(ctx, id+"_refund")
-		if blnk.IsNotFound(err) {
-			continue
-		}
+		_, found, err := k.ByReference(ctx, id+"_refund")
 		if err != nil {
-			return types.Entry{}, MapErr(err)
+			return types.Entry{}, err
 		}
-		e.Status = types.StatusRejected
-		return e, nil
+		if found {
+			e.Status = types.StatusRejected
+			return e, nil
+		}
 	}
 	return e, nil
+}
+
+// ByReference is the transaction recorded under ref, if any. It filters on
+// the reference rather than using GET /transactions/reference/{ref}: Blnk's
+// router decodes an escaped "/" there and answers a bare 404, so a reference
+// such as "INV/2026/0042" would look unused when it isn't. The filter also
+// returns the full record, where the reference endpoint leaves fields out.
+func (k *Core) ByReference(ctx context.Context, ref string) (*blnk.Transaction, bool, error) {
+	txs, _, err := k.C.Transactions.Filter(ctx, blnk.FilterRequest{
+		Filters: []blnk.Filter{{Field: "reference", Operator: "eq", Value: ref}},
+		Limit:   1,
+	})
+	if err != nil {
+		return nil, false, MapErr(err)
+	}
+	if len(txs) == 0 {
+		return nil, false, nil
+	}
+	return &txs[0], true, nil
 }
 
 // Matches reports whether e moves the same amounts through the same
@@ -148,6 +173,11 @@ func totals(ps []types.Posting) map[types.AccountRef]money.Money {
 // ErrReferenceUsed if the reference holds anything else.
 func (k *Core) Existing(ctx context.Context, t types.Transaction) (types.Entry, error) {
 	e, err := k.GetEntryByReference(ctx, t.Ref)
+	if errors.Is(err, types.ErrNotFound) {
+		// Blnk holds the reference, but no entry is recorded under it: it
+		// holds "<ref>-1" of something else, such as a single transaction.
+		return types.Entry{}, fmt.Errorf("%w: %s is held by something not recorded under it", types.ErrReferenceUsed, t.Ref)
+	}
 	if err != nil {
 		// Not ErrDuplicate: that would tell the caller the money moved.
 		return types.Entry{}, fmt.Errorf("humanblnk: reference %s is already used, and looking it up failed (check again before retrying): %w", t.Ref, err)
@@ -164,25 +194,60 @@ func (k *Core) Existing(ctx context.Context, t types.Transaction) (types.Entry, 
 
 // GetEntryByReference fetches the entry recorded under ref.
 func (k *Core) GetEntryByReference(ctx context.Context, ref string) (types.Entry, error) {
-	tx, err := k.C.Transactions.GetByReference(ctx, ref)
-	if err == nil {
-		return k.GetEntry(ctx, tx.GetID()) // the reference lookup returns only some fields
+	tx, found, err := k.ByReference(ctx, ref)
+	if err != nil {
+		return types.Entry{}, err
 	}
-	if !blnk.IsNotFound(err) {
-		return types.Entry{}, MapErr(err)
+	if found {
+		return k.GetEntry(ctx, tx.GetID())
 	}
+	notFound := fmt.Errorf("%w: no entry with reference %s", types.ErrNotFound, ref)
 	// A split's postings carry ref-1, ref-2, … and name the split as parent.
-	// A batch's items name the batch as parent too, so check that what is
-	// gathered is the split recorded under ref, not a batch holding "ref-1".
-	first, ferr := k.C.Transactions.GetByReference(ctx, ref+"-1")
-	if ferr != nil || first.ParentTransaction == "" {
-		return types.Entry{}, MapErr(err)
+	// A batch's items name the batch as parent too, so only postings
+	// humanblnk stamped as a split's count: a batch of "ref-1" and "ref-2"
+	// is not an entry recorded under ref.
+	first, found, err := k.splitPosting(ctx, ref)
+	if err != nil || !found {
+		return types.Entry{}, cmp.Or(err, notFound)
 	}
-	e, gerr := k.GetEntry(ctx, first.ParentTransaction)
-	if errors.Is(gerr, errNotASplit) || (gerr == nil && e.Ref != ref) {
-		return types.Entry{}, MapErr(err)
+	e, err := k.GetEntry(ctx, first.ParentTransaction)
+	if errors.Is(err, errNotASplit) || (err == nil && e.Ref != ref) {
+		return types.Entry{}, notFound
 	}
-	return e, gerr
+	return e, err
+}
+
+// splitPosting is the first posting of a split recorded under ref, if any.
+func (k *Core) splitPosting(ctx context.Context, ref string) (*blnk.Transaction, bool, error) {
+	first, found, err := k.ByReference(ctx, ref+"-1")
+	if err != nil || !found {
+		return nil, false, err
+	}
+	if _, stamped := first.MetaData[MetaSplitPostings]; !stamped || first.ParentTransaction == "" {
+		return nil, false, nil
+	}
+	return first, true, nil
+}
+
+// ReferenceTaken refuses a reference another kind of entry already holds.
+// Blnk records a split's postings as ref-1, ref-2, …, never ref itself, so it
+// would accept a single transaction under ref after a split, or a split
+// after a single: two different writes under one reference.
+func (k *Core) ReferenceTaken(ctx context.Context, ref string, split bool) error {
+	var taken bool
+	var err error
+	if split {
+		_, taken, err = k.ByReference(ctx, ref)
+	} else {
+		_, taken, err = k.splitPosting(ctx, ref)
+	}
+	if err != nil {
+		return err
+	}
+	if taken {
+		return fmt.Errorf("%w: %s holds a different transaction", types.ErrReferenceUsed, ref)
+	}
+	return nil
 }
 
 // errNotASplit is transactions gathered under one parent that aren't the
@@ -238,8 +303,20 @@ func side(ds []blnk.Distribution, account string, amount money.Money) ([]types.P
 // splitSuffix is the "-n" Blnk adds to each posting's reference in a split.
 var splitSuffix = regexp.MustCompile(`-[0-9]+$`)
 
-// Gather rebuilds a split from the transactions Blnk recorded for its postings.
+// postingNumber is n in a split posting's "<ref>-n", or 0.
+func postingNumber(ref string) int {
+	n, _ := strconv.Atoi(strings.TrimPrefix(splitSuffix.FindString(ref), "-"))
+	return n
+}
+
+// Gather rebuilds a split from the transactions Blnk recorded for its
+// postings, in the order they were asked for ("-1", "-2", …): Blnk stamps
+// them with one created_at, so it lists them in no set order.
 func Gather(id string, children []blnk.Transaction) (types.Entry, error) {
+	children = slices.Clone(children)
+	slices.SortStableFunc(children, func(a, b blnk.Transaction) int {
+		return cmp.Compare(postingNumber(a.Reference), postingNumber(b.Reference))
+	})
 	e := types.Entry{ID: id}
 	from, to := map[types.AccountRef]money.Money{}, map[types.AccountRef]money.Money{}
 	var order struct{ from, to []types.AccountRef }
@@ -292,4 +369,96 @@ func addTo(totals map[types.AccountRef]money.Money, order *[]types.AccountRef, p
 	sum, err := prev.Add(p.Amount)
 	totals[p.Account] = sum
 	return err
+}
+
+// Captured is what hold held (an entry read with GetEntry, StatusHeld)
+// moved once captured, as one entry Reverse can undo:
+//
+//   - A single hold's capture is its own transaction, so that is returned,
+//     with its own id.
+//   - A split hold is captured a posting at a time, each capture the child
+//     of a posting, so the captures are gathered under the hold's id.
+//
+// ok is false if nothing, or for a split not every posting, was captured.
+func (k *Core) Captured(ctx context.Context, held types.Entry) (types.Entry, bool, error) {
+	children := func(parent, status string) ([]blnk.Transaction, error) {
+		txs, _, err := k.C.Transactions.Filter(ctx, blnk.FilterRequest{
+			Filters: []blnk.Filter{
+				{Field: "parent_transaction", Operator: "eq", Value: parent},
+				{Field: "status", Operator: "eq", Value: status},
+			},
+			Limit: 100,
+		})
+		return txs, MapErr(err)
+	}
+	if len(held.From) == 1 && len(held.To) == 1 {
+		caps, err := children(held.ID, types.StatusApplied)
+		if err != nil || len(caps) == 0 {
+			return types.Entry{}, false, err
+		}
+		e, err := Entry(&caps[0])
+		return e, err == nil, err
+	}
+	legs, err := children(held.ID, types.StatusHeld)
+	if err != nil || len(legs) == 0 {
+		return types.Entry{}, false, err
+	}
+	out := types.Entry{ID: held.ID, Ref: held.Ref, Status: types.StatusApplied, Description: held.Description, Meta: held.Meta, CreatedAt: held.CreatedAt}
+	from, to := map[types.AccountRef]money.Money{}, map[types.AccountRef]money.Money{}
+	var order struct{ from, to []types.AccountRef }
+	for i := range legs {
+		caps, err := children(legs[i].GetID(), types.StatusApplied)
+		if err != nil || len(caps) == 0 {
+			return types.Entry{}, false, err
+		}
+		c, err := Entry(&caps[0])
+		if err != nil {
+			return types.Entry{}, false, err
+		}
+		if out.Amount.Valid() {
+			if out.Amount, err = out.Amount.Add(c.Amount); err != nil {
+				return types.Entry{}, false, err
+			}
+		} else {
+			out.Amount = c.Amount
+		}
+		if err := addTo(from, &order.from, c.From[0]); err != nil {
+			return types.Entry{}, false, err
+		}
+		if err := addTo(to, &order.to, c.To[0]); err != nil {
+			return types.Entry{}, false, err
+		}
+	}
+	for _, a := range order.from {
+		out.From = append(out.From, types.Posting{Account: a, Amount: from[a]})
+	}
+	for _, a := range order.to {
+		out.To = append(out.To, types.Posting{Account: a, Amount: to[a]})
+	}
+	return out, true, nil
+}
+
+// SplitHoldOf is the split hold whose posting transaction id captured, if
+// it is such a capture. A captured split hold is reversed as a whole, under
+// its own id; reversing a posting's capture on its own would let the same
+// money be reversed twice, under two ids.
+func (k *Core) SplitHoldOf(ctx context.Context, id string) (string, bool, error) {
+	tx, err := k.C.Transactions.Get(ctx, id)
+	if blnk.IsNotFound(err) {
+		return "", false, nil // a split or batch: its id isn't a transaction
+	}
+	if err != nil || tx.ParentTransaction == "" {
+		return "", false, MapErr(err)
+	}
+	posting, err := k.C.Transactions.Get(ctx, tx.ParentTransaction)
+	if blnk.IsNotFound(err) {
+		return "", false, nil // its parent is a split or batch, not a hold
+	}
+	if err != nil {
+		return "", false, MapErr(err)
+	}
+	if posting.Status == types.StatusHeld && posting.ParentTransaction != "" {
+		return posting.ParentTransaction, true, nil
+	}
+	return "", false, nil
 }

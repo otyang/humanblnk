@@ -228,8 +228,8 @@ func TestPlaceAfterARolledBackSplitHold(t *testing.T) {
 	s, f := newService(t)
 	usd := func(v string) money.Money { return money.MustParse(v, blnkfake.USD) }
 	f.On("POST /transactions", 400, blnkfake.APIError("TXN_DUPLICATE_REFERENCE"))
-	f.On("GET /transactions/reference/payout:po_1-1", 200, `{"transaction_id":"l1","parent_transaction":"s1"}`)
-	f.On("POST /transactions/filter", 200, `[{"transaction_id":"l1","parent_transaction":"s1","reference":"payout:po_1-1","status":"INFLIGHT","currency":"USD","precise_amount":9900,"precision":100,"source":"bln_usd","destination":"bln_usd2"}]`)
+	f.On("GET /transactions/reference/payout:po_1-1", 200, `{"transaction_id":"l1","parent_transaction":"s1","meta_data":{"ledger_split_postings":"2"}}`)
+	f.On("POST /transactions/filter", 200, `[{"transaction_id":"l1","parent_transaction":"s1","reference":"payout:po_1-1","status":"INFLIGHT","currency":"USD","precise_amount":9900,"precision":100,"source":"bln_usd","destination":"bln_usd2","meta_data":{"ledger_split_postings":"2"}}]`)
 	_, err := s.Place(context.Background(), types.Transaction{
 		Ref: "payout:po_1", From: types.Single("bln_usd", usd("100")),
 		To: types.Many(types.Posting{Account: "bln_usd2", Amount: usd("99")}, types.Posting{Account: "bln_usd", Amount: usd("1")}), Description: "payout",

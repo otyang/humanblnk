@@ -11,6 +11,7 @@ import (
 	"github.com/otyang/humanblnk/internal/core"
 	"github.com/otyang/humanblnk/internal/types"
 	"github.com/otyang/humanblnk/money"
+	"github.com/otyang/humanblnk/money/currency"
 )
 
 // Service creates and reads accounts.
@@ -134,8 +135,28 @@ func (s *Service) Get(ctx context.Context, id string) (types.Account, error) {
 	return s.k.Account(b)
 }
 
+// System fetches one of your system accounts (World, FeeIncome, a
+// ClearingAccount, any SystemAccount) in currency c. Blnk keeps one per
+// currency, made the first time a transaction names it: until then it is
+// ErrNotFound.
+func (s *Service) System(ctx context.Context, a types.AccountRef, c currency.Currency) (types.Account, error) {
+	switch {
+	case !a.IsSystem():
+		return types.Account{}, core.Invalid("%s isn't a system account (\"@…\"): use Get", a)
+	case !c.Valid():
+		return types.Account{}, money.ErrUnknownCurrency
+	}
+	b, err := s.k.C.Balances.GetByIndicator(ctx, string(a), c.Code())
+	if err != nil {
+		return types.Account{}, core.MapErr(err)
+	}
+	return s.Get(ctx, b.BalanceID) // with queued debits, as Get reads every account
+}
+
 // List returns the accounts q selects and how many there are in all. Their
-// Available doesn't count queued debits; use Get for that.
+// Available doesn't count queued debits; use Get for that. The spare
+// accounts a cross-process race of OpenForCustomer leaves (empty, marked
+// meta_data.duplicate_of) are listed too.
 func (s *Service) List(ctx context.Context, q types.AccountQuery) ([]types.Account, int, error) {
 	r := blnk.FilterRequest{Limit: q.Limit, Offset: q.Offset, IncludeCount: true, SortBy: "created_at", SortOrder: "desc"}
 	if q.Ledger != "" {

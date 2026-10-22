@@ -47,7 +47,8 @@
     <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
@@ -207,7 +208,7 @@ bounced back | Ada: 30000.00 NGN</code></pre></figure>
 </div>
 <h2 id="good-to-know"><a class="anchor" href="#good-to-know">Good to know</a></h2>
 <ul>
-<li><strong>A refund takes money from where it went.</strong> If the shop had already spent the ₦15,000, the refund would fail with <code>ErrInsufficientFunds</code>: a customer is never pushed below zero. System accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts) may go negative.</li>
+<li><strong>A refund takes money from where it went.</strong> If the shop had already spent the ₦15,000, the refund would fail with <code>ErrInsufficientFunds</code>: a customer is never pushed below zero. System accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts) may go negative, even in the same reversal: refunding a transfer with a fee after the day&#39;s fees were swept still works.</li>
 <li><strong>Splits reverse in full only.</strong> Reversing a transfer with a fee undoes both postings in one entry. Which postings of a split to undo in part is a business decision: reverse it in full, then record what should stand.</li>
 <li><strong>Only applied entries can be reversed.</strong> For money still in a hold, use <code>Holds.Cancel</code>.</li>
 <li>Each reversal is its own entry, referenced <code>reversal:&lt;entry&gt;:&lt;n&gt;</code> and tagged <code>reversal_of</code>, <code>reversal_ref</code> and <code>reversal_reason</code> in its metadata.</li>

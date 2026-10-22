@@ -66,4 +66,9 @@ payout and its fee, say) can only be captured in full.
   the hold's status to ask "did it settle?". `Capture`'s return value, or
   `ErrHoldSettled`, tells you.
 - To undo money a capture already moved, use `Transactions.Reverse`
-  (chapter 8). `Cancel` only releases money still held.
+  (chapter 8) with the id `Capture` returned, or the hold's own id: a split
+  hold's capture is reversed as a whole. `Cancel` only releases money still
+  held.
+- Retrying `Place` returns the same hold, captured or not, so a whole
+  purchase is safe to retry. If the hold was released instead (cancelled, or
+  expired), `Place` says `ErrHoldSettled`: don't deliver against it.

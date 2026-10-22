@@ -1,6 +1,6 @@
 # Contributing
 
-You need Go 1.27.1+ and Docker.
+You need Go 1.24+ and Docker.
 
 ## Layout
 
@@ -11,10 +11,13 @@ You need Go 1.27.1+ and Docker.
 | `internal/accounts`, `transactions`, `holds`, `watches`, `reconcile`, `ledger`, `identities` | One package per service |
 | `internal/events` | Webhook verification and decoding, behind `VerifyWebhook` |
 | `internal/core` | Shared and private: the Blnk client, conversion, the currency check, error mapping |
-| `blnk`, `blnk/blnkfake` | The Blnk Core HTTP client, and a fake Blnk for unit tests |
+| `blnk`, `blnk/blnkfake` | The Blnk Core HTTP client, and a fake Blnk with canned answers for exact edge cases |
+| `internal/memblnk` | An in-memory Blnk Core: the subset of its HTTP API humanblnk uses, behaving as Blnk does where humanblnk depends on it |
+| `humanblnktest` | The public face of `memblnk`: a `humanblnk.Client` on a fresh in-memory Blnk, for callers' tests |
+| `contract_*_test.go` | The contract tests: one suite, run against `memblnk` by default and a real Blnk with `-tags integration` |
 | `money`, `money/currency` | Exact amounts and the currency list |
 | `docs/site`, `docs/site/chapters`, `docs/examples` | The tutorial: its generator, its chapters, and the programs every snippet comes from |
-| `deploy` | A local Blnk 0.15.6 (Docker Compose) and its config, for the integration tests and the tutorial |
+| `deploy` | A local Blnk 0.15.6 (Docker Compose) and its config, for the contract tests and the tutorial |
 
 A new public type goes in `internal/types` and gets an alias in `aliases.go`;
 a new service gets a field on `Client` and a `…Service` alias. The reference
@@ -23,15 +26,19 @@ lives in `doc.go`: change it with the code.
 ## Tests
 
 ```sh
-go test ./...                                           # against a fake Blnk (blnk/blnkfake)
+go test ./...                                           # unit tests, and the contract tests on an in-memory Blnk
 
 docker compose -f deploy/docker-compose.yml up -d       # Blnk 0.15.6, its worker, Postgres, Redis
 BLNK_URL=http://localhost:5001 go test -tags integration .
 ```
 
-The integration tests check what the unit tests can only assume: how Blnk
+The contract tests check what the unit tests can only assume: how Blnk
 stores splits, that funds errors are immediate, that a partial capture releases
-the rest, and that concurrent reversals never exceed the entry.
+the rest, and that concurrent reversals never exceed the entry. Without the tag
+they run against `internal/memblnk`; with it, against the real Blnk at
+`$BLNK_URL`. Both must pass: that's what keeps the in-memory Blnk honest. When
+you find Blnk behaving in a way humanblnk relies on, add a contract test, and
+make `memblnk` match it.
 
 CI runs gofmt, `go mod tidy -diff`, `go generate ./money/currency`, `go vet`
 (with and without the `integration` tag), `go test -race ./...`, and the

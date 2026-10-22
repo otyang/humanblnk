@@ -3,11 +3,7 @@
 // error mapping. It is the one place amounts cross into Blnk.
 package core
 
-import (
-	"sync"
-
-	"github.com/otyang/humanblnk/blnk"
-)
+import "github.com/otyang/humanblnk/blnk"
 
 // Core is one Blnk instance and what the services know about it.
 type Core struct {
@@ -18,18 +14,23 @@ type Core struct {
 	// accounts, beside AccountLedger.
 	CustomerLedgers map[string]bool
 
-	// currencies caches each account's currency, and system whether it is a
-	// system account; neither ever changes.
-	currencies sync.Map // account id -> currency.Currency
-	system     sync.Map // account id -> bool
+	// accounts caches each account's currency and whether it is a system
+	// account; neither ever changes.
+	accounts *cache
 }
 
 // GeneralLedger is Blnk's General Ledger, where system accounts live.
 const GeneralLedger = "general_ledger_id"
 
-// New returns a Core on c.
+// New returns a Core on c that remembers up to DefaultCacheSize accounts.
 func New(c *blnk.Client, accountLedger string) *Core {
-	return &Core{C: c, AccountLedger: accountLedger}
+	return NewWithCache(c, accountLedger, DefaultCacheSize)
+}
+
+// NewWithCache is New remembering up to cacheSize accounts (DefaultCacheSize
+// if cacheSize <= 0).
+func NewWithCache(c *blnk.Client, accountLedger string, cacheSize int) *Core {
+	return &Core{C: c, AccountLedger: accountLedger, accounts: newCache(cacheSize)}
 }
 
 // IsCustomerLedger reports whether ledger holds only customer accounts.

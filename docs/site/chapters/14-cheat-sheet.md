@@ -10,7 +10,7 @@ below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 | Service | Methods |
 | --- | --- |
 | `hb.Identities` | `Create(ctx, meta) (string, error)`, `Get(ctx, id)`, `UpdateMeta(ctx, id, meta)`, `FindByCustomer(ctx, customerID)` |
-| `hb.Accounts` | `OpenForCustomer(ctx, CustomerAccount)`, `CreateInternal(ctx, NewAccount)`, `Get(ctx, id)`, `List(ctx, AccountQuery) ([]Account, total, error)` |
+| `hb.Accounts` | `OpenForCustomer(ctx, CustomerAccount)`, `CreateInternal(ctx, NewAccount)`, `Get(ctx, id)`, `System(ctx, humanblnk.FeeIncome, usd)`, `List(ctx, AccountQuery) ([]Account, total, error)` |
 | `hb.Transactions` | `Record(ctx, Transaction)`, `RecordAll(ctx, []Transaction)`, `Preview(ctx, Transaction)`, `Reverse(ctx, Reversal)`, `Get(ctx, id)`, `GetByReference(ctx, ref)`, `List(ctx, EntryQuery) ([]Entry, total, error)` |
 | `hb.Holds` | `Place(ctx, Transaction, expires) (HoldID, error)`, `Capture(ctx, HoldID, amount)`, `Cancel(ctx, HoldID)` |
 | `hb.Watches` | `Create(ctx, Watch)`, `Get(ctx, WatchID)`, `List(ctx, account)`, `Change(ctx, WatchID, Watch)`, `Delete(ctx, WatchID)` |
@@ -37,7 +37,7 @@ below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 | `humanblnk.Single(account, amount)` | one posting |
 | `humanblnk.Many(humanblnk.Posting{…}, …)` | several postings, for one side of a split |
 | `Transaction` | `Ref`, `From`, `To`, `Description`, `Meta` |
-| `Reversal` | `Ref`, `Entry`, `Amount`, `Reason` |
+| `Reversal` | `Ref`, `Entry` (an entry's id, or a captured hold's), `Amount`, `Reason` |
 | `CustomerAccount` | `Owner`, `Currency`, `Ledger` |
 | `NewAccount` | `Ledger`, `Owner`, `Currency`, `Meta` |
 | `Watch` | `Account`, `Field`, `Op`, `Threshold`, `Description` |
@@ -75,3 +75,15 @@ an id you stored, as in `humanblnk.HoldID(s)`. Owner (`idt_…`) and ledger
 | `m.Add`, `m.Sub`, `m.Cmp`, `m.Equal` | one currency only |
 | `m.Percent(p, mode)`, `money.Round(d, c, mode)` | with `money.Up`, `money.Down` or `money.HalfEven` |
 | `m.Minor()`, `money.FromMinor(n, c)` | to and from the smallest unit |
+
+## Testing
+
+Import `github.com/otyang/humanblnk/humanblnktest` (chapter 13).
+
+| Call | |
+| --- | --- |
+| `hb := humanblnktest.New(t, opts...)` | `*Books`, embedding a `*humanblnk.Client` (`hb.Client`) on a fresh in-memory Blnk, closed when `t` ends |
+| `hb.Customer(t, "USD")` | an owner and their wallet: its `AccountRef` |
+| `hb.Fund(t, account, "100.00")` | a deposit from `@World` |
+| `hb.Available(t, account)` | what it can spend now, such as `"70.00"` |
+| `humanblnktest.Money(t, "30.00", "USD")` | an amount, failing the test if it can't parse |

@@ -45,11 +45,13 @@ func CheckPrecision(id string, got json.Number, c currency.Currency) error {
 	return nil
 }
 
-// Time is t as Blnk parses dates (RFC 3339 with an offset), or "" for the
-// zero time. Blnk silently reads a malformed date as no date at all.
+// Time is t as Blnk parses dates (RFC 3339 with an offset, to the
+// nanosecond, so a range ending at t takes in entries within its last
+// second), or "" for the zero time. Blnk silently reads a malformed date as
+// no date at all.
 func Time(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.Format(time.RFC3339)
+	return t.Format(time.RFC3339Nano)
 }

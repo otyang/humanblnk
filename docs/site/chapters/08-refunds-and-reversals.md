@@ -66,7 +66,8 @@ go below zero:
 - **A refund takes money from where it went.** If the shop had already spent
   the ₦15,000, the refund would fail with `ErrInsufficientFunds`: a customer
   is never pushed below zero. System accounts (`@World`, `@FeeIncome`,
-  clearing accounts) may go negative.
+  clearing accounts) may go negative, even in the same reversal: refunding a
+  transfer with a fee after the day's fees were swept still works.
 - **Splits reverse in full only.** Reversing a transfer with a fee undoes
   both postings in one entry. Which postings of a split to undo in part is a
   business decision: reverse it in full, then record what should stand.

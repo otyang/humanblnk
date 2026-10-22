@@ -3,12 +3,17 @@ package core
 import (
 	"context"
 	"fmt"
+	"math/big"
 	"strconv"
 
 	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/internal/types"
 	"github.com/otyang/humanblnk/money"
 )
+
+// MaxPostings is the most postings one side of a split takes: as many as
+// GetEntry reads back.
+const MaxPostings = 100
 
 // Validate checks t on its own, before any account is looked up, and
 // returns its total.
@@ -22,6 +27,8 @@ func Validate(t types.Transaction) (money.Money, error) {
 		return money.Money{}, Invalid("a transaction needs From and To postings")
 	case len(t.From) > 1 && len(t.To) > 1:
 		return money.Money{}, Invalid("Blnk moves one account to many or many to one, not many to many")
+	case len(t.From) > MaxPostings || len(t.To) > MaxPostings:
+		return money.Money{}, Invalid("a split takes at most %d postings on a side", MaxPostings)
 	}
 	from, err := sum(t.From)
 	if err != nil {
@@ -65,7 +72,7 @@ func sum(ps []types.Posting) (money.Money, error) {
 }
 
 // Request turns t into Blnk's request, after checking each account holds
-// t's currency.
+// t's currency and that t.Ref isn't held by another kind of entry.
 func (k *Core) Request(ctx context.Context, t types.Transaction) (blnk.CreateTransactionRequest, error) {
 	total, err := Validate(t)
 	if err != nil {
@@ -75,6 +82,9 @@ func (k *Core) Request(ctx context.Context, t types.Transaction) (blnk.CreateTra
 		if err := k.SameCurrency(ctx, p.Account, total); err != nil {
 			return blnk.CreateTransactionRequest{}, err
 		}
+	}
+	if err := k.ReferenceTaken(ctx, t.Ref, max(len(t.From), len(t.To)) > 1); err != nil {
+		return blnk.CreateTransactionRequest{}, err
 	}
 	overdraft, err := k.fromSystemOnly(ctx, t)
 	if err != nil {
@@ -160,4 +170,64 @@ func distributions(ps []types.Posting) ([]blnk.Distribution, error) {
 		out[i] = blnk.Distribution{Identifier: string(p.Account), PreciseDistribution: minor.String()}
 	}
 	return out, nil
+}
+
+// PerSource is r as an atomic batch of one transaction per source, for a
+// split taking from both system accounts and others. Blnk allows an
+// overdraft per transaction, not per source: as one transaction, either no
+// source may go below zero (so a system account among them, say @FeeIncome
+// when a transfer with a fee is reversed after the day's fees were swept,
+// can't) or every one may (a customer too). As a batch, each item allows
+// what its own source may. The items take the references and metadata a
+// split's postings would, so the batch reads back as the split. ok is false
+// when r can go to Blnk as it is.
+func (k *Core) PerSource(ctx context.Context, r blnk.CreateTransactionRequest) (items []blnk.CreateTransactionRequest, ok bool, err error) {
+	if len(r.Sources) == 0 || r.AllowOverdraft { // not a many-to-one split, or every source is a system account
+		return nil, false, nil
+	}
+	// Merge an account named twice, as Blnk does with a split's postings.
+	var order []string
+	amounts := map[string]*big.Int{}
+	system := false
+	for _, d := range r.Sources {
+		v, ok := new(big.Int).SetString(d.PreciseDistribution, 10)
+		if !ok {
+			return nil, false, fmt.Errorf("humanblnk: bad posting amount %q", d.PreciseDistribution)
+		}
+		if prev, seen := amounts[d.Identifier]; seen {
+			prev.Add(prev, v)
+			continue
+		}
+		amounts[d.Identifier] = v
+		order = append(order, d.Identifier)
+		sys, err := k.IsSystemAccount(ctx, types.AccountRef(d.Identifier))
+		if err != nil {
+			return nil, false, err
+		}
+		system = system || sys
+	}
+	if !system {
+		return nil, false, nil // no source may overdraw: one transaction will do
+	}
+	for i, account := range order {
+		sys, err := k.IsSystemAccount(ctx, types.AccountRef(account))
+		if err != nil {
+			return nil, false, err
+		}
+		items = append(items, blnk.CreateTransactionRequest{
+			PreciseAmount:      blnk.BigFrom(amounts[account]),
+			Precision:          r.Precision,
+			Reference:          r.Reference + "-" + strconv.Itoa(i+1),
+			Currency:           r.Currency,
+			Source:             account,
+			Destination:        r.Destination,
+			Description:        r.Description,
+			AllowOverdraft:     sys,
+			Inflight:           r.Inflight,
+			InflightExpiryDate: r.InflightExpiryDate,
+			SkipQueue:          true,
+			MetaData:           r.MetaData,
+		})
+	}
+	return items, true, nil
 }

@@ -29,6 +29,11 @@ func (s *Service) Record(ctx context.Context, t types.Transaction) (types.Entry,
 	if err != nil {
 		return types.Entry{}, err
 	}
+	if items, ok, err := s.k.PerSource(ctx, r); err != nil {
+		return types.Entry{}, err
+	} else if ok {
+		return s.recordPerSource(ctx, t, items)
+	}
 	tx, err := s.k.C.Transactions.Create(ctx, r)
 	if blnk.HasCode(err, blnk.CodeDuplicateReference) {
 		return s.k.Existing(ctx, t)
@@ -37,6 +42,24 @@ func (s *Service) Record(ctx context.Context, t types.Transaction) (types.Entry,
 		return types.Entry{}, core.MapErr(err)
 	}
 	return core.Entry(tx)
+}
+
+// recordPerSource records a split whose sources mix system accounts and
+// others as an atomic batch (see core.PerSource), and reads it back as the
+// split it is.
+func (s *Service) recordPerSource(ctx context.Context, t types.Transaction, items []blnk.CreateTransactionRequest) (types.Entry, error) {
+	_, err := s.k.C.Transactions.CreateBulk(ctx, blnk.BulkTransactionRequest{Atomic: true, SkipQueue: true, Transactions: items})
+	if blnk.HasCode(err, blnk.CodeDuplicateReference) {
+		return s.k.Existing(ctx, t)
+	}
+	if err != nil {
+		return types.Entry{}, core.MapErr(err)
+	}
+	e, err := s.readBack(ctx, t.Ref)
+	if err != nil {
+		return types.Entry{}, fmt.Errorf("%w: %s: %w", types.ErrReadBack, t.Ref, err)
+	}
+	return e, nil
 }
 
 // RecordAll records every transaction or none: if one fails, Blnk rolls the

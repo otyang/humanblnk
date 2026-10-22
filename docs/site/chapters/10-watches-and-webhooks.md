@@ -37,14 +37,22 @@ webhooks to:
 
 | `Event` field | |
 | --- | --- |
-| `Kind` | the event, such as `"balance.monitor"` or `"transaction.applied"` |
+| `Kind` | the event: `humanblnk.EventBalanceMonitor`, `EventTransactionApplied`, `EventTransactionVoid`, … |
 | `Watch`, `Account` | for `balance.monitor`: which watch fired, on which account |
 | `Entry` | for `transaction.*` events: the entry |
 | `Data` | the raw data, as Blnk sent it |
 
 The tolerance rejects old deliveries replayed by an attacker; five minutes is
-sensible. The example signs requests the way Blnk does and sends a genuine
-one and a forged one to a test server.
+sensible, and is what `VerifyWebhook` uses if you pass 0. Answer anything
+that isn't 2xx and Blnk sends the webhook again, so reject only a bad
+signature or a stale one, and acknowledge what you can't use.
+
+**Blnk can deliver the same event more than once**, each time freshly
+signed. Make the handler safe to repeat: text the customer once per watch
+and day, say, or act on an entry once by its `ID`.
+
+The example signs requests the way Blnk does and sends a genuine one and a
+forged one to a test server.
 
 ## Step 4: stop watching
 

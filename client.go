@@ -31,6 +31,7 @@ type Option func(*config)
 type config struct {
 	accountLedger   string
 	customerLedgers map[string]bool
+	cacheSize       int
 }
 
 // WithAccountLedger sets the customer ledger Accounts.OpenForCustomer opens
@@ -54,13 +55,22 @@ func WithCustomerLedgers(ids ...string) Option {
 	}
 }
 
+// WithAccountCacheSize sets how many accounts the Client remembers the
+// currency of, so it needn't ask Blnk before every write: 100,000 unless
+// set, about 20 MiB. The least recently used are forgotten first, so a
+// long-running service's memory stays bounded however many accounts it
+// touches.
+func WithAccountCacheSize(n int) Option {
+	return func(c *config) { c.cacheSize = n }
+}
+
 // New returns a Client on c.
 func New(c *blnk.Client, opts ...Option) *Client {
 	var cfg config
 	for _, o := range opts {
 		o(&cfg)
 	}
-	k := core.New(c, cfg.accountLedger)
+	k := core.NewWithCache(c, cfg.accountLedger, cfg.cacheSize)
 	k.CustomerLedgers = cfg.customerLedgers
 	return &Client{
 		Identities:     identities.New(k),

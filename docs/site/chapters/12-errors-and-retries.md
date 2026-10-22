@@ -32,8 +32,8 @@ below says the call is safe to repeat.
 | Call | Safe to repeat? | Because |
 | --- | --- | --- |
 | `Transactions.Record`, `RecordAll` | yes, with the same `Ref` | a used reference is checked: `ErrDuplicate` if it happened |
-| `Transactions.Reverse` | yes, with the same `Ref` | returns the reversal already made |
-| `Holds.Place` | yes, with the same transaction | returns the same hold |
+| `Transactions.Reverse` | yes, with the same `Ref` | returns the reversal already made; without a `Ref`, a full reversal says `ErrAlreadyReversed` once done |
+| `Holds.Place` | yes, with the same transaction | returns the same hold, captured or not; `ErrHoldSettled` if it was released |
 | `Holds.Capture` (full) | yes | finds the earlier capture |
 | `Holds.Capture` (partial) | **wait a few seconds first** | Blnk can't tell a repeated partial capture still being processed from a new one |
 | `Holds.Cancel` | yes | |
@@ -45,7 +45,7 @@ below says the call is safe to repeat.
 | `Ledgers.Rename`, `Reconciliation.ChangeRule` | yes | they replace, not add |
 | `Watches.Delete`, `Reconciliation.RemoveRule` | yes | a repeat may return `ErrNotFound` |
 | `Reconciliation.Upload`, `AddRule`, `Run`, `RunLines` | **no** | each call makes a new statement, rule or run |
-| every read (`Get`, `List`, `GetByReference`, `Preview`) | yes | |
+| every read (`Get`, `List`, `GetByReference`, `Accounts.System`, `Preview`) | yes | |
 
 ## References, in one rule
 

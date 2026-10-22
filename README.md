@@ -11,7 +11,7 @@ marketplaces, payouts, remittance) who want Blnk's double-entry ledger without
 re-learning its sharp edges in production.
 
 ```sh
-go get github.com/otyang/humanblnk   # Go 1.27.1+
+go get github.com/otyang/humanblnk   # Go 1.24+
 ```
 
 ## Why not call Blnk directly?
@@ -23,10 +23,10 @@ are the gaps humanblnk closes:
 | --- | --- |
 | Amounts are integers you scale yourself; one write at the wrong precision mixes units silently | Amounts are `money.Money`, exact decimals, sent in the currency's smallest unit at its own precision; entries read back are checked against it |
 | A USD 10.00 transaction applied to an NGN (Nigerian naira) account lands as NGN 10.00 | A currency mismatch is refused with `money.ErrCurrencyMismatch` |
-| A retried request hits a "reference already used" error that doesn't say whether your write applied | You build each reference from your own ids with `humanblnk.Reference`. A retried `Record` gets `ErrDuplicate` (it applied) or `ErrReferenceUsed` (something else holds that reference); a retried hold or reversal returns the one already made |
+| A retried request hits a "reference already used" error that doesn't say whether your write applied | You build each reference from your own ids with `humanblnk.Reference`. A retried `Record` gets `ErrDuplicate` (it applied) or `ErrReferenceUsed` (something else holds that reference); a retried hold, or a reversal retried with its `Ref`, returns the one already made. Any reference works, `/` included |
 | Writes are queued by default: insufficient funds turns up later as a `REJECTED` status | Writes are synchronous: you get `ErrInsufficientFunds` from the call itself |
 | A split (one transaction paying several accounts, such as an amount plus a fee) that fails partway reads as applied, though Blnk will refund its earlier parts | The entry reads as `StatusRejected` at once and its reference can't be reused. The balances still show the earlier parts until Blnk's worker refunds them (about 200 ms), so keep the worker running |
-| Overdraft is a flag on each write: any write that sets it can take its source below zero | Overdraft is allowed only when every source is a system account (such as `@World`, money outside your books, or a provider's clearing account) |
+| Overdraft is a flag on each write: any write that sets it can take its source below zero, so a split from a customer and a system account can't let only one of them | Only system accounts (such as `@World`, money outside your books, or a provider's clearing account) go below zero, each on its own terms, even in one split |
 | Customer money and your company's own can share a ledger | Customer accounts need an owner and live in the customer ledgers you name; your own accounts can't be opened there |
 | Blnk's refund undoes a transaction once, in full; partial refunds are yours to track | Reversals, full or partial, are numbered per entry and never undo more than it moved, even when they run concurrently |
 
@@ -97,13 +97,42 @@ if bankAccepted {
 }
 ```
 
+## Testing without Blnk
+
+`humanblnktest` runs your code against an in-memory Blnk, so your tests need no
+Blnk, Docker or network:
+
+```go
+func TestPayout(t *testing.T) {
+	hb := humanblnktest.New(t) // a fresh in-memory Blnk, closed when the test ends
+	ada := hb.Customer(t, "USD")
+	hb.Fund(t, ada, "100.00")
+
+	svc := payouts.New(hb.Holds) // your code, given the real humanblnk
+	// ... exercise svc ...
+
+	if got := hb.Available(t, ada); got != "70.00" {
+		t.Fatalf("Ada can spend %s, want 70.00", got)
+	}
+}
+```
+
+It copies the Blnk Core 0.15.6 behaviour humanblnk relies on: reused
+references refused, splits rolled back a moment after a later posting fails,
+holds settled by transactions of their own, signed webhooks. humanblnk's
+contract tests run against it and a real Blnk alike, so a difference they
+cover fails CI. It isn't Blnk: nothing is queued, and a few features
+humanblnk doesn't use are left out (listed in
+[tutorial chapter 13](https://otyang.github.io/humanblnk/docs/testing.html)),
+so keep a few tests against a real Blnk too.
+
 ## Learn more
 
-- **[Tutorial](https://otyang.github.io/humanblnk/docs/)**: thirteen chapters.
+- **[Tutorial](https://otyang.github.io/humanblnk/docs/)**: fourteen chapters.
   Eleven walk through a real task (sign-up, deposits, transfers with fees,
   payouts, refunds, currency exchange, webhooks, reconciliation) with a
-  program you can run against your own Blnk; the last two cover errors and
-  retries, and a cheat sheet.
+  program you can run against your own Blnk; the others cover errors and
+  retries, testing your service without Blnk, and a cheat sheet.
 - **[Reference](https://pkg.go.dev/github.com/otyang/humanblnk)**: every
   service and method, the rules humanblnk enforces, what's safe to retry, its
   errors and its limits. Also in [doc.go](doc.go).
@@ -116,6 +145,7 @@ if bankAccepted {
 | --- | --- |
 | `humanblnk` | Your books: `Client`, its services, and the vocabulary |
 | [`money`](money/README.md) | An exact amount in one currency: parse, add, round, convert to the smallest unit |
+| `humanblnktest` | `humanblnk` on an in-memory Blnk, for your tests |
 | `blnk` | A Blnk Core HTTP client. You use it to build the client (`blnk.New`, `blnk.WithAPIKey`); only humanblnk calls Blnk through it |
 
 Your own features (airtime top-ups, payouts, transfers) go in their own

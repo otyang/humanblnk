@@ -52,7 +52,10 @@ func (s *TransactionService) Get(ctx context.Context, id string) (*Transaction, 
 	return &out, s.client.do(ctx, http.MethodGet, "/transactions/"+esc(id), nil, &out)
 }
 
-// GetByReference fetches by your reference. Queued transactions that
+// GetByReference fetches by your reference. A reference containing "/"
+// can't be fetched this way: Blnk's router decodes the escaped "/" and
+// answers a bare 404. Filter on "reference" instead, which humanblnk does.
+// Queued transactions that
 // have been processed carry the reference with a "_q" suffix. Blnk returns
 // only some fields here (ids, reference, parties, amounts, currency,
 // description, status, created_at, effective_date, meta_data); use Get for

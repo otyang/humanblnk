@@ -47,7 +47,10 @@ func ClearingAccount(provider string) AccountRef {
 // retry produces the same reference and Blnk refuses to apply it twice.
 //
 // The ":" separator keeps it apart from the suffixes Blnk adds itself ("-1"
-// on each posting of a split, "_refund" on a full reversal).
+// on each posting of a split, "_refund" on a rollback). Parts are joined as
+// they are, so keep ":" out of them, or ("a:b", "c") and ("a", "b:c") are
+// one reference. References starting "reversal:" are humanblnk's own, for
+// Transactions.Reverse: don't build those yourself.
 func Reference(kind string, parts ...string) string {
 	return strings.Join(append([]string{kind}, parts...), ":")
 }

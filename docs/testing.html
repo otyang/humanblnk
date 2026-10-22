@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>13. Testing your service · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="testing.html" class="current" aria-current="page"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 13 · Running it</p>
+    <h1 id="testing-your-service"><a class="anchor" href="#testing-your-service">Testing your service</a></h1>
+<p><strong>Scenario:</strong> the airtime service from chapter 7 needs tests that run on every <code>go test</code>: on a laptop, in CI, with no Blnk, Docker or network.</p>
+<p><code>humanblnktest</code> starts an <strong>in-memory Blnk</strong> for each test and gives you a <code>humanblnk.Client</code> on it. Your code runs exactly as in production: the same humanblnk, the same Blnk client, the same rules, against a Blnk that lives in the test&#39;s memory and disappears when it ends.</p>
+<figure class="code"><figcaption><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">hb := humanblnktest.New(t)           // a fresh, empty Blnk, closed when t ends
+ada := hb.Customer(t, &#34;NGN&#34;)         // an owner and their wallet
+hb.Fund(t, ada, &#34;5000&#34;)              // a deposit from @World
+air := airtime.New(hb.Holds, ...)    // hb embeds a *humanblnk.Client (hb.Client)
+hb.Available(t, ada)                 // &#34;4000.00&#34;</code></pre></figure>
+<h2 id="step-1-fake-what-isn-t-yours"><a class="anchor" href="#step-1-fake-what-isn-t-yours">Step 1: fake what isn&#39;t yours</a></h2>
+<p>The airtime package depends on two things: humanblnk&#39;s holds, and a provider. The holds are real, from the in-memory Blnk. Only the provider is faked: it answers however the test says and counts its calls.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/13-testing/airtime_test.go" target="_blank" rel="noopener">13-testing/airtime_test.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">type provider struct {
+    err   error
+    calls int
+}
+
+func (p *provider) Buy(context.Context, string, string, money.Money) error {
+    p.calls++
+    return p.err
+}</code></pre></figure>
+<h2 id="step-2-test-each-outcome"><a class="anchor" href="#step-2-test-each-outcome">Step 2: test each outcome</a></h2>
+<p>A table of what the provider answers, and what Ada can spend afterwards. Each case gets its own Blnk, so cases never see each other&#39;s money:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/13-testing/airtime_test.go" target="_blank" rel="noopener">13-testing/airtime_test.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func TestBuy(t *testing.T) {
+    for _, c := range []struct {
+        name      string
+        answer    error
+        wantErr   error
+        available string // what Ada can spend afterwards
+    }{
+        {&#34;delivered&#34;, nil, nil, &#34;4000.00&#34;},
+        {&#34;declined&#34;, airtime.ErrDeclined, airtime.ErrDeclined, &#34;5000.00&#34;},
+        {&#34;no answer&#34;, errors.New(&#34;timeout&#34;), airtime.ErrPending, &#34;4000.00&#34;}, // still held
+    } {
+        t.Run(c.name, func(t *testing.T) {
+            hb := humanblnktest.New(t) // a fresh, empty Blnk for each case
+            ada := hb.Customer(t, &#34;NGN&#34;)
+            hb.Fund(t, ada, &#34;5000&#34;)
+
+            air := airtime.New(hb.Holds, &amp;provider{err: c.answer}, &#34;vtpass&#34;)
+            _, err := air.Buy(ctx, airtime.Purchase{
+                ID: &#34;air_1&#34;, Wallet: ada, Phone: &#34;08031234567&#34;, Amount: humanblnktest.Money(t, &#34;1000&#34;, &#34;NGN&#34;),
+            })
+            if !errors.Is(err, c.wantErr) {
+                t.Fatalf(&#34;Buy: %v, want %v&#34;, err, c.wantErr)
+            }
+            if got := hb.Available(t, ada); got != c.available {
+                t.Fatalf(&#34;Ada can spend %s, want %s&#34;, got, c.available)
+            }
+        })
+    }
+}</code></pre></figure>
+<h2 id="step-3-test-the-retry"><a class="anchor" href="#step-3-test-the-retry">Step 3: test the retry</a></h2>
+<p>The bug that costs money is a retry that charges twice. The in-memory Blnk refuses a reused reference the way Blnk does, so this tests the real thing:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/13-testing/airtime_test.go" target="_blank" rel="noopener">13-testing/airtime_test.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func TestBuyIsSafeToRetry(t *testing.T) {
+    hb := humanblnktest.New(t)
+    ada := hb.Customer(t, &#34;NGN&#34;)
+    hb.Fund(t, ada, &#34;5000&#34;)
+    air := airtime.New(hb.Holds, &amp;provider{}, &#34;vtpass&#34;)
+    p := airtime.Purchase{ID: &#34;air_1&#34;, Wallet: ada, Phone: &#34;08031234567&#34;, Amount: humanblnktest.Money(t, &#34;1000&#34;, &#34;NGN&#34;)}
+
+    first, err := air.Buy(ctx, p)
+    if err != nil {
+        t.Fatal(err)
+    }
+    again, err := air.Buy(ctx, p) // the same purchase, as a retry sends it
+    if err != nil || again != first {
+        t.Fatalf(&#34;retry: %q %v, want the same hold %q&#34;, again, err, first)
+    }
+    if got := hb.Available(t, ada); got != &#34;4000.00&#34; {
+        t.Fatalf(&#34;Ada can spend %s after a retried Buy, want 4000.00&#34;, got)
+    }
+}</code></pre></figure>
+<h2 id="step-4-test-the-refusal"><a class="anchor" href="#step-4-test-the-refusal">Step 4: test the refusal</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/13-testing/airtime_test.go" target="_blank" rel="noopener">13-testing/airtime_test.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func TestBuyWithoutFunds(t *testing.T) {
+    hb := humanblnktest.New(t)
+    ada := hb.Customer(t, &#34;NGN&#34;) // never funded
+    p := &amp;provider{}
+    air := airtime.New(hb.Holds, p, &#34;vtpass&#34;)
+
+    _, err := air.Buy(ctx, airtime.Purchase{ID: &#34;air_1&#34;, Wallet: ada, Phone: &#34;08031234567&#34;, Amount: humanblnktest.Money(t, &#34;1000&#34;, &#34;NGN&#34;)})
+    if !errors.Is(err, humanblnk.ErrInsufficientFunds) {
+        t.Fatalf(&#34;Buy: %v, want ErrInsufficientFunds&#34;, err)
+    }
+    if p.calls != 0 {
+        t.Fatalf(&#34;the provider was called %d times for an unpaid purchase&#34;, p.calls)
+    }
+}</code></pre></figure>
+<h2 id="the-whole-test"><a class="anchor" href="#the-whole-test">The whole test</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/13-testing/airtime_test.go" target="_blank" rel="noopener">13-testing/airtime_test.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 13: the airtime service from chapter 7, tested against an
+// in-memory Blnk. Run it with go test ./docs/examples/13-testing: no Blnk,
+// Docker or network needed.
+package airtime_test
+
+import (
+    &#34;context&#34;
+    &#34;errors&#34;
+    &#34;testing&#34;
+
+    &#34;github.com/otyang/humanblnk&#34;
+    &#34;github.com/otyang/humanblnk/docs/examples/07-airtime/airtime&#34;
+    &#34;github.com/otyang/humanblnk/humanblnktest&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+)
+
+var ctx = context.Background()
+
+// provider is a fake airtime provider: it answers with err, and counts the
+// calls so a test can check nothing was sent twice.
+type provider struct {
+    err   error
+    calls int
+}
+
+func (p *provider) Buy(context.Context, string, string, money.Money) error {
+    p.calls++
+    return p.err
+}
+
+func TestBuy(t *testing.T) {
+    for _, c := range []struct {
+        name      string
+        answer    error
+        wantErr   error
+        available string // what Ada can spend afterwards
+    }{
+        {&#34;delivered&#34;, nil, nil, &#34;4000.00&#34;},
+        {&#34;declined&#34;, airtime.ErrDeclined, airtime.ErrDeclined, &#34;5000.00&#34;},
+        {&#34;no answer&#34;, errors.New(&#34;timeout&#34;), airtime.ErrPending, &#34;4000.00&#34;}, // still held
+    } {
+        t.Run(c.name, func(t *testing.T) {
+            hb := humanblnktest.New(t) // a fresh, empty Blnk for each case
+            ada := hb.Customer(t, &#34;NGN&#34;)
+            hb.Fund(t, ada, &#34;5000&#34;)
+
+            air := airtime.New(hb.Holds, &amp;provider{err: c.answer}, &#34;vtpass&#34;)
+            _, err := air.Buy(ctx, airtime.Purchase{
+                ID: &#34;air_1&#34;, Wallet: ada, Phone: &#34;08031234567&#34;, Amount: humanblnktest.Money(t, &#34;1000&#34;, &#34;NGN&#34;),
+            })
+            if !errors.Is(err, c.wantErr) {
+                t.Fatalf(&#34;Buy: %v, want %v&#34;, err, c.wantErr)
+            }
+            if got := hb.Available(t, ada); got != c.available {
+                t.Fatalf(&#34;Ada can spend %s, want %s&#34;, got, c.available)
+            }
+        })
+    }
+}
+
+// A retried Buy charges once: Place returns the same hold, and a full
+// capture can&#39;t move the money twice.
+func TestBuyIsSafeToRetry(t *testing.T) {
+    hb := humanblnktest.New(t)
+    ada := hb.Customer(t, &#34;NGN&#34;)
+    hb.Fund(t, ada, &#34;5000&#34;)
+    air := airtime.New(hb.Holds, &amp;provider{}, &#34;vtpass&#34;)
+    p := airtime.Purchase{ID: &#34;air_1&#34;, Wallet: ada, Phone: &#34;08031234567&#34;, Amount: humanblnktest.Money(t, &#34;1000&#34;, &#34;NGN&#34;)}
+
+    first, err := air.Buy(ctx, p)
+    if err != nil {
+        t.Fatal(err)
+    }
+    again, err := air.Buy(ctx, p) // the same purchase, as a retry sends it
+    if err != nil || again != first {
+        t.Fatalf(&#34;retry: %q %v, want the same hold %q&#34;, again, err, first)
+    }
+    if got := hb.Available(t, ada); got != &#34;4000.00&#34; {
+        t.Fatalf(&#34;Ada can spend %s after a retried Buy, want 4000.00&#34;, got)
+    }
+}
+
+// A customer who can&#39;t pay gets humanblnk&#39;s error, and nothing is sent.
+func TestBuyWithoutFunds(t *testing.T) {
+    hb := humanblnktest.New(t)
+    ada := hb.Customer(t, &#34;NGN&#34;) // never funded
+    p := &amp;provider{}
+    air := airtime.New(hb.Holds, p, &#34;vtpass&#34;)
+
+    _, err := air.Buy(ctx, airtime.Purchase{ID: &#34;air_1&#34;, Wallet: ada, Phone: &#34;08031234567&#34;, Amount: humanblnktest.Money(t, &#34;1000&#34;, &#34;NGN&#34;)})
+    if !errors.Is(err, humanblnk.ErrInsufficientFunds) {
+        t.Fatalf(&#34;Buy: %v, want ErrInsufficientFunds&#34;, err)
+    }
+    if p.calls != 0 {
+        t.Fatalf(&#34;the provider was called %d times for an unpaid purchase&#34;, p.calls)
+    }
+}</code></pre></figure>
+<p>Run it:</p>
+<figure class="code"><figcaption><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-sh">go test ./docs/examples/13-testing</code></pre></figure>
+<h2 id="how-close-is-it-to-blnk"><a class="anchor" href="#how-close-is-it-to-blnk">How close is it to Blnk?</a></h2>
+<p>The in-memory Blnk copies the Blnk Core 0.15.6 behaviour humanblnk relies on:</p>
+<ul>
+<li>System accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts) are made the first time a transaction names them.</li>
+<li>A reused reference is refused, so <code>ErrDuplicate</code> and <code>ErrReferenceUsed</code> come back as they would.</li>
+<li>A split is recorded a posting at a time. If a later posting fails, the earlier ones move and are refunded about 200 ms later, as Blnk&#39;s worker does. <code>humanblnktest.WithRollbackDelay</code> stretches that window, to test what your code sees inside it.</li>
+<li>Holds stay <code>INFLIGHT</code>; captures and releases are transactions of their own.</li>
+<li>Watches fire <code>balance.monitor</code>: <code>humanblnktest.WithWebhook(url, secret)</code> sends signed webhooks to your handler, so <code>VerifyWebhook</code> can be tested end to end. Delivery is best effort and gives up after 5 seconds, so a handler must answer rather than block (say, on a full channel).</li>
+</ul>
+<p>humanblnk&#39;s contract tests run against both the in-memory Blnk and a real one, so a difference in what they cover fails CI. Where they don&#39;t look, it isn&#39;t Blnk:</p>
+<ul>
+<li>Nothing is ever queued: every write applies at once, and queued balances are always 0.</li>
+<li>Hold expiry happens on the first request after it, to the second.</li>
+<li>Splits take exact amounts (<code>precise_distribution</code>) only, and a batch can&#39;t hold a split. Batches, commits and voids can&#39;t be previewed.</li>
+<li><code>effective_date</code> and backdating are ignored.</li>
+<li>Reconciliation matches <code>one_to_one</code> only.</li>
+</ul>
+<p>humanblnk itself uses none of these, but a raw <code>blnk.Client</code> on <code>hb.URL</code> could.</p>
+<h2 id="options"><a class="anchor" href="#options">Options</a></h2>
+<div class="table"><table>
+<thead><tr><th>Option</th><th>For</th></tr></thead><tbody>
+<tr><td><code>WithCustomerLedger(&#34;Savings&#34;)</code></td><td>another customer ledger; its id is <code>hb.CustomerLedgers[&#34;Savings&#34;]</code></td></tr>
+<tr><td><code>WithRollbackDelay(d)</code></td><td>how long a failed split&#39;s applied part stays before its refund</td></tr>
+<tr><td><code>WithWebhook(url, secret)</code></td><td>send Blnk&#39;s webhooks to a test server</td></tr>
+<tr><td><code>WithClientOptions(...)</code></td><td>pass options to <code>humanblnk.New</code>, such as <code>WithAccountCacheSize</code></td></tr>
+</tbody></table></div>
+<p>Keep a test against a real Blnk too, for the behaviour your service relies on most: a few in CI with <code>docker compose -f deploy/docker-compose.yml up -d</code> cost little and catch what no fake can.</p>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="errors-and-retries.html"><small>Previous</small>Errors and retries</a>
+    <a class="next" href="cheat-sheet.html"><small>Next</small>Cheat sheet</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

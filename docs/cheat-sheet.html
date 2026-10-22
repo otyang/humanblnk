@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>13. Cheat sheet · humanblnk tutorial</title>
+<title>14. Cheat sheet · humanblnk tutorial</title>
 <meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
@@ -47,21 +47,22 @@
     <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html" class="current" aria-current="page"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html" class="current" aria-current="page"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
 </nav>
 <main>
   <article>
-    <p class="eyebrow">Chapter 13 · Running it</p>
+    <p class="eyebrow">Chapter 14 · Running it</p>
     <h1 id="cheat-sheet"><a class="anchor" href="#cheat-sheet">Cheat sheet</a></h1>
 <p>Everything on one page. Import <code>github.com/otyang/humanblnk</code>; every type below is <code>humanblnk.X</code>. Build one <code>*humanblnk.Client</code> at start-up with <code>humanblnk.New(client, humanblnk.WithAccountLedger(id), humanblnk.WithCustomerLedgers(ids...))</code> (chapter 1).</p>
 <h2 id="services"><a class="anchor" href="#services">Services</a></h2>
 <div class="table"><table>
 <thead><tr><th>Service</th><th>Methods</th></tr></thead><tbody>
 <tr><td><code>hb.Identities</code></td><td><code>Create(ctx, meta) (string, error)</code>, <code>Get(ctx, id)</code>, <code>UpdateMeta(ctx, id, meta)</code>, <code>FindByCustomer(ctx, customerID)</code></td></tr>
-<tr><td><code>hb.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, AccountQuery) ([]Account, total, error)</code></td></tr>
+<tr><td><code>hb.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>System(ctx, humanblnk.FeeIncome, usd)</code>, <code>List(ctx, AccountQuery) ([]Account, total, error)</code></td></tr>
 <tr><td><code>hb.Transactions</code></td><td><code>Record(ctx, Transaction)</code>, <code>RecordAll(ctx, []Transaction)</code>, <code>Preview(ctx, Transaction)</code>, <code>Reverse(ctx, Reversal)</code>, <code>Get(ctx, id)</code>, <code>GetByReference(ctx, ref)</code>, <code>List(ctx, EntryQuery) ([]Entry, total, error)</code></td></tr>
 <tr><td><code>hb.Holds</code></td><td><code>Place(ctx, Transaction, expires) (HoldID, error)</code>, <code>Capture(ctx, HoldID, amount)</code>, <code>Cancel(ctx, HoldID)</code></td></tr>
 <tr><td><code>hb.Watches</code></td><td><code>Create(ctx, Watch)</code>, <code>Get(ctx, WatchID)</code>, <code>List(ctx, account)</code>, <code>Change(ctx, WatchID, Watch)</code>, <code>Delete(ctx, WatchID)</code></td></tr>
@@ -86,7 +87,7 @@
 <tr><td><code>humanblnk.Single(account, amount)</code></td><td>one posting</td></tr>
 <tr><td><code>humanblnk.Many(humanblnk.Posting{…}, …)</code></td><td>several postings, for one side of a split</td></tr>
 <tr><td><code>Transaction</code></td><td><code>Ref</code>, <code>From</code>, <code>To</code>, <code>Description</code>, <code>Meta</code></td></tr>
-<tr><td><code>Reversal</code></td><td><code>Ref</code>, <code>Entry</code>, <code>Amount</code>, <code>Reason</code></td></tr>
+<tr><td><code>Reversal</code></td><td><code>Ref</code>, <code>Entry</code> (an entry&#39;s id, or a captured hold&#39;s), <code>Amount</code>, <code>Reason</code></td></tr>
 <tr><td><code>CustomerAccount</code></td><td><code>Owner</code>, <code>Currency</code>, <code>Ledger</code></td></tr>
 <tr><td><code>NewAccount</code></td><td><code>Ledger</code>, <code>Owner</code>, <code>Currency</code>, <code>Meta</code></td></tr>
 <tr><td><code>Watch</code></td><td><code>Account</code>, <code>Field</code>, <code>Op</code>, <code>Threshold</code>, <code>Description</code></td></tr>
@@ -116,10 +117,20 @@
 <tr><td><code>m.Percent(p, mode)</code>, <code>money.Round(d, c, mode)</code></td><td>with <code>money.Up</code>, <code>money.Down</code> or <code>money.HalfEven</code></td></tr>
 <tr><td><code>m.Minor()</code>, <code>money.FromMinor(n, c)</code></td><td>to and from the smallest unit</td></tr>
 </tbody></table></div>
+<h2 id="testing"><a class="anchor" href="#testing">Testing</a></h2>
+<p>Import <code>github.com/otyang/humanblnk/humanblnktest</code> (chapter 13).</p>
+<div class="table"><table>
+<thead><tr><th>Call</th><th></th></tr></thead><tbody>
+<tr><td><code>hb := humanblnktest.New(t, opts...)</code></td><td><code>*Books</code>, embedding a <code>*humanblnk.Client</code> (<code>hb.Client</code>) on a fresh in-memory Blnk, closed when <code>t</code> ends</td></tr>
+<tr><td><code>hb.Customer(t, &#34;USD&#34;)</code></td><td>an owner and their wallet: its <code>AccountRef</code></td></tr>
+<tr><td><code>hb.Fund(t, account, &#34;100.00&#34;)</code></td><td>a deposit from <code>@World</code></td></tr>
+<tr><td><code>hb.Available(t, account)</code></td><td>what it can spend now, such as <code>&#34;70.00&#34;</code></td></tr>
+<tr><td><code>humanblnktest.Money(t, &#34;30.00&#34;, &#34;USD&#34;)</code></td><td>an amount, failing the test if it can&#39;t parse</td></tr>
+</tbody></table></div>
 
   </article>
   <nav class="pager" aria-label="Previous and next">
-    <a class="prev" href="errors-and-retries.html"><small>Previous</small>Errors and retries</a>
+    <a class="prev" href="testing.html"><small>Previous</small>Testing your service</a>
     
   </nav>
   <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>

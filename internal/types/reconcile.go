@@ -41,7 +41,9 @@ type Criterion struct {
 	Value   string
 	Pattern string // for MatchContains
 	// Drift is how far apart the two may be and still match: a fraction of
-	// the amount for MatchAmount (0.01 is 1%), seconds for MatchDate.
+	// the amount for MatchAmount (0.01 is 1%), seconds for MatchDate, and for
+	// MatchContains a percentage of the longer text's length, in edits (10 is
+	// 10%).
 	Drift float64
 }
 

@@ -26,7 +26,9 @@ type Call struct {
 }
 
 // Fake answers like Blnk Core from canned routes ("METHOD /path"). Unknown
-// routes are 404 GEN_NOT_FOUND.
+// routes are 404 GEN_NOT_FOUND. A transaction filter on one reference is
+// answered from the "GET /transactions/reference/{ref}" route, so a test
+// says once what a reference holds.
 type Fake struct {
 	routes map[string]func(c Call) (int, string)
 	calls  []Call
@@ -72,11 +74,46 @@ func (f *Fake) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	f.calls = append(f.calls, c)
 	status, body := http.StatusNotFound, APIError("GEN_NOT_FOUND")
-	if h, ok := f.routes[r.Method+" "+r.URL.Path]; ok {
+	if ref, ok := referenceQuery(c); ok {
+		status, body = f.byReference(ref)
+	} else if h, ok := f.routes[r.Method+" "+r.URL.Path]; ok {
 		status, body = h(c)
 	}
 	w.WriteHeader(status)
 	_, _ = w.Write([]byte(body))
+}
+
+// referenceQuery reports whether c is a transaction filter on one
+// reference, which is how humanblnk looks a reference up.
+func referenceQuery(c Call) (string, bool) {
+	if c.Method != http.MethodPost || c.Path != "/transactions/filter" {
+		return "", false
+	}
+	fs, _ := c.Body["filters"].([]any)
+	if len(fs) != 1 {
+		return "", false
+	}
+	f, _ := fs[0].(map[string]any)
+	ref, ok := f["value"].(string)
+	return ref, ok && f["field"] == "reference" && f["operator"] == "eq"
+}
+
+// byReference answers a reference filter from the "GET
+// /transactions/reference/{ref}" route a test set up: its transaction as a
+// list of one, or an empty list if it has none or answers 404.
+func (f *Fake) byReference(ref string) (int, string) {
+	h, ok := f.routes["GET /transactions/reference/"+ref]
+	if !ok {
+		return http.StatusOK, "[]"
+	}
+	status, body := h(Call{Method: http.MethodGet, Path: "/transactions/reference/" + ref})
+	switch {
+	case status == http.StatusNotFound:
+		return http.StatusOK, "[]"
+	case status >= 300:
+		return status, body
+	}
+	return http.StatusOK, "[" + body + "]"
 }
 
 // APIError is a Blnk error body with code.

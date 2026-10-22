@@ -4,6 +4,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,13 +25,20 @@ const secret = "change-me"
 // snippet:handler
 func webhook(w http.ResponseWriter, r *http.Request) {
 	ev, err := humanblnk.VerifyWebhook(secret, r, 5*time.Minute)
-	if err != nil {
+	switch {
+	case errors.Is(err, blnk.ErrBadSignature), errors.Is(err, blnk.ErrStale):
 		http.Error(w, "bad signature", http.StatusUnauthorized) // never act on its body
 		fmt.Println("  rejected:", err)
 		return
+	case err != nil:
+		// Signed, but not something to act on: say so, or Blnk sends it
+		// again and again.
+		w.WriteHeader(http.StatusNoContent)
+		fmt.Println("  can't use it:", err)
+		return
 	}
 	switch {
-	case ev.Kind == "balance.monitor":
+	case ev.Kind == humanblnk.EventBalanceMonitor:
 		fmt.Println("  watch", ev.Watch, "fired on", ev.Account, "- e.g. text the customer 'low balance'")
 	case ev.Entry != nil: // transaction.applied, transaction.rejected, …
 		fmt.Println("  ", ev.Kind, ev.Entry.Ref, ev.Entry.Amount)

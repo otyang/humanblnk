@@ -18,10 +18,18 @@ import (
 // maxBody caps how much of a webhook VerifyWebhook reads.
 const maxBody = 1 << 20 // 1 MB
 
+// DefaultTolerance is how old a webhook may be when VerifyWebhook is given
+// no tolerance.
+const DefaultTolerance = 5 * time.Minute
+
 // VerifyWebhook checks a Blnk webhook's signature (Blnk's server.secret_key)
-// and that it is no older than tolerance, then decodes it. A request that
-// fails the check is an error; never act on its body.
+// and that it is no older than tolerance (DefaultTolerance if tolerance <=
+// 0: the age check is what stops a replayed delivery), then decodes it. A
+// request that fails the check is an error; never act on its body.
 func VerifyWebhook(secret string, r *http.Request, tolerance time.Duration) (types.Event, error) {
+	if tolerance <= 0 {
+		tolerance = DefaultTolerance
+	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBody+1))
 	if err != nil {
 		return types.Event{}, fmt.Errorf("humanblnk: read webhook: %w", err)

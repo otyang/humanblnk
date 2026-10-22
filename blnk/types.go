@@ -41,12 +41,14 @@ func (b *BigInt) UnmarshalJSON(data []byte) error {
 		b.SetInt64(0)
 		return nil
 	}
-	// Accept exponent / decimal forms defensively (e.g. 1e+06, 100.0).
+	// Accept exponent and decimal forms of whole numbers (1e+06, 100.0).
 	if _, ok := b.SetString(s, 10); ok {
 		return nil
 	}
 	f, _, err := big.ParseFloat(s, 10, 256, big.ToNearestEven)
-	if err != nil {
+	if err != nil || !f.IsInt() {
+		// A fraction here would be an amount in the wrong unit: never
+		// truncate it quietly.
 		return fmt.Errorf("blnk: invalid integer %q", s)
 	}
 	f.Int(&b.Int)

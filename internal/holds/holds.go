@@ -11,7 +11,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"hash/maphash"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/otyang/humanblnk/blnk"
@@ -21,10 +23,17 @@ import (
 )
 
 // Service places, captures and cancels holds.
-type Service struct{ k *core.Core }
+type Service struct {
+	k *core.Core
+
+	// capturing serialises Capture calls for the same hold within this
+	// process, so two different-amount captures can't both commit.
+	capturing [64]sync.Mutex
+	seed      maphash.Seed
+}
 
 // New returns a Service on k.
-func New(k *core.Core) *Service { return &Service{k} }
+func New(k *core.Core) *Service { return &Service{k: k, seed: maphash.MakeSeed()} }
 
 // Place reserves t's amount: it leaves From's Available at once but reaches
 // To only when captured. If expires is set and passes first, Blnk cancels
@@ -32,8 +41,11 @@ func New(k *core.Core) *Service { return &Service{k} }
 // cancelled as one.
 //
 // Place is safe to repeat with the same t: if t.Ref already holds this
-// hold, its id comes back. A reference holding anything else, including
-// this split hold rolled back, is ErrReferenceUsed.
+// hold, its id comes back, captured or not, so a whole purchase (Place,
+// deliver, Capture) is safe to retry. If it was released instead, cancelled
+// or expired without any capture, that is ErrHoldSettled: the money is no
+// longer held, so don't deliver against it. A reference holding anything
+// else, including this split hold rolled back, is ErrReferenceUsed.
 func (s *Service) Place(ctx context.Context, t types.Transaction, expires time.Time) (types.HoldID, error) {
 	r, err := s.k.Request(ctx, t)
 	if err != nil {
@@ -41,6 +53,20 @@ func (s *Service) Place(ctx context.Context, t types.Transaction, expires time.T
 	}
 	r.Inflight = true
 	r.InflightExpiryDate = core.Time(expires)
+	if items, ok, err := s.k.PerSource(ctx, r); err != nil {
+		return "", err
+	} else if ok {
+		// A split from system accounts and others: an inflight batch, held,
+		// captured and cancelled by its id as a split hold is.
+		res, err := s.k.C.Transactions.CreateBulk(ctx, blnk.BulkTransactionRequest{Atomic: true, Inflight: true, SkipQueue: true, Transactions: items})
+		if blnk.HasCode(err, blnk.CodeDuplicateReference) {
+			return s.placed(ctx, t)
+		}
+		if err != nil {
+			return "", core.MapErr(err)
+		}
+		return types.HoldID(res.BatchID), nil
+	}
 	tx, err := s.k.C.Transactions.Create(ctx, r)
 	if blnk.HasCode(err, blnk.CodeDuplicateReference) {
 		return s.placed(ctx, t)
@@ -67,7 +93,55 @@ func (s *Service) placed(ctx context.Context, t types.Transaction) (types.HoldID
 	if !same || e.Status != types.StatusHeld {
 		return "", fmt.Errorf("%w: %s is %s %s, not this hold", types.ErrReferenceUsed, t.Ref, e.ID, e.Status)
 	}
+	// A hold's own transaction stays INFLIGHT after it is settled; what
+	// happened to it is in its children.
+	split := len(e.From) > 1 || len(e.To) > 1
+	if released, err := s.released(ctx, types.HoldID(e.ID), split); err != nil {
+		return "", err
+	} else if released {
+		return "", fmt.Errorf("%w: %s holds hold %s, cancelled or expired", types.ErrHoldSettled, t.Ref, e.ID)
+	}
 	return types.HoldID(e.ID), nil
+}
+
+// released reports whether hold h was released without any capture:
+// cancelled or expired. It, or for a split each of its postings, then has a
+// VOID child and no APPLIED one.
+func (s *Service) released(ctx context.Context, h types.HoldID, split bool) (bool, error) {
+	children := func(parent string) ([]blnk.Transaction, error) {
+		txs, _, err := s.k.C.Transactions.Filter(ctx, blnk.FilterRequest{
+			Filters: []blnk.Filter{{Field: "parent_transaction", Operator: "eq", Value: parent}},
+			Limit:   100,
+		})
+		return txs, core.MapErr(err)
+	}
+	holds := []string{string(h)}
+	if split {
+		legs, err := children(string(h))
+		if err != nil {
+			return false, err
+		}
+		holds = holds[:0]
+		for _, l := range legs {
+			holds = append(holds, l.GetID())
+		}
+	}
+	voided := false
+	for _, id := range holds {
+		kids, err := children(id)
+		if err != nil {
+			return false, err
+		}
+		for _, k := range kids {
+			switch k.Status {
+			case types.StatusApplied:
+				return false, nil // captured, at least in part: the money moved
+			case types.StatusVoid:
+				voided = true
+			}
+		}
+	}
+	return voided, nil
 }
 
 // Capture settles a hold: amount moves to its To account, and whatever of
@@ -80,6 +154,10 @@ func (s *Service) placed(ctx context.Context, t types.Transaction) (types.HoldID
 // remains: a partial capture retried while Blnk is still working on the
 // first attempt can capture twice, so wait a few seconds before retrying one.
 func (s *Service) Capture(ctx context.Context, h types.HoldID, amount money.Money) (types.Entry, error) {
+	mu := &s.capturing[maphash.String(s.seed, string(h))%uint64(len(s.capturing))]
+	mu.Lock()
+	defer mu.Unlock()
+
 	held, err := s.k.GetEntry(ctx, string(h))
 	if err != nil {
 		return types.Entry{}, err

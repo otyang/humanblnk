@@ -16,8 +16,7 @@ func (k *Core) Account(b *blnk.Balance) (types.Account, error) {
 	if !ok {
 		return types.Account{}, fmt.Errorf("humanblnk: account %s has unknown currency %q", b.BalanceID, b.Currency)
 	}
-	k.currencies.Store(b.BalanceID, c)
-	k.system.Store(b.BalanceID, b.Indicator != "")
+	k.accounts.put(b.BalanceID, accountInfo{currency: c, system: b.Indicator != ""})
 	total, err := money.FromMinor(&b.Balance.Int, c)
 	if err != nil {
 		return types.Account{}, err
@@ -60,20 +59,23 @@ func (k *Core) IsSystemAccount(ctx context.Context, a types.AccountRef) (bool, e
 	if a.IsSystem() {
 		return true, nil
 	}
-	if sys, ok := k.system.Load(string(a)); ok {
-		return sys.(bool), nil
+	if info, ok := k.accounts.get(string(a)); ok {
+		return info.system, nil
 	}
-	if _, err := k.CurrencyOf(ctx, string(a)); err != nil { // caches both
+	b, err := k.C.Balances.Get(ctx, string(a), blnk.GetBalanceOptions{})
+	if err != nil {
+		return false, MapErr(err)
+	}
+	if _, err := k.Account(b); err != nil { // caches it
 		return false, err
 	}
-	sys, _ := k.system.Load(string(a))
-	return sys == true, nil
+	return b.Indicator != "", nil
 }
 
 // CurrencyOf is the currency account id holds, from the cache or Blnk.
 func (k *Core) CurrencyOf(ctx context.Context, id string) (currency.Currency, error) {
-	if c, ok := k.currencies.Load(id); ok {
-		return c.(currency.Currency), nil
+	if info, ok := k.accounts.get(id); ok {
+		return info.currency, nil
 	}
 	b, err := k.C.Balances.Get(ctx, id, blnk.GetBalanceOptions{})
 	if err != nil {

@@ -47,7 +47,8 @@
     <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html" class="current" aria-current="page"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
@@ -77,8 +78,8 @@
 <div class="table"><table>
 <thead><tr><th>Call</th><th>Safe to repeat?</th><th>Because</th></tr></thead><tbody>
 <tr><td><code>Transactions.Record</code>, <code>RecordAll</code></td><td>yes, with the same <code>Ref</code></td><td>a used reference is checked: <code>ErrDuplicate</code> if it happened</td></tr>
-<tr><td><code>Transactions.Reverse</code></td><td>yes, with the same <code>Ref</code></td><td>returns the reversal already made</td></tr>
-<tr><td><code>Holds.Place</code></td><td>yes, with the same transaction</td><td>returns the same hold</td></tr>
+<tr><td><code>Transactions.Reverse</code></td><td>yes, with the same <code>Ref</code></td><td>returns the reversal already made; without a <code>Ref</code>, a full reversal says <code>ErrAlreadyReversed</code> once done</td></tr>
+<tr><td><code>Holds.Place</code></td><td>yes, with the same transaction</td><td>returns the same hold, captured or not; <code>ErrHoldSettled</code> if it was released</td></tr>
 <tr><td><code>Holds.Capture</code> (full)</td><td>yes</td><td>finds the earlier capture</td></tr>
 <tr><td><code>Holds.Capture</code> (partial)</td><td><strong>wait a few seconds first</strong></td><td>Blnk can&#39;t tell a repeated partial capture still being processed from a new one</td></tr>
 <tr><td><code>Holds.Cancel</code></td><td>yes</td><td></td></tr>
@@ -90,7 +91,7 @@
 <tr><td><code>Ledgers.Rename</code>, <code>Reconciliation.ChangeRule</code></td><td>yes</td><td>they replace, not add</td></tr>
 <tr><td><code>Watches.Delete</code>, <code>Reconciliation.RemoveRule</code></td><td>yes</td><td>a repeat may return <code>ErrNotFound</code></td></tr>
 <tr><td><code>Reconciliation.Upload</code>, <code>AddRule</code>, <code>Run</code>, <code>RunLines</code></td><td><strong>no</strong></td><td>each call makes a new statement, rule or run</td></tr>
-<tr><td>every read (<code>Get</code>, <code>List</code>, <code>GetByReference</code>, <code>Preview</code>)</td><td>yes</td><td></td></tr>
+<tr><td>every read (<code>Get</code>, <code>List</code>, <code>GetByReference</code>, <code>Accounts.System</code>, <code>Preview</code>)</td><td>yes</td><td></td></tr>
 </tbody></table></div>
 <h2 id="references-in-one-rule"><a class="anchor" href="#references-in-one-rule">References, in one rule</a></h2>
 <p>Build every reference from <strong>your own ids</strong>, with <code>humanblnk.Reference</code>:</p>
@@ -113,7 +114,7 @@
   </article>
   <nav class="pager" aria-label="Previous and next">
     <a class="prev" href="reconciliation.html"><small>Previous</small>Reconciliation</a>
-    <a class="next" href="cheat-sheet.html"><small>Next</small>Cheat sheet</a>
+    <a class="next" href="testing.html"><small>Next</small>Testing your service</a>
   </nav>
   <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
 </main>

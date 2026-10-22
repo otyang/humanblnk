@@ -13,7 +13,12 @@
 //	)
 //
 // The ledgers themselves are made once, by a setup script, with
-// Ledgers.Create. The tutorial at https://otyang.github.io/humanblnk/docs/
+// Ledgers.Create.
+//
+// A Client remembers the currency of up to 100,000 recently used accounts
+// (about 20 MiB), so it needn't ask Blnk before every write.
+// WithAccountCacheSize changes that; either way memory stays bounded however
+// many accounts a long-running service touches. The tutorial at https://otyang.github.io/humanblnk/docs/
 // walks through each task with a program to run.
 //
 // # Vocabulary
@@ -51,10 +56,12 @@
 //
 //   - Identities: Create, Get, UpdateMeta, FindByCustomer. Owners for
 //     customer accounts, holding only references such as customer_id.
-//   - Accounts: OpenForCustomer, CreateInternal, Get, List.
+//   - Accounts: OpenForCustomer, CreateInternal, Get, List, and System for a
+//     system account by name and currency.
 //   - Transactions: Record, RecordAll, Preview, Reverse, Get,
 //     GetByReference, List. Moving money now, undoing it, and reading what
-//     was recorded.
+//     was recorded. Reverse takes an entry's id, or a captured hold's: the
+//     id Capture returned, or the hold's own.
 //   - Holds: Place, Capture, Cancel. Reserving money now, settling it later.
 //   - Watches: Create, Get, List, Change, Delete. Thresholds that fire Blnk's
 //     balance.monitor webhook.
@@ -81,14 +88,20 @@
 //     carries a reference, built from the caller's own ids with Reference
 //     and the same on every retry, so a retry cannot apply it twice. A
 //     retried Record or RecordAll returns ErrDuplicate with the entry; a
-//     retried Place or Reverse returns the hold or reversal already made.
-//     ErrReferenceUsed means the reference is taken by something other than
-//     this write, applied: a different transaction, or this one rolled back.
+//     retried Place returns the hold already placed (ErrHoldSettled if it
+//     was released since), and a Reverse retried with its Ref the reversal
+//     already made. ErrReferenceUsed means the reference is taken by
+//     something other than this write: a different transaction, or this one
+//     rolled back. Any reference works, "/" included; a split and a single
+//     transaction can't share one, so each write first checks that.
 //   - Writes are applied synchronously (Blnk's skip_queue), so a refusal such
 //     as ErrInsufficientFunds is returned, not discovered later as a
 //     rejected status.
-//   - Only system accounts may go below zero: a write may overdraw only when
-//     every source is one. A customer account never may.
+//   - Only system accounts may go below zero; a customer account never may.
+//     Blnk allows an overdraft per transaction, not per source, so a split
+//     taking from both (a refund of a transfer with a fee, say) goes to Blnk
+//     as an atomic batch, one transaction per source, and reads back as the
+//     split it is.
 //   - Reversals, full or partial, are numbered per entry. They take turns,
 //     even concurrently, and never undo more than the entry moved. A reversal
 //     takes from where the entry put the money, so a customer who spent it
@@ -111,8 +124,8 @@
 // error or a gateway timeout means the outcome is unknown, so repeat the
 // call with the same arguments if it is safe to:
 //
-//   - Safe: Transactions.Record and RecordAll (same Ref), Reverse (same Ref,
-//     or none for a full reversal, which then returns ErrAlreadyReversed),
+//   - Safe: Transactions.Record and RecordAll (same Ref), Reverse (same Ref;
+//     a full reversal without one returns ErrAlreadyReversed once done),
 //     Holds.Place, Holds.Cancel, a full Holds.Capture,
 //     Accounts.OpenForCustomer, Identities.UpdateMeta, Ledgers.Rename,
 //     Reconciliation.ChangeRule, every read, and every delete (a repeat may
@@ -132,15 +145,16 @@
 //   - ErrDuplicate: this exact write already happened, applied. Treat it as
 //     success: the existing entry comes back with it.
 //   - ErrReferenceUsed: this write did not apply; the reference holds a
-//     different transaction, or this one rolled back. After a rollback,
+//     different transaction, or this one rolled back (for a Reverse, its Ref
+//     names a reversal of another amount). After a rollback,
 //     record it again under a new reference; otherwise investigate how two
 //     writes got the same reference.
 //   - ErrNotFound: no such account, entry, hold, ledger, identity or watch.
 //   - ErrUnbalanced: From and To don't add up to the same amount.
 //   - ErrAlreadyReversed: nothing, or not that much, is left to reverse.
 //   - ErrHoldSettled: the hold was already captured, cancelled or expired;
-//     the id isn't a hold; or a repeated Capture asked for a different
-//     amount.
+//     the id isn't a hold; a repeated Capture asked for a different amount,
+//     or more than is left; or a Place found its hold released.
 //   - ErrInvalid: refused before reaching Blnk, such as a missing reference,
 //     a negative amount, the wrong ledger, or reversing an entry that isn't
 //     applied. Don't retry it unchanged.
@@ -154,6 +168,18 @@
 // error humanblnk has no name for comes back as a *blnk.APIError.
 // VerifyWebhook returns blnk.ErrBadSignature or blnk.ErrStale when the check
 // fails, and a plain error for a body it can't read or decode.
+//
+// # Testing
+//
+// Package humanblnktest runs a Client against an in-memory Blnk, so code
+// built on humanblnk can be tested with no Blnk, Docker or network:
+//
+//	hb := humanblnktest.New(t)
+//	ada := hb.Customer(t, "USD")
+//	hb.Fund(t, ada, "100.00")
+//
+// It copies the Blnk Core 0.15.6 behaviour humanblnk relies on, and
+// humanblnk's contract tests run against it and a real Blnk alike.
 //
 // # Limits
 //

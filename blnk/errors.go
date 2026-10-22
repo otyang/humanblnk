@@ -129,10 +129,13 @@ func HasCode(err error, codes ...string) bool {
 	return false
 }
 
-// IsNotFound reports whether err is any kind of 404 from Blnk.
+// IsNotFound reports whether err is Blnk saying something doesn't exist: a
+// 404 carrying one of its error codes (BAL_NOT_FOUND, TXN_NOT_FOUND, …). A
+// bare 404 is a path Blnk doesn't serve, such as a wrong base URL or a proxy,
+// and says nothing about whether the thing exists.
 func IsNotFound(err error) bool {
 	var ae *APIError
-	return errors.As(err, &ae) && ae.Status == http.StatusNotFound
+	return errors.As(err, &ae) && ae.Status == http.StatusNotFound && ae.Code != ""
 }
 
 func parseAPIError(status int, raw []byte) *APIError {

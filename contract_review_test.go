@@ -1,5 +1,3 @@
-//go:build integration
-
 package humanblnk_test
 
 import (
@@ -13,7 +11,7 @@ import (
 
 // A split whose second posting fails is rolled back by Blnk, but its first
 // posting's reference stays used. A retry must say so, not "already done".
-func TestIntegrationRetryAfterRolledBackSplit(t *testing.T) {
+func TestContractRetryAfterRolledBackSplit(t *testing.T) {
 	ctx, w := setup(t)
 	ada, bola := w.account(t, ctx, iusd), w.account(t, ctx, iusd)
 	shop := w.account(t, ctx, iusd)
@@ -56,7 +54,7 @@ func TestIntegrationRetryAfterRolledBackSplit(t *testing.T) {
 }
 
 // Reversing part of a payout takes it back from @World, which is below zero.
-func TestIntegrationPartialReversalOfAPayout(t *testing.T) {
+func TestContractPartialReversalOfAPayout(t *testing.T) {
 	ctx, w := setup(t)
 	ada := w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100") // @World goes below zero here
@@ -79,7 +77,7 @@ func TestIntegrationPartialReversalOfAPayout(t *testing.T) {
 }
 
 // Full and partial reversals racing never undo more than the entry moved.
-func TestIntegrationFullAndPartialReversalsRace(t *testing.T) {
+func TestContractFullAndPartialReversalsRace(t *testing.T) {
 	ctx, w := setup(t)
 	ada, shop := w.account(t, ctx, iusd), w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100")
@@ -117,7 +115,7 @@ func TestIntegrationFullAndPartialReversalsRace(t *testing.T) {
 // The second review's case, live: a split reversal fails partway because
 // one recipient spent their share, and Blnk rolls it back. A retry with the
 // same Ref must reverse it properly, not report the failed one as done.
-func TestIntegrationRolledBackSplitReversal(t *testing.T) {
+func TestContractRolledBackSplitReversal(t *testing.T) {
 	ctx, w := setup(t)
 	ada, bola, cara := w.account(t, ctx, iusd), w.account(t, ctx, iusd), w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100")

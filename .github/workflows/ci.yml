@@ -22,6 +22,22 @@ jobs:
       - run: go vet ./...
       - run: go vet -tags integration ./...
       - run: go test -race ./...
+      - name: known vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  # The oldest Go go.mod allows, and the newest: a library must build on both.
+  compat:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.24", "stable"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - run: go vet ./...
+      - run: go test ./...
 
   integration:
     runs-on: ubuntu-latest

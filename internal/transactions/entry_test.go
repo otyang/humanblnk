@@ -29,8 +29,8 @@ func TestGetEntryGathersASplit(t *testing.T) {
 
 func TestGetEntryByReferenceFindsASplit(t *testing.T) {
 	s, f := newService(t)
-	f.On("GET /transactions/reference/transfer:t1-1", 200, `{"transaction_id":"c1","parent_transaction":"txn_p"}`)
-	f.On("POST /transactions/filter", 200, `[{"transaction_id":"c1","reference":"transfer:t1-1","status":"APPLIED","currency":"USD","precise_amount":100,"precision":100,"source":"bln_usd","destination":"bln_usd2"}]`)
+	f.On("GET /transactions/reference/transfer:t1-1", 200, `{"transaction_id":"c1","parent_transaction":"txn_p","meta_data":{"ledger_split_postings":"1"}}`)
+	f.On("POST /transactions/filter", 200, `[{"transaction_id":"c1","reference":"transfer:t1-1","status":"APPLIED","currency":"USD","precise_amount":100,"precision":100,"source":"bln_usd","destination":"bln_usd2","meta_data":{"ledger_split_postings":"1"}}]`)
 	e, err := s.GetByReference(context.Background(), "transfer:t1")
 	if err != nil || e.ID != "txn_p" {
 		t.Fatalf("%+v %v", e, err)

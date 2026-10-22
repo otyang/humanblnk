@@ -47,7 +47,8 @@
     <li><a href="watches-and-webhooks.html" class="current" aria-current="page"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
@@ -88,13 +89,20 @@ fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, 
 <p>Blnk signs each webhook with its <code>server.secret_key</code>. <code>humanblnk.VerifyWebhook</code> checks the signature and the age, then decodes it. Never act on a body that fails the check. This is the handler you mount at the URL Blnk sends webhooks to:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func webhook(w http.ResponseWriter, r *http.Request) {
     ev, err := humanblnk.VerifyWebhook(secret, r, 5*time.Minute)
-    if err != nil {
+    switch {
+    case errors.Is(err, blnk.ErrBadSignature), errors.Is(err, blnk.ErrStale):
         http.Error(w, &#34;bad signature&#34;, http.StatusUnauthorized) // never act on its body
         fmt.Println(&#34;  rejected:&#34;, err)
         return
+    case err != nil:
+        // Signed, but not something to act on: say so, or Blnk sends it
+        // again and again.
+        w.WriteHeader(http.StatusNoContent)
+        fmt.Println(&#34;  can&#39;t use it:&#34;, err)
+        return
     }
     switch {
-    case ev.Kind == &#34;balance.monitor&#34;:
+    case ev.Kind == humanblnk.EventBalanceMonitor:
         fmt.Println(&#34;  watch&#34;, ev.Watch, &#34;fired on&#34;, ev.Account, &#34;- e.g. text the customer &#39;low balance&#39;&#34;)
     case ev.Entry != nil: // transaction.applied, transaction.rejected, …
         fmt.Println(&#34;  &#34;, ev.Kind, ev.Entry.Ref, ev.Entry.Amount)
@@ -103,12 +111,14 @@ fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, 
 }</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th><code>Event</code> field</th><th></th></tr></thead><tbody>
-<tr><td><code>Kind</code></td><td>the event, such as <code>&#34;balance.monitor&#34;</code> or <code>&#34;transaction.applied&#34;</code></td></tr>
+<tr><td><code>Kind</code></td><td>the event: <code>humanblnk.EventBalanceMonitor</code>, <code>EventTransactionApplied</code>, <code>EventTransactionVoid</code>, …</td></tr>
 <tr><td><code>Watch</code>, <code>Account</code></td><td>for <code>balance.monitor</code>: which watch fired, on which account</td></tr>
 <tr><td><code>Entry</code></td><td>for <code>transaction.*</code> events: the entry</td></tr>
 <tr><td><code>Data</code></td><td>the raw data, as Blnk sent it</td></tr>
 </tbody></table></div>
-<p>The tolerance rejects old deliveries replayed by an attacker; five minutes is sensible. The example signs requests the way Blnk does and sends a genuine one and a forged one to a test server.</p>
+<p>The tolerance rejects old deliveries replayed by an attacker; five minutes is sensible, and is what <code>VerifyWebhook</code> uses if you pass 0. Answer anything that isn&#39;t 2xx and Blnk sends the webhook again, so reject only a bad signature or a stale one, and acknowledge what you can&#39;t use.</p>
+<p><strong>Blnk can deliver the same event more than once</strong>, each time freshly signed. Make the handler safe to repeat: text the customer once per watch and day, say, or act on an entry once by its <code>ID</code>.</p>
+<p>The example signs requests the way Blnk does and sends a genuine one and a forged one to a test server.</p>
 <h2 id="step-4-stop-watching"><a class="anchor" href="#step-4-stop-watching">Step 4: stop watching</a></h2>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">if err := hb.Watches.Delete(ctx, low.ID); err != nil {
     log.Fatal(err)
@@ -123,6 +133,7 @@ package main
 
 import (
     &#34;bytes&#34;
+    &#34;errors&#34;
     &#34;fmt&#34;
     &#34;log&#34;
     &#34;net/http&#34;
@@ -142,13 +153,20 @@ const secret = &#34;change-me&#34;
 // webhook is the handler you mount at the URL Blnk sends webhooks to.
 func webhook(w http.ResponseWriter, r *http.Request) {
     ev, err := humanblnk.VerifyWebhook(secret, r, 5*time.Minute)
-    if err != nil {
+    switch {
+    case errors.Is(err, blnk.ErrBadSignature), errors.Is(err, blnk.ErrStale):
         http.Error(w, &#34;bad signature&#34;, http.StatusUnauthorized) // never act on its body
         fmt.Println(&#34;  rejected:&#34;, err)
         return
+    case err != nil:
+        // Signed, but not something to act on: say so, or Blnk sends it
+        // again and again.
+        w.WriteHeader(http.StatusNoContent)
+        fmt.Println(&#34;  can&#39;t use it:&#34;, err)
+        return
     }
     switch {
-    case ev.Kind == &#34;balance.monitor&#34;:
+    case ev.Kind == humanblnk.EventBalanceMonitor:
         fmt.Println(&#34;  watch&#34;, ev.Watch, &#34;fired on&#34;, ev.Account, &#34;- e.g. text the customer &#39;low balance&#39;&#34;)
     case ev.Entry != nil: // transaction.applied, transaction.rejected, …
         fmt.Println(&#34;  &#34;, ev.Kind, ev.Entry.Ref, ev.Entry.Amount)

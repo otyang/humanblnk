@@ -47,7 +47,8 @@
     <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
     <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
     <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
-    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    <li><a href="testing.html"><span class="num">13</span>Testing your service</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">14</span>Cheat sheet</a></li>
     
   </ul>
   
@@ -232,7 +233,8 @@ ride charged 4200.00 | Ada: 25800.00 NGN</code></pre></figure>
 <h2 id="good-to-know"><a class="anchor" href="#good-to-know">Good to know</a></h2>
 <ul>
 <li>A hold&#39;s own transaction stays <code>StatusHeld</code> (<code>INFLIGHT</code>) for good. The capture and the release are separate transactions under it, so don&#39;t use the hold&#39;s status to ask &#34;did it settle?&#34;. <code>Capture</code>&#39;s return value, or <code>ErrHoldSettled</code>, tells you.</li>
-<li>To undo money a capture already moved, use <code>Transactions.Reverse</code> (chapter 8). <code>Cancel</code> only releases money still held.</li>
+<li>To undo money a capture already moved, use <code>Transactions.Reverse</code> (chapter 8) with the id <code>Capture</code> returned, or the hold&#39;s own id: a split hold&#39;s capture is reversed as a whole. <code>Cancel</code> only releases money still held.</li>
+<li>Retrying <code>Place</code> returns the same hold, captured or not, so a whole purchase is safe to retry. If the hold was released instead (cancelled, or expired), <code>Place</code> says <code>ErrHoldSettled</code>: don&#39;t deliver against it.</li>
 </ul>
 
   </article>

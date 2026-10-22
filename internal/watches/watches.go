@@ -110,7 +110,7 @@ var maxExactThreshold = new(big.Int).Lsh(big.NewInt(1), 53)
 func (s *Service) monitor(ctx context.Context, w types.Watch) (blnk.BalanceMonitor, error) {
 	switch {
 	case w.Account == "" || w.Account.IsSystem():
-		return blnk.BalanceMonitor{}, core.Invalid("a watch needs a customer account")
+		return blnk.BalanceMonitor{}, core.Invalid("a watch needs an account by its id, not a system account (%q)", w.Account)
 	case w.Field == "" || w.Op == "":
 		return blnk.BalanceMonitor{}, core.Invalid("a watch needs a field and an operator")
 	case !w.Threshold.Valid():
