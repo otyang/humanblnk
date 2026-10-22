@@ -1,6 +1,6 @@
 # HumanBlnk
 
-A Go backend for a bank or wallet. Money is kept exactly (never a float), and
+A Go Domain based Wrapper Implementation on the Blnk Ledger. Money is kept exactly (never a float), and
 every account and transaction lives in [Blnk Core](https://docs.blnkfinance.com)
 0.15.6, a double-entry ledger.
 
