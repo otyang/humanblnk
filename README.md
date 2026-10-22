@@ -87,7 +87,7 @@ fmt.Println(acct.Available) // "3000.00": what the customer can spend now
 
 For a step-by-step guide with runnable real-life examples (deposits,
 transfers, payouts, refunds, exchange, reconciliation), read the
-[tutorial](https://otyang.github.io/humanblnk/). See [ledger/README.md](ledger/README.md) for every
+[tutorial](https://otyang.github.io/humanblnk/docs/). See [ledger/README.md](ledger/README.md) for every
 service, and known limits.
 
 ## License
