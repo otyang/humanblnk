@@ -113,13 +113,14 @@ acct, err := hb.Accounts.Get(ctx, ngn.ID)
 if err != nil {
     log.Fatal(err)
 }
-fmt.Printf(&#34;Get %s: Total %s, Held %s, Available %s\n&#34;, acct.ID, acct.Total, acct.Held, acct.Available)</code></pre></figure>
-<p>An <code>Account</code> has three amounts:</p>
+fmt.Printf(&#34;Get %s: Total %s, OutgoingHeld %s, Available %s\n&#34;, acct.ID, acct.Total, acct.OutgoingHeld, acct.Available)</code></pre></figure>
+<p>An <code>Account</code> has four amounts:</p>
 <div class="table"><table>
 <thead><tr><th>Field</th><th>Meaning</th></tr></thead><tbody>
 <tr><td><code>Total</code></td><td>everything recorded</td></tr>
-<tr><td><code>Held</code></td><td>reserved by holds not yet captured or cancelled</td></tr>
-<tr><td><code>Available</code></td><td><code>Total</code> less held and queued debits: <strong>what she can spend now</strong></td></tr>
+<tr><td><code>Available</code></td><td><code>Total</code> less outgoing holds and queued debits: <strong>what she can spend now</strong></td></tr>
+<tr><td><code>OutgoingHeld</code></td><td>reserved by holds out of it, not yet captured or cancelled</td></tr>
+<tr><td><code>IncomingHeld</code></td><td>reserved by holds into it; <strong>not</strong> in <code>Total</code> or <code>Available</code> until captured</td></tr>
 </tbody></table></div>
 <p>Always decide &#34;can she pay?&#34; on <code>Available</code>, read with <code>Get</code>. <code>List</code> is quicker for many accounts, but its <code>Available</code> leaves queued debits out.</p>
 <h2 id="step-4-tag-the-owner-later"><a class="anchor" href="#step-4-tag-the-owner-later">Step 4: tag the owner later</a></h2>
@@ -219,7 +220,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    fmt.Printf(&#34;Get %s: Total %s, Held %s, Available %s\n&#34;, acct.ID, acct.Total, acct.Held, acct.Available)
+    fmt.Printf(&#34;Get %s: Total %s, OutgoingHeld %s, Available %s\n&#34;, acct.ID, acct.Total, acct.OutgoingHeld, acct.Available)
 
     // 5. Tag the owner later; keys you don&#39;t send keep their values.
     meta, err := hb.Identities.UpdateMeta(ctx, owner, humanblnk.Meta{&#34;tier&#34;: &#34;gold&#34;})
@@ -253,7 +254,7 @@ USD wallet bln_43e7c258-a642-48a8-b640-e8bbb336ba87
 2 accounts:
   bln_43e7c258-a642-48a8-b640-e8bbb336ba87  USD  available 0.00
   bln_29be359a-dd9e-4710-897d-f9d0e62d9a98  NGN  available 0.00
-Get bln_29be359a-dd9e-4710-897d-f9d0e62d9a98: Total 0.00, Held 0.00, Available 0.00
+Get bln_29be359a-dd9e-4710-897d-f9d0e62d9a98: Total 0.00, OutgoingHeld 0.00, Available 0.00
 owner meta: map[customer_id:cus_ada_1792634712487858000 tier:gold]
 escrow pool bln_cac9aee4-41cc-461c-a516-4a97a9058816
 customer account without an owner: humanblnk: invalid request: a customer account needs an owner

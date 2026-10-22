@@ -9,15 +9,16 @@ import (
 
 // Account is a Blnk balance: money in one currency, owned by one identity.
 type Account struct {
-	ID        string
-	Ledger    string // the Blnk ledger it lives in
-	Owner     string // the Blnk identity it belongs to
-	Currency  currency.Currency
-	Total     money.Money // everything recorded
-	Available money.Money // Total less held and queued debits: what can be spent now
-	Held      money.Money // reserved by holds not yet captured or cancelled
-	Meta      Meta
-	CreatedAt time.Time
+	ID           string
+	Ledger       string // the Blnk ledger it lives in
+	Owner        string // the Blnk identity it belongs to
+	Currency     currency.Currency
+	Total        money.Money // everything recorded
+	Available    money.Money // Total less outgoing holds and queued debits: what can be spent now
+	OutgoingHeld money.Money // reserved by holds out of it, not yet captured or cancelled
+	IncomingHeld money.Money // reserved by holds into it; not in Total or Available until captured
+	Meta         Meta
+	CreatedAt    time.Time
 }
 
 // NewAccount is what Accounts.CreateInternal needs: one of your company's own

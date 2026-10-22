@@ -1,4 +1,4 @@
-held txn_cfe718da-ff3a-4630-bab2-0b9a634c9c0f: Total 50000.00, Held 20000.00, Available 30000.00
+held txn_cfe718da-ff3a-4630-bab2-0b9a634c9c0f: Total 50000.00, OutgoingHeld 20000.00, Available 30000.00
 placed again, same hold: true
 captured 20000.00 | Ada: 30000.00 NGN
 captured again: 20000.00 <nil>

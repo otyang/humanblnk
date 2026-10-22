@@ -46,7 +46,7 @@ below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 
 | Type | Fields |
 | --- | --- |
-| `Account` | `ID`, `Ledger`, `Owner`, `Currency`, `Total`, `Held`, `Available`, `Meta`, `CreatedAt` |
+| `Account` | `ID`, `Ledger`, `Owner`, `Currency`, `Total`, `Available`, `OutgoingHeld`, `IncomingHeld`, `Meta`, `CreatedAt` |
 | `Entry` | `ID`, `Ref`, `Status`, `Amount`, `From`, `To`, `Description`, `Meta`, `CreatedAt` |
 | `Preview` | `WouldApply`, `Rejection`, `Changes []AccountChange`, `Notes` |
 | `Identity` | `ID`, `Meta`, `CreatedAt` |

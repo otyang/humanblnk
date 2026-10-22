@@ -32,7 +32,7 @@ func main() {
 		log.Fatal(err) // humanblnk.ErrInsufficientFunds: tell Ada
 	}
 	acct, _ := hb.Accounts.Get(ctx, ada.ID)
-	fmt.Printf("held %s: Total %s, Held %s, Available %s\n", hold, acct.Total, acct.Held, acct.Available)
+	fmt.Printf("held %s: Total %s, OutgoingHeld %s, Available %s\n", hold, acct.Total, acct.OutgoingHeld, acct.Available)
 
 	// Placing it again (a retry) gives back the same hold.
 	same, _ := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))

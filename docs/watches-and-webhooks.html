@@ -70,7 +70,7 @@ if err != nil {
 fmt.Println(&#34;watch&#34;, low.ID, &#34;on&#34;, low.Account, low.Field, low.Op, low.Threshold)</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Field</th><th>Values</th></tr></thead><tbody>
-<tr><td><code>Field</code></td><td><code>WatchBalance</code> (Total), <code>WatchCredits</code>, <code>WatchDebits</code>, <code>WatchHeld</code> (held out of it), <code>WatchIncomingHeld</code>, <code>WatchHeldNet</code></td></tr>
+<tr><td><code>Field</code></td><td><code>WatchBalance</code> (Total), <code>WatchCredits</code>, <code>WatchDebits</code>, <code>WatchOutgoingHeld</code> (held out of it), <code>WatchIncomingHeld</code> (held into it), <code>WatchHeldNet</code></td></tr>
 <tr><td><code>Op</code></td><td><code>WatchAbove</code>, <code>WatchAtLeast</code>, <code>WatchBelow</code>, <code>WatchAtMost</code>, <code>WatchEquals</code>, <code>WatchNotEquals</code></td></tr>
 <tr><td><code>Threshold</code></td><td>a <code>money.Money</code> in the account&#39;s currency, at most 2^53 in its smallest unit (about ₦90 trillion, or 0.009 ETH). Larger is <code>ErrInvalid</code>: Blnk can&#39;t store it exactly.</td></tr>
 </tbody></table></div>

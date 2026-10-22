@@ -120,7 +120,7 @@
 //     customer_id, nothing more.
 //
 // Check Account.Available, not Account.Total, before letting a customer
-// spend. From Accounts.Get, Available is Total less held and queued debits;
+// spend. From Accounts.Get, Available is Total less outgoing holds and queued debits;
 // Accounts.List leaves out queued debits.
 //
 // # Retries

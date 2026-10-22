@@ -32,13 +32,14 @@ call it whenever you need Ada's wallet, instead of storing ids everywhere.
 
 {{code 02-onboarding/main.go balances}}
 
-An `Account` has three amounts:
+An `Account` has four amounts:
 
 | Field | Meaning |
 | --- | --- |
 | `Total` | everything recorded |
-| `Held` | reserved by holds not yet captured or cancelled |
-| `Available` | `Total` less held and queued debits: **what she can spend now** |
+| `Available` | `Total` less outgoing holds and queued debits: **what she can spend now** |
+| `OutgoingHeld` | reserved by holds out of it, not yet captured or cancelled |
+| `IncomingHeld` | reserved by holds into it; **not** in `Total` or `Available` until captured |
 
 Always decide "can she pay?" on `Available`, read with `Get`. `List` is
 quicker for many accounts, but its `Available` leaves queued debits out.

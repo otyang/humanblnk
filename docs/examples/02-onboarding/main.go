@@ -67,7 +67,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Printf("Get %s: Total %s, Held %s, Available %s\n", acct.ID, acct.Total, acct.Held, acct.Available)
+	fmt.Printf("Get %s: Total %s, OutgoingHeld %s, Available %s\n", acct.ID, acct.Total, acct.OutgoingHeld, acct.Available)
 	// end-snippet
 
 	// 5. Tag the owner later; keys you don't send keep their values.

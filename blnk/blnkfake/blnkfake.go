@@ -39,7 +39,7 @@ type Fake struct {
 func New(t *testing.T) (*blnk.Client, *Fake) {
 	t.Helper()
 	f := &Fake{routes: map[string]func(Call) (int, string){}}
-	f.On("GET /balances/bln_usd", 200, `{"balance_id":"bln_usd","ledger_id":"ldg_wallets","identity_id":"idt_ada","currency":"USD","balance":150025,"inflight_debit_balance":25,"queued_debit_balance":100000}`)
+	f.On("GET /balances/bln_usd", 200, `{"balance_id":"bln_usd","ledger_id":"ldg_wallets","identity_id":"idt_ada","currency":"USD","balance":150025,"inflight_debit_balance":25,"inflight_credit_balance":40,"queued_debit_balance":100000}`)
 	f.On("GET /balances/bln_usd2", 200, `{"balance_id":"bln_usd2","currency":"USD","balance":0}`)
 	f.On("GET /balances/bln_ngn", 200, `{"balance_id":"bln_ngn","currency":"NGN","balance":0}`)
 	srv := httptest.NewServer(f)

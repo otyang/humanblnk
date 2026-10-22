@@ -29,7 +29,7 @@ const (
 	WatchBalance      WatchField = "balance"                 // Total
 	WatchCredits      WatchField = "credit_balance"          // everything ever credited
 	WatchDebits       WatchField = "debit_balance"           // everything ever debited
-	WatchHeld         WatchField = "inflight_debit_balance"  // reserved by holds out of it
+	WatchOutgoingHeld WatchField = "inflight_debit_balance"  // reserved by holds out of it
 	WatchIncomingHeld WatchField = "inflight_credit_balance" // reserved by holds into it
 	WatchHeldNet      WatchField = "inflight_balance"        // incoming less outgoing holds
 )

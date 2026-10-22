@@ -13,7 +13,7 @@ webhook event `balance.monitor` after every update of the account.
 
 | Field | Values |
 | --- | --- |
-| `Field` | `WatchBalance` (Total), `WatchCredits`, `WatchDebits`, `WatchHeld` (held out of it), `WatchIncomingHeld`, `WatchHeldNet` |
+| `Field` | `WatchBalance` (Total), `WatchCredits`, `WatchDebits`, `WatchOutgoingHeld` (held out of it), `WatchIncomingHeld` (held into it), `WatchHeldNet` |
 | `Op` | `WatchAbove`, `WatchAtLeast`, `WatchBelow`, `WatchAtMost`, `WatchEquals`, `WatchNotEquals` |
 | `Threshold` | a `money.Money` in the account's currency, at most 2^53 in its smallest unit (about ₦90 trillion, or 0.009 ETH). Larger is `ErrInvalid`: Blnk can't store it exactly. |
 

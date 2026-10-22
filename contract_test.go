@@ -224,6 +224,46 @@ func TestContractHolds(t *testing.T) {
 	}
 }
 
+func TestContractHeldBothWays(t *testing.T) {
+	ctx, w := setup(t)
+	ada, shop := w.account(t, ctx, iusd), w.account(t, ctx, iusd)
+	w.fund(t, ctx, ada, "100")
+	h, err := w.hb.Holds.Place(ctx, humanblnk.Transaction{
+		Ref: w.ref("held-both"), From: humanblnk.Single(humanblnk.AccountRef(ada.ID), usdT("30")),
+		To: humanblnk.Single(humanblnk.AccountRef(shop.ID), usdT("30")), Description: "purchase",
+	}, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	get := func(a humanblnk.Account) humanblnk.Account {
+		t.Helper()
+		got, err := w.hb.Accounts.Get(ctx, a.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got
+	}
+	// The hold counts against the payer at once, but is not the payee's to
+	// spend until captured.
+	a, s := get(ada), get(shop)
+	if a.OutgoingHeld.String() != "30.00" || a.IncomingHeld.String() != "0.00" || a.Available.String() != "70.00" {
+		t.Fatalf("payer while held: %+v", a)
+	}
+	if s.IncomingHeld.String() != "30.00" || s.OutgoingHeld.String() != "0.00" || s.Total.String() != "0.00" || s.Available.String() != "0.00" {
+		t.Fatalf("payee while held: %+v", s)
+	}
+	if _, err := w.hb.Holds.Capture(ctx, h, money.Money{}); err != nil {
+		t.Fatal(err)
+	}
+	a, s = get(ada), get(shop)
+	if a.OutgoingHeld.String() != "0.00" || a.Total.String() != "70.00" {
+		t.Fatalf("payer after capture: %+v", a)
+	}
+	if s.IncomingHeld.String() != "0.00" || s.Available.String() != "30.00" {
+		t.Fatalf("payee after capture: %+v", s)
+	}
+}
+
 func TestContractReversals(t *testing.T) {
 	ctx, w := setup(t)
 	ada, shop := w.account(t, ctx, iusd), w.account(t, ctx, iusd)

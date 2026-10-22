@@ -25,13 +25,17 @@ func (k *Core) Account(b *blnk.Balance) (types.Account, error) {
 	if err != nil {
 		return types.Account{}, err
 	}
-	held, err := money.FromMinor(&b.InflightDebitBalance.Int, c)
+	outgoingHeld, err := money.FromMinor(&b.InflightDebitBalance.Int, c)
+	if err != nil {
+		return types.Account{}, err
+	}
+	incomingHeld, err := money.FromMinor(&b.InflightCreditBalance.Int, c)
 	if err != nil {
 		return types.Account{}, err
 	}
 	return types.Account{
 		ID: b.BalanceID, Ledger: b.LedgerID, Owner: b.IdentityID, Currency: c,
-		Total: total, Available: available, Held: held,
+		Total: total, Available: available, OutgoingHeld: outgoingHeld, IncomingHeld: incomingHeld,
 		Meta: types.Meta(b.MetaData), CreatedAt: b.CreatedAt.Time,
 	}, nil
 }

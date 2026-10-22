@@ -139,7 +139,7 @@ func TestGetAccountIsMoney(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if a.Total.String() != "1500.25" || a.Available.String() != "500.00" || a.Held.String() != "0.25" || a.Owner != "idt_ada" {
+	if a.Total.String() != "1500.25" || a.Available.String() != "500.00" || a.OutgoingHeld.String() != "0.25" || a.IncomingHeld.String() != "0.40" || a.Owner != "idt_ada" {
 		t.Fatalf("%+v", a)
 	}
 	if _, err := s.Get(context.Background(), "bln_missing"); !errors.Is(err, types.ErrNotFound) {

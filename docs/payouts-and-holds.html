@@ -76,12 +76,12 @@ if err != nil {
     log.Fatal(err) // humanblnk.ErrInsufficientFunds: tell Ada
 }
 acct, _ := hb.Accounts.Get(ctx, ada.ID)
-fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Total, acct.Held, acct.Available)
+fmt.Printf(&#34;held %s: Total %s, OutgoingHeld %s, Available %s\n&#34;, hold, acct.Total, acct.OutgoingHeld, acct.Available)
 
 // Placing it again (a retry) gives back the same hold.
 same, _ := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
 fmt.Println(&#34;placed again, same hold:&#34;, same == hold)</code></pre></figure>
-<p>While it&#39;s held, <code>Accounts.Get</code> shows <code>Held</code> 20,000 and <code>Available</code> 20,000 less. Store the hold id with your payout, so the bank&#39;s callback can find it. Placing the same transaction again (a retry) returns the same hold.</p>
+<p>While it&#39;s held, <code>Accounts.Get</code> shows <code>OutgoingHeld</code> 20,000 and <code>Available</code> 20,000 less. Store the hold id with your payout, so the bank&#39;s callback can find it. Placing the same transaction again (a retry) returns the same hold.</p>
 <aside class="note"><p><strong>Expiry:</strong> <code>time.Time{}</code> means none. If a payout&#39;s hold expires while the bank actually sent the money, you have paid out without taking it. For payouts, prefer no expiry and a job that chases stuck ones.</p></aside>
 <h2 id="step-2-the-bank-confirms"><a class="anchor" href="#step-2-the-bank-confirms">Step 2: the bank confirms</a></h2>
 <p>The zero <code>Money</code> captures all of it. Capturing again (a retried callback) returns the same capture and moves nothing more:</p>
@@ -170,7 +170,7 @@ func main() {
         log.Fatal(err) // humanblnk.ErrInsufficientFunds: tell Ada
     }
     acct, _ := hb.Accounts.Get(ctx, ada.ID)
-    fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Total, acct.Held, acct.Available)
+    fmt.Printf(&#34;held %s: Total %s, OutgoingHeld %s, Available %s\n&#34;, hold, acct.Total, acct.OutgoingHeld, acct.Available)
 
     // Placing it again (a retry) gives back the same hold.
     same, _ := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
@@ -220,7 +220,7 @@ func main() {
     fmt.Println(&#34;ride charged&#34;, fare.Amount, &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID))
 }</code></pre></figure>
 </div>
-<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">held txn_cfe718da-ff3a-4630-bab2-0b9a634c9c0f: Total 50000.00, Held 20000.00, Available 30000.00
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">held txn_cfe718da-ff3a-4630-bab2-0b9a634c9c0f: Total 50000.00, OutgoingHeld 20000.00, Available 30000.00
 placed again, same hold: true
 captured 20000.00 | Ada: 30000.00 NGN
 captured again: 20000.00 &lt;nil&gt;

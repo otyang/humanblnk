@@ -71,7 +71,7 @@ const (
 	WatchBalance      = types.WatchBalance
 	WatchCredits      = types.WatchCredits
 	WatchDebits       = types.WatchDebits
-	WatchHeld         = types.WatchHeld
+	WatchOutgoingHeld = types.WatchOutgoingHeld
 	WatchIncomingHeld = types.WatchIncomingHeld
 	WatchHeldNet      = types.WatchHeldNet
 
