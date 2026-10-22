@@ -110,6 +110,12 @@ const (
 	StatusQueued   = types.StatusQueued
 )
 
+// RecordHold is how long a split Record, or a RecordAll batch, holds the
+// money while it captures it. Capture follows at once; the hold matters only
+// if the process stops in between, when a retry within it finishes the
+// write and after it the money is released.
+const RecordHold = transactions.RecordHold
+
 // Webhook kinds, in Event.Kind.
 const (
 	EventBalanceMonitor         = types.EventBalanceMonitor

@@ -25,7 +25,7 @@ are the gaps humanblnk closes:
 | A USD 10.00 transaction applied to an NGN (Nigerian naira) account lands as NGN 10.00 | A currency mismatch is refused with `money.ErrCurrencyMismatch` |
 | A retried request hits a "reference already used" error that doesn't say whether your write applied | You build each reference from your own ids with `humanblnk.Reference`. A retried `Record` gets `ErrDuplicate` (it applied) or `ErrReferenceUsed` (something else holds that reference); a retried hold, or a reversal retried with its `Ref`, returns the one already made. Any reference works, `/` included |
 | Writes are queued by default: insufficient funds turns up later as a `REJECTED` status | Writes are synchronous: you get `ErrInsufficientFunds` from the call itself |
-| A split (one transaction paying several accounts, such as an amount plus a fee) that fails partway reads as applied, though Blnk will refund its earlier parts | The entry reads as `StatusRejected` at once and its reference can't be reused. The balances still show the earlier parts until Blnk's worker refunds them (about 200 ms), so keep the worker running |
+| A split (one transaction paying several accounts, such as an amount plus a fee) that fails partway has already moved its earlier parts; Blnk refunds them later, from its worker | A split is held and captured at once, so one that fails partway moves nothing, not even for a moment. Its entry reads as `StatusRejected` and its reference can't be reused |
 | Overdraft is a flag on each write: any write that sets it can take its source below zero, so a split from a customer and a system account can't let only one of them | Only system accounts (such as `@World`, money outside your books, or a provider's clearing account) go below zero, each on its own terms, even in one split |
 | Customer money and your company's own can share a ledger | Customer accounts need an owner and live in the customer ledgers you name; your own accounts can't be opened there |
 | Blnk's refund undoes a transaction once, in full; partial refunds are yours to track | Reversals, full or partial, are numbered per entry and never undo more than it moved, even when they run concurrently |
@@ -118,7 +118,7 @@ func TestPayout(t *testing.T) {
 ```
 
 It copies the Blnk Core 0.15.6 behaviour humanblnk relies on: reused
-references refused, splits rolled back a moment after a later posting fails,
+references refused, held splits released at once when a later posting fails,
 holds settled by transactions of their own, signed webhooks. humanblnk's
 contract tests run against it and a real Blnk alike, so a difference they
 cover fails CI. It isn't Blnk: nothing is queued, and a few features

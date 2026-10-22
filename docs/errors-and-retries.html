@@ -63,7 +63,7 @@
 <thead><tr><th>Error</th><th>Means</th><th>What to do</th></tr></thead><tbody>
 <tr><td><code>humanblnk.ErrInsufficientFunds</code></td><td>the source account can&#39;t cover it</td><td>tell the customer; nothing moved</td></tr>
 <tr><td><code>humanblnk.ErrDuplicate</code></td><td>this exact write already happened, applied</td><td>treat as <strong>success</strong>; the existing entry comes back with it</td></tr>
-<tr><td><code>humanblnk.ErrReferenceUsed</code></td><td>this write didn&#39;t apply: the reference holds a different transaction, or this one rolled back</td><td>after a rollback, record again under a <strong>new</strong> reference; otherwise investigate how two writes got the same reference</td></tr>
+<tr><td><code>humanblnk.ErrReferenceUsed</code></td><td>this write didn&#39;t apply: the reference holds a different transaction, or this one was refused partway</td><td>after a refusal, record again under a <strong>new</strong> reference; otherwise investigate how two writes got the same reference</td></tr>
 <tr><td><code>humanblnk.ErrNotFound</code></td><td>no such account, entry or hold</td><td>check the id</td></tr>
 <tr><td><code>humanblnk.ErrUnbalanced</code></td><td><code>From</code> and <code>To</code> don&#39;t add up to the same amount</td><td>fix the postings</td></tr>
 <tr><td><code>humanblnk.ErrAlreadyReversed</code></td><td>nothing (or not that much) is left to reverse</td><td>nothing to do; pass a <code>Ref</code> to get your own reversal back on a retry</td></tr>
@@ -103,13 +103,13 @@
 </tbody></table></div>
 <p>Never use a random value or a timestamp: a retry must produce the same reference, so Blnk can refuse to apply it twice.</p>
 <h2 id="when-a-split-or-batch-fails-partway"><a class="anchor" href="#when-a-split-or-batch-fails-partway">When a split or batch fails partway</a></h2>
-<p>Blnk records a split (and a <code>RecordAll</code> batch) one part at a time. If a later part fails:</p>
+<p>Blnk moves a split (and a <code>RecordAll</code> batch) one part at a time. humanblnk sends it as a hold and captures it at once, so if a later part fails:</p>
 <ol>
-<li>You get the error (say <code>ErrInsufficientFunds</code>), but the earlier parts have already moved.</li>
-<li>Blnk refunds them from its background worker a moment later (about 200 ms). Until then they show in the accounts.</li>
-<li>The references stay used. Once Blnk&#39;s refund has landed, recording again with the same <code>Ref</code> returns <code>ErrReferenceUsed</code>; use a new one.</li>
+<li>You get the error (say <code>ErrInsufficientFunds</code>), and nothing moved: Blnk released the earlier parts&#39; holds before it answered.</li>
+<li>The references stay used. Recording again with the same <code>Ref</code> returns <code>ErrReferenceUsed</code>; use a new one.</li>
 </ol>
-<p><code>Get</code> and <code>GetByReference</code> show a split&#39;s entry as <code>StatusRejected</code>, even before the refund lands. An earlier part of a <code>RecordAll</code> batch shows as <code>StatusRejected</code> only once its refund lands: until then it reads <code>StatusApplied</code>, and retrying the batch returns a lookup error (&#34;looking it up failed&#34;) for the part Blnk never recorded. Wait and retry. Keep Blnk&#39;s worker running and monitored: if it&#39;s down, the earlier parts stay moved until it restarts.</p>
+<p><code>Get</code> and <code>GetByReference</code> show the entry as <code>StatusRejected</code>.</p>
+<p>If your process stops between the hold and its capture (a crash, a deploy), the money is reserved but hasn&#39;t moved. Retry with the same <code>Ref</code> within <code>humanblnk.RecordHold</code> (15 minutes) and the capture finishes. After that the hold expires, the money goes back, and the reference reads as <code>ErrReferenceUsed</code>. Keep Blnk&#39;s worker running and monitored: it expires holds.</p>
 
   </article>
   <nav class="pager" aria-label="Previous and next">

@@ -192,7 +192,7 @@ too much: true
 USD: 100.00 USD | NGN: 155025.00 NGN</code></pre></figure>
 </div>
 </div>
-<p>If a later item fails after an earlier one applied, Blnk refunds the earlier one from its background worker a moment later, just as for a split (chapter 5).</p>
+<p><code>RecordAll</code> holds the batch and captures it at once, as <code>Record</code> does a split (chapter 5), so if a later item fails, the earlier ones never move.</p>
 
   </article>
   <nav class="pager" aria-label="Previous and next">

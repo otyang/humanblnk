@@ -67,21 +67,22 @@ func TestFullReversalRepeatReturnsIt(t *testing.T) {
 func TestFullReversalOfASplit(t *testing.T) {
 	s, f := newService(t)
 	f.On("GET /transactions/split1", 404, blnkfake.APIError("TXN_NOT_FOUND"))
-	split := `"meta_data":{"ledger_split_postings":"2","reversal_of":"split1","reversal_ref":"refund:o2"}`
+	split := `"meta_data":{"ledger_split_postings":"2","ledger_recorded":"reversal:split1:1","reversal_of":"split1","reversal_ref":"refund:o2"}`
+	h := newHeldRecord(t, f, "bulk_1",
+		`{"transaction_id":"i1","reference":"reversal:split1:1-1","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd2","destination":"bln_usd",`+split+`}`,
+		`{"transaction_id":"i2","reference":"reversal:split1:1-2","currency":"USD","precise_amount":500,"precision":100,"source":"bln_fee","destination":"bln_usd",`+split+`}`)
 	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
 		fl := c.Body["filters"].([]any)[0].(map[string]any)
-		switch {
-		case fl["field"] == "parent_transaction" && fl["value"] == "split1":
+		if fl["field"] == "parent_transaction" && fl["value"] == "split1" {
 			return 200, `[{"transaction_id":"l1","reference":"pay:2-1","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2"},
 				{"transaction_id":"l2","reference":"pay:2-2","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd","destination":"@FeeIncome"}]`
-		case fl["field"] == "parent_transaction" && fl["value"] == "bulk_1":
-			return 200, `[{"transaction_id":"i1","reference":"reversal:split1:1-1","parent_transaction":"bulk_1","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd2","destination":"bln_usd",` + split + `},
-				{"transaction_id":"i2","reference":"reversal:split1:1-2","parent_transaction":"bulk_1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_fee","destination":"bln_usd",` + split + `}]`
+		}
+		if status, body, ok := h.filter(c); ok {
+			return status, body
 		}
 		return 200, `[]` // no reversals yet
 	})
 	f.On("POST /transactions/bulk", 201, `{"batch_id":"bulk_1","status":"applied","transaction_count":2}`)
-	f.On("GET /transactions/reference/reversal:split1:1-1", 200, `{"transaction_id":"i1","parent_transaction":"bulk_1",`+split+`}`)
 	e, err := s.Reverse(context.Background(), types.Reversal{Ref: "refund:o2", Entry: "split1", Reason: "x"})
 	if err != nil || e.ID != "bulk_1" || len(e.From) != 2 || e.Amount.String() != "100.00" {
 		t.Fatalf("%+v %v", e, err)
@@ -91,8 +92,8 @@ func TestFullReversalOfASplit(t *testing.T) {
 	}
 	batch := f.Sent("POST /transactions/bulk")[0].Body
 	items := batch["transactions"].([]any)
-	if batch["atomic"] != true || len(items) != 2 {
-		t.Fatalf("batch %v", batch)
+	if batch["atomic"] != true || batch["inflight"] != true || len(items) != 2 || !h.committed {
+		t.Fatalf("batch %v, committed %v", batch, h.committed)
 	}
 	for i, want := range []struct {
 		ref, source string
@@ -175,8 +176,16 @@ func TestRolledBackSplitReversalDoesntCount(t *testing.T) {
 	f.On("GET /balances/bln_usd3", 200, `{"balance_id":"bln_usd3","currency":"USD","balance":0}`)
 	f.On("GET /transactions/split1", 404, blnkfake.APIError("TXN_NOT_FOUND"))
 	meta := `"meta_data":{"reversal_of":"split1","reversal_ref":"refund:o2","reversal_reason":"x","ledger_split_postings":"2"}`
+	f.On("POST /transactions", 201, `{"transaction_id":"rv2","status":"INFLIGHT"}`)
+	held := `"meta_data":{"reversal_of":"split1","reversal_ref":"refund:o2","reversal_reason":"x","ledger_split_postings":"2","ledger_recorded":"reversal:split1:2"}`
+	h := newHeldRecord(t, f, "rv2",
+		`{"transaction_id":"r1","reference":"reversal:split1:2-1","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd2","destination":"bln_usd",`+held+`}`,
+		`{"transaction_id":"r2","reference":"reversal:split1:2-2","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd3","destination":"bln_usd",`+held+`}`)
 	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
-		if c.Body["filters"].([]any)[0].(map[string]any)["field"] == "parent_transaction" {
+		if status, body, ok := h.filter(c); ok {
+			return status, body
+		}
+		if fl := c.Body["filters"].([]any)[0].(map[string]any); fl["field"] == "parent_transaction" && fl["value"] == "split1" {
 			return 200, `[{"transaction_id":"l1","reference":"pay:2-1","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2","meta_data":{"ledger_split_postings":"2"}},
 				{"transaction_id":"l2","reference":"pay:2-2","parent_transaction":"split1","status":"APPLIED","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd","destination":"bln_usd3","meta_data":{"ledger_split_postings":"2"}}]`
 		}
@@ -187,13 +196,12 @@ func TestRolledBackSplitReversalDoesntCount(t *testing.T) {
 			{"transaction_id":"rbq","reference":"rv1_refund_q","parent_transaction":"rb","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2",` + meta + `}]`
 	})
 	f.On("GET /transactions/reference/rv1_refund", 200, `{"transaction_id":"rb"}`)
-	f.On("POST /transactions", 201, `{"transaction_id":"rv2","status":"APPLIED","currency":"USD","precise_amount":10000,"precision":100,"destination":"bln_usd","sources":[{"identifier":"bln_usd2","precise_distribution":"9500"},{"identifier":"bln_usd3","precise_distribution":"500"}]}`)
 	e, err := s.Reverse(context.Background(), types.Reversal{Ref: "refund:o2", Entry: "split1", Reason: "x"})
-	if err != nil || e.ID != "rv2" {
+	if err != nil || e.ID != "rv2" || e.Status != types.StatusApplied {
 		t.Fatalf("%+v %v", e, err)
 	}
 	got := f.Sent("POST /transactions")[0].Body
-	if got["reference"] != "reversal:split1:2" || got["precise_amount"] != float64(10000) || len(got["sources"].([]any)) != 2 {
+	if got["reference"] != "reversal:split1:2" || got["inflight"] != true || got["precise_amount"] != float64(10000) || len(got["sources"].([]any)) != 2 {
 		t.Fatalf("sent %v: want the whole split reversed as number 2", got)
 	}
 }

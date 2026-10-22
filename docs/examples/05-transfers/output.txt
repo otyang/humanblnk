@@ -1,11 +1,11 @@
 would apply: true
-  bln_c0f2245d-b8a2-4535-9c2e-99e592c6fdc6: 50000.00 -> 39850.00
-  bln_12f40edb-c3c1-4013-aa06-466454836f78: 0.00 -> 10000.00
-  bln_f308c9b3-5ad0-444a-a8e9-3a0ccc80c2fe: 300.00 -> 450.00
-recorded txn_b2806c40-671a-422a-9d0d-2cea4c5e77b5: 10150.00 from Ada, 2 postings to
+  bln_55706683-ad70-42bc-b8a9-9a9879bb812b: 50000.00 -> 39850.00
+  bln_963197b3-9f8c-44ba-ab6a-c6e61e0b632b: 0.00 -> 10000.00
+  @FeeIncome: 0.00 -> 150.00
+recorded txn_55b9addf-0927-483e-b481-4f698d4119bc: 10150.00 from Ada, 2 postings to
 Ada: 39850.00 NGN | Bola: 10000.00 NGN
 too much, would apply: false | because: humanblnk: insufficient funds: failed to apply transaction to balances: insufficient funds in source balance
 recording it anyway: insufficient funds? true
 2 entries out of Ada's wallet:
-  transfer:tr_1792634714614537000-1  10000.00  APPLIED
-  transfer:tr_1792634714614537000-2  150.00  APPLIED
+  transfer:tr_1792678032583143000  150.00  APPLIED
+  transfer:tr_1792678032583143000  10000.00  APPLIED

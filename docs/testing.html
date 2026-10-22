@@ -247,7 +247,7 @@ func TestBuyWithoutFunds(t *testing.T) {
 <ul>
 <li>System accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts) are made the first time a transaction names them.</li>
 <li>A reused reference is refused, so <code>ErrDuplicate</code> and <code>ErrReferenceUsed</code> come back as they would.</li>
-<li>A split is recorded a posting at a time. If a later posting fails, the earlier ones move and are refunded about 200 ms later, as Blnk&#39;s worker does. <code>humanblnktest.WithRollbackDelay</code> stretches that window, to test what your code sees inside it.</li>
+<li>A split is held a posting at a time. If a later posting fails, the earlier holds are released at once, as Blnk does.</li>
 <li>Holds stay <code>INFLIGHT</code>; captures and releases are transactions of their own.</li>
 <li>Watches fire <code>balance.monitor</code>: <code>humanblnktest.WithWebhook(url, secret)</code> sends signed webhooks to your handler, so <code>VerifyWebhook</code> can be tested end to end. Delivery is best effort and gives up after 5 seconds, so a handler must answer rather than block (say, on a full channel).</li>
 </ul>
@@ -264,7 +264,7 @@ func TestBuyWithoutFunds(t *testing.T) {
 <div class="table"><table>
 <thead><tr><th>Option</th><th>For</th></tr></thead><tbody>
 <tr><td><code>WithCustomerLedger(&#34;Savings&#34;)</code></td><td>another customer ledger; its id is <code>hb.CustomerLedgers[&#34;Savings&#34;]</code></td></tr>
-<tr><td><code>WithRollbackDelay(d)</code></td><td>how long a failed split&#39;s applied part stays before its refund</td></tr>
+<tr><td><code>WithRollbackDelay(d)</code></td><td>how long a split or batch applied directly (not through humanblnk) stays before Blnk&#39;s refund</td></tr>
 <tr><td><code>WithWebhook(url, secret)</code></td><td>send Blnk&#39;s webhooks to a test server</td></tr>
 <tr><td><code>WithClientOptions(...)</code></td><td>pass options to <code>humanblnk.New</code>, such as <code>WithAccountCacheSize</code></td></tr>
 </tbody></table></div>

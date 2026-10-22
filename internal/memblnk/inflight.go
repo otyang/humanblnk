@@ -105,23 +105,25 @@ func (s *Server) updateInflight(r *http.Request, body []byte) (int, any) {
 		if in.PreciseAmount != nil {
 			return respond(0, nil, invalid(blnk.CodeTxnValidation, "%s holds several transactions: commit them in full", id))
 		}
-		// Blnk refuses the lot if any has already been settled, and answers
-		// ALREADY_COMMITTED if any was committed, even with another voided.
-		var refusal *failure
-		for _, h := range holds {
-			if err := settled(h); err != nil && (refusal == nil || h.committed.Sign() > 0) {
-				refusal = err
-				if h.committed.Sign() > 0 {
-					refusal = conflict(blnk.CodeAlreadyCommitted, "transaction %s has already been committed", h.TransactionID)
-				}
+	}
+	// Blnk settles every hold still open, then answers with the error of
+	// one settled before: ALREADY_COMMITTED if any was committed, even with
+	// another voided. So a split committed partway is finished by committing
+	// it again, and one with a posting voided is committed for the rest.
+	var refusal *failure
+	for _, h := range holds {
+		if err := settled(h); err != nil && (refusal == nil || h.committed.Sign() > 0) {
+			refusal = err
+			if h.committed.Sign() > 0 {
+				refusal = conflict(blnk.CodeAlreadyCommitted, "transaction %s has already been committed", h.TransactionID)
 			}
-		}
-		if refusal != nil {
-			return respond(0, nil, refusal)
 		}
 	}
 	var last *txn
 	for _, h := range holds {
+		if len(holds) > 1 && settled(h) != nil {
+			continue
+		}
 		var amount *big.Int
 		if in.PreciseAmount != nil {
 			amount = &in.PreciseAmount.Int
@@ -135,6 +137,9 @@ func (s *Server) updateInflight(r *http.Request, body []byte) (int, any) {
 		if err != nil {
 			return respond(0, nil, err)
 		}
+	}
+	if refusal != nil {
+		return respond(0, nil, refusal)
 	}
 	return http.StatusOK, blnk.UpdateInflightResponse{Transaction: last.Transaction}
 }

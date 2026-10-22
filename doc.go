@@ -92,11 +92,18 @@
 //     was released since), and a Reverse retried with its Ref the reversal
 //     already made. ErrReferenceUsed means the reference is taken by
 //     something other than this write: a different transaction, or this one
-//     rolled back. Any reference works, "/" included; a split and a single
+//     refused partway. Any reference works, "/" included; a split and a single
 //     transaction can't share one, so each write first checks that.
 //   - Writes are applied synchronously (Blnk's skip_queue), so a refusal such
 //     as ErrInsufficientFunds is returned, not discovered later as a
 //     rejected status.
+//   - A write applies in full or not at all, and a refused one moves nothing,
+//     not even for a moment. Blnk moves a split a posting at a time: applied,
+//     one refused partway has already moved its earlier postings, which Blnk
+//     refunds only later. So Record sends a split as a hold and captures it
+//     at once, and RecordAll its batch the same way: a hold refused partway
+//     is released before Blnk answers. The entry still reads as the one
+//     applied transaction it is.
 //   - Only system accounts may go below zero; a customer account never may.
 //     Blnk allows an overdraft per transaction, not per source, so a split
 //     taking from both (a refund of a transfer with a fee, say) goes to Blnk
@@ -145,16 +152,18 @@
 //   - ErrDuplicate: this exact write already happened, applied. Treat it as
 //     success: the existing entry comes back with it.
 //   - ErrReferenceUsed: this write did not apply; the reference holds a
-//     different transaction, or this one rolled back (for a Reverse, its Ref
-//     names a reversal of another amount). After a rollback,
-//     record it again under a new reference; otherwise investigate how two
-//     writes got the same reference.
+//     different transaction, or this one was refused partway (for a Reverse,
+//     its Ref names a reversal of another amount). After a refusal, record
+//     it again under a new reference; otherwise investigate how two writes
+//     got the same reference.
 //   - ErrNotFound: no such account, entry, hold, ledger, identity or watch.
 //   - ErrUnbalanced: From and To don't add up to the same amount.
 //   - ErrAlreadyReversed: nothing, or not that much, is left to reverse.
 //   - ErrHoldSettled: the hold was already captured, cancelled or expired;
 //     the id isn't a hold; a repeated Capture asked for a different amount,
-//     or more than is left; or a Place found its hold released.
+//     or more than is left; a split hold has a posting released (say, by
+//     its expiry), so it can't be captured whole; or a Place found its hold
+//     released.
 //   - ErrInvalid: refused before reaching Blnk, such as a missing reference,
 //     a negative amount, the wrong ledger, or reversing an entry that isn't
 //     applied. Don't retry it unchanged.
@@ -186,9 +195,13 @@
 //   - A transaction can't be many to many: one side may have several
 //     postings, not both. RecordAll takes one posting on each side.
 //   - A split is reversed and captured only in full.
-//   - Transactions.List shows each posting of a split as its own entry.
-//     Blnk can't filter "from or to" together with other conditions, so an
-//     account's full history is two List calls, one with From, one with To.
+//   - Transactions.List shows Blnk's own records, each posting of a split
+//     its own entry. A split or RecordAll batch, held and captured, is there
+//     twice: its postings held (StatusHeld) and their captures
+//     (StatusApplied), the captures under the transaction's reference. List
+//     with Status StatusApplied for what moved. Blnk can't filter "from or
+//     to" together with other conditions, so an account's full history is
+//     two List calls, one with From, one with To.
 //   - List calls return 1 to 100 items per page (20 by default).
 //   - A watch threshold is at most 2^53 in the currency's smallest unit.
 //     Watches.Change makes a new watch with a new ID, and both may fire once
@@ -198,10 +211,10 @@
 //   - Accounts.OpenForCustomer calls racing from different processes can
 //     each open an account. All of them then return the oldest; the others
 //     are left empty and marked with meta_data.duplicate_of.
-//   - When a split fails partway, its entry reads as StatusRejected at once,
-//     but the balances show its earlier parts until Blnk's worker refunds
-//     them (about 200 ms). Keep the worker running. A failed RecordAll batch
-//     is slower to show: its earlier entries read as StatusApplied until the
-//     refund lands, and a retry in that window returns a lookup error. Wait
-//     and retry.
+//   - A split Record, or a RecordAll, whose process stops between hold and
+//     capture leaves the money reserved, not moved: the destination doesn't
+//     have it yet, and the source can't spend it. Retried within RecordHold
+//     (15 minutes) it is captured; after that the hold expires, the money is
+//     released, and the reference is used (ErrReferenceUsed). Keep Blnk's
+//     worker running: it expires holds.
 package humanblnk

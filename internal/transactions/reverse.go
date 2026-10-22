@@ -69,6 +69,10 @@ func (s *Service) Reverse(ctx context.Context, r types.Reversal) (types.Entry, e
 		return types.Entry{}, err
 	} else if ok {
 		return types.Entry{}, core.Invalid("%s captures part of split hold %s: reverse the hold", r.Entry, hold)
+	} else if owner, ok, err := s.k.RecordedOwner(ctx, r.Entry); err != nil {
+		return types.Entry{}, err
+	} else if ok {
+		return types.Entry{}, core.Invalid("%s is part of entry %s: reverse that", r.Entry, owner)
 	}
 	if original.Status != types.StatusApplied {
 		return types.Entry{}, core.Invalid("entry %s is %s; only applied entries can be reversed (Cancel a hold)", r.Entry, original.Status)
@@ -187,16 +191,23 @@ func (s *Service) reversalsOf(ctx context.Context, e types.Entry) (reversals, er
 	}
 	for _, ref := range order {
 		txs := byNumber[ref]
-		// Gather marks a split reversal missing a posting as not applied.
-		r, err := core.Gather(ref, txs)
+		var r types.Entry
+		var err error
+		if recorded, _ := txs[0].MetaData[core.MetaRecorded].(string); recorded != "" {
+			// A split reversal recorded as a hold: these are its postings,
+			// held, and GetEntry settles the hold they share.
+			r, err = s.k.GetEntry(ctx, txs[0].ParentTransaction)
+		} else {
+			// Gather marks a split reversal missing a posting as not applied.
+			if r, err = core.Gather(ref, txs); err == nil {
+				ids := make([]string, len(txs))
+				for i := range txs {
+					ids[i] = txs[i].GetID()
+				}
+				r, err = s.k.MarkRolledBack(ctx, r, ids...)
+			}
+		}
 		if err != nil {
-			return out, err
-		}
-		ids := make([]string, len(txs))
-		for i := range txs {
-			ids[i] = txs[i].GetID()
-		}
-		if r, err = s.k.MarkRolledBack(ctx, r, ids...); err != nil {
 			return out, err
 		}
 		if r.Status != types.StatusApplied {

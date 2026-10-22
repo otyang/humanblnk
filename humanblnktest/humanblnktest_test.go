@@ -49,7 +49,9 @@ func TestEachNewIsItsOwnBlnk(t *testing.T) {
 	}
 }
 
-func TestRollbackDelay(t *testing.T) {
+// Record holds a split, so one refused partway never waits on Blnk's
+// rollback: nothing moved, even with the refund an hour away.
+func TestRefusedSplitMovesNothing(t *testing.T) {
 	t.Parallel()
 	hb := humanblnktest.New(t, humanblnktest.WithRollbackDelay(time.Hour))
 	ada, bola, shop := hb.Customer(t, "USD"), hb.Customer(t, "USD"), hb.Customer(t, "USD")
@@ -65,8 +67,7 @@ func TestRollbackDelay(t *testing.T) {
 	if !errors.Is(err, humanblnk.ErrInsufficientFunds) {
 		t.Fatal(err)
 	}
-	// The refund is an hour away: what code sees in between, it sees now.
-	if got := hb.Available(t, ada); got != "0.00" {
+	if got := hb.Available(t, ada); got != "10.00" {
 		t.Fatalf("ada %s", got)
 	}
 	if e, err := hb.Transactions.GetByReference(ctx, "group-pay"); err != nil || e.Status != humanblnk.StatusRejected {

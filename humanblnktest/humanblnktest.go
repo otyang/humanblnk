@@ -15,10 +15,9 @@
 // under test, or hb.Client where a whole Client is wanted.
 //
 // The in-memory Blnk copies the Blnk Core 0.15.6 behaviour humanblnk relies
-// on: system accounts made on first use, splits recorded a posting at a
-// time and rolled back a moment after a later posting fails, holds whose
-// captures and releases are transactions of their own, reused references
-// refused. humanblnk's contract tests run against it and a real Blnk alike.
+// on: system accounts made on first use, splits held a posting at a time
+// and released at once when a later posting fails, holds whose captures
+// and releases are transactions of their own, reused references refused. humanblnk's contract tests run against it and a real Blnk alike.
 // It isn't Blnk: nothing is queued, and reconciliation matches one_to_one
 // only (see the tutorial's chapter 13 for the rest). Each New is a fresh,
 // empty Blnk of its own, so tests can run in parallel.
@@ -63,9 +62,10 @@ type config struct {
 	customerLedgers []string
 }
 
-// WithRollbackDelay sets how long after a split or batch fails partway its
-// applied part is refunded (200ms unless set, about what Blnk takes). Use
-// it to test what your code sees in between.
+// WithRollbackDelay sets how long after a split or batch Blnk applied
+// fails partway its applied part is refunded (200ms unless set, about what
+// Blnk takes). humanblnk holds splits and batches, which a failure releases
+// at once, so it only matters to code calling Blnk directly.
 func WithRollbackDelay(d time.Duration) Option {
 	return func(c *config) { c.server = append(c.server, memblnk.WithRollbackDelay(d)) }
 }

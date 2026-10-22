@@ -287,9 +287,14 @@ func TestContractRecordAllAndList(t *testing.T) {
 	if got := w.available(t, ctx, ngnAcct); got != "16000.00" {
 		t.Fatalf("ngn %s", got)
 	}
-	list, total, err := w.hb.Transactions.List(ctx, humanblnk.EntryQuery{To: humanblnk.AccountRef(ngnAcct.ID)})
-	if err != nil || total != 1 || len(list) != 1 {
+	// RecordAll holds the batch and captures it: the capture is what moved,
+	// listed under the caller's reference.
+	list, total, err := w.hb.Transactions.List(ctx, humanblnk.EntryQuery{To: humanblnk.AccountRef(ngnAcct.ID), Status: humanblnk.StatusApplied})
+	if err != nil || total != 1 || len(list) != 1 || list[0].Ref != es[1].Ref {
 		t.Fatalf("list %+v %d %v", list, total, err)
+	}
+	if got, err := w.hb.Transactions.Get(ctx, es[1].ID); err != nil || got.Status != humanblnk.StatusApplied || got.Ref != es[1].Ref || got.ID != es[1].ID {
+		t.Fatalf("get %+v %v", got, err)
 	}
 	accts, _, err := w.hb.Accounts.List(ctx, humanblnk.AccountQuery{Currency: ingn})
 	if err != nil || len(accts) == 0 {

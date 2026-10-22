@@ -116,6 +116,7 @@ fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, 
 <tr><td><code>Entry</code></td><td>for <code>transaction.*</code> events: the entry</td></tr>
 <tr><td><code>Data</code></td><td>the raw data, as Blnk sent it</td></tr>
 </tbody></table></div>
+<p><code>Record</code> sends a split as a hold and captures it at once (chapter 5), and <code>RecordAll</code> its batch, so Blnk sends <code>transaction.inflight</code> for each posting and then <code>transaction.applied</code> for each capture. The applied ones carry the transaction&#39;s own <code>Ref</code> in <code>Entry.Ref</code>. React to <code>transaction.applied</code> for money that moved.</p>
 <p>The tolerance rejects old deliveries replayed by an attacker; five minutes is sensible, and is what <code>VerifyWebhook</code> uses if you pass 0. Answer anything that isn&#39;t 2xx and Blnk sends the webhook again, so reject only a bad signature or a stale one, and acknowledge what you can&#39;t use.</p>
 <p><strong>Blnk can deliver the same event more than once</strong>, each time freshly signed. Make the handler safe to repeat: text the customer once per watch and day, say, or act on an entry once by its <code>ID</code>.</p>
 <p>The example signs requests the way Blnk does and sends a genuine one and a forged one to a test server.</p>

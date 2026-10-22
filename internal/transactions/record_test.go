@@ -30,10 +30,23 @@ func TestRecordSendsMinorUnitsSynchronously(t *testing.T) {
 	}
 }
 
-func TestRecordSplitIsAtomic(t *testing.T) {
+// A split goes to Blnk as a hold, stamped as recorded, and is captured at
+// once: refused partway, Blnk releases a hold before it answers, where it
+// refunds applied postings only later.
+func TestRecordSplitIsHeldThenCaptured(t *testing.T) {
 	s, f := newService(t)
-	f.On("POST /transactions", 201, `{"transaction_id":"txn_p","reference":"transfer:t1","status":"APPLIED","currency":"USD","precise_amount":10150,"precision":100,"source":"bln_usd",
-		"destinations":[{"identifier":"bln_usd2","precise_distribution":"10000"},{"identifier":"@FeeIncome","precise_distribution":"150"}]}`)
+	f.On("POST /transactions", 201, `{"transaction_id":"txn_p","reference":"transfer:t1","status":"INFLIGHT"}`)
+	meta := `"meta_data":{"ledger_recorded":"transfer:t1","ledger_split_postings":"2"}`
+	h := newHeldRecord(t, f, "txn_p",
+		`{"transaction_id":"l1","reference":"transfer:t1-1","currency":"USD","precise_amount":10000,"precision":100,"source":"bln_usd","destination":"bln_usd2",`+meta+`}`,
+		`{"transaction_id":"l2","reference":"transfer:t1-2","currency":"USD","precise_amount":150,"precision":100,"source":"bln_usd","destination":"bln_fee",`+meta+`}`)
+	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
+		if status, body, ok := h.filter(c); ok {
+			return status, body
+		}
+		return 200, `[]`
+	})
+	f.On("GET /balances/bln_fee", 200, `{"balance_id":"bln_fee","indicator":"@FeeIncome","currency":"USD","balance":0}`)
 	e, err := s.Record(context.Background(), types.Transaction{
 		Ref:  "transfer:t1",
 		From: types.Single("bln_usd", money.MustParse("101.50", blnkfake.USD)),
@@ -48,12 +61,52 @@ func TestRecordSplitIsAtomic(t *testing.T) {
 	}
 	got := f.Sent("POST /transactions")[0].Body
 	ds, _ := got["destinations"].([]any)
-	if got["atomic"] != true || got["source"] != "bln_usd" || got["precise_amount"] != float64(10150) || len(ds) != 2 ||
-		ds[1].(map[string]any)["precise_distribution"] != "150" {
+	meta2, _ := got["meta_data"].(map[string]any)
+	if got["atomic"] != true || got["inflight"] != true || got["inflight_expiry_date"] == nil || got["skip_queue"] != true ||
+		got["source"] != "bln_usd" || got["precise_amount"] != float64(10150) || len(ds) != 2 || ds[1].(map[string]any)["precise_distribution"] != "150" ||
+		meta2["ledger_recorded"] != "transfer:t1" || meta2["ledger_split_postings"] != "2" {
 		t.Fatalf("sent %v", got)
 	}
-	if len(e.To) != 2 || e.To[1].Account != types.FeeIncome || e.To[1].Amount.String() != "1.50" {
+	if commits := f.Sent("PUT /transactions/inflight/txn_p"); len(commits) != 1 || commits[0].Body["status"] != "commit" || commits[0].Body["precise_amount"] != nil {
+		t.Fatalf("commits %v", commits)
+	}
+	if e.ID != "txn_p" || e.Ref != "transfer:t1" || e.Status != types.StatusApplied || len(e.To) != 2 || e.To[1].Amount.String() != "1.50" {
 		t.Fatalf("entry %+v", e)
+	}
+	// Read back, the captured hold is the entry it applied.
+	got2, err := s.Get(context.Background(), "txn_p")
+	if err != nil || got2.ID != "txn_p" || got2.Ref != "transfer:t1" || got2.Status != types.StatusApplied || got2.Amount.String() != "101.50" {
+		t.Fatalf("get %+v %v", got2, err)
+	}
+}
+
+// A Record retried after its process stopped between hold and capture
+// finishes the capture, rather than call the reference used.
+func TestRecordSplitRetryFinishesTheCapture(t *testing.T) {
+	s, f := newService(t)
+	f.On("POST /transactions", 400, blnkfake.APIError("TXN_DUPLICATE_REFERENCE"))
+	meta := `"meta_data":{"ledger_recorded":"pay:3","ledger_split_postings":"2"}`
+	h := newHeldRecord(t, f, "txn_p",
+		`{"transaction_id":"l1","reference":"pay:3-1","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2",`+meta+`}`,
+		`{"transaction_id":"l2","reference":"pay:3-2","currency":"USD","precise_amount":500,"precision":100,"source":"bln_usd","destination":"bln_ngn",`+meta+`}`)
+	f.On("GET /balances/bln_ngn", 200, `{"balance_id":"bln_ngn","currency":"USD","balance":0}`) // a USD account, for this test
+	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
+		if status, body, ok := h.filter(c); ok {
+			return status, body
+		}
+		return 200, `[]`
+	})
+	f.On("GET /transactions/reference/pay:3-1", 200, `{"transaction_id":"l1","reference":"pay:3-1","parent_transaction":"txn_p","status":"INFLIGHT",`+meta+`}`)
+	usd := func(v string) money.Money { return money.MustParse(v, blnkfake.USD) }
+	e, err := s.Record(context.Background(), types.Transaction{
+		Ref: "pay:3", From: types.Single("bln_usd", usd("100")),
+		To: types.Many(types.Posting{Account: "bln_usd2", Amount: usd("95")}, types.Posting{Account: "bln_ngn", Amount: usd("5")}), Description: "d",
+	})
+	if err != nil || e.ID != "txn_p" || e.Status != types.StatusApplied {
+		t.Fatalf("%+v %v", e, err)
+	}
+	if !h.committed {
+		t.Fatal("the retry didn't capture the hold")
 	}
 }
 
@@ -144,23 +197,10 @@ func TestRecordAllRetryAfterARolledBackBatch(t *testing.T) {
 	}
 }
 
-// A split is stamped with its posting count: Blnk copies it onto each
-// posting, and a split missing one reads as not applied, even before Blnk's
-// rollback refund lands.
+// A split recorded before Record held splits, missing a posting, reads as
+// not applied, even before Blnk's rollback refund lands.
 func TestSplitMissingAPostingIsNotApplied(t *testing.T) {
 	s, f := newService(t)
-	usd := func(v string) money.Money { return money.MustParse(v, blnkfake.USD) }
-	f.On("POST /transactions", 201, `{"transaction_id":"split1","status":"APPLIED","currency":"USD","precise_amount":10500,"precision":100,"source":"bln_usd","destinations":[{"identifier":"bln_usd2","precise_distribution":"9500"},{"identifier":"@FeeIncome","precise_distribution":"1000"}]}`)
-	if _, err := s.Record(context.Background(), types.Transaction{
-		Ref: "pay:9", From: types.Single("bln_usd", usd("105")),
-		To: types.Many(types.Posting{Account: "bln_usd2", Amount: usd("95")}, types.Posting{Account: types.FeeIncome, Amount: usd("10")}), Description: "d",
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if meta := f.Sent("POST /transactions")[0].Body["meta_data"].(map[string]any); meta["ledger_split_postings"] != "2" {
-		t.Fatalf("stamped %v", meta)
-	}
-
 	f.On("GET /transactions/split9", 404, blnkfake.APIError("TXN_NOT_FOUND"))
 	f.On("POST /transactions/filter", 200, `[{"transaction_id":"l1","reference":"pay:9-1","parent_transaction":"split9","status":"APPLIED","currency":"USD","precise_amount":9500,"precision":100,"source":"bln_usd","destination":"bln_usd2","meta_data":{"ledger_split_postings":"2"}}]`)
 	e, err := s.Get(context.Background(), "split9")
@@ -196,6 +236,7 @@ func TestRecordRejectsAnotherPrecision(t *testing.T) {
 func TestRecordAllIsOneAtomicBatch(t *testing.T) {
 	s, f := newService(t)
 	f.On("POST /transactions/bulk", 201, `{"batch_id":"bulk_1","status":"applied","transaction_count":2}`)
+	f.On("PUT /transactions/inflight/bulk_1", 200, `{}`)
 	f.On("GET /transactions/reference/fx:1:blnkfake.USD", 200, `{"transaction_id":"txn_a"}`)
 	f.On("GET /transactions/reference/fx:1:blnkfake.NGN", 200, `{"transaction_id":"txn_b"}`)
 	f.On("GET /transactions/txn_a", 200, `{"transaction_id":"txn_a","reference":"fx:1:blnkfake.USD","status":"APPLIED","currency":"USD","precise_amount":1000,"precision":100,"source":"bln_usd","destination":"@FX"}`)
@@ -209,8 +250,18 @@ func TestRecordAllIsOneAtomicBatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := f.Sent("POST /transactions/bulk")[0].Body
-	if got["atomic"] != true || got["skip_queue"] != true || len(got["transactions"].([]any)) != 2 {
+	items := got["transactions"].([]any)
+	if got["atomic"] != true || got["inflight"] != true || got["skip_queue"] != true || len(items) != 2 {
 		t.Fatalf("sent %v", got)
+	}
+	for _, it := range items {
+		it := it.(map[string]any)
+		if it["inflight"] != true || it["inflight_expiry_date"] == nil || it["meta_data"].(map[string]any)["ledger_recorded"] != it["reference"] {
+			t.Fatalf("item %v", it)
+		}
+	}
+	if commits := f.Sent("PUT /transactions/inflight/bulk_1"); len(commits) != 1 || commits[0].Body["status"] != "commit" {
+		t.Fatalf("commits %v", commits)
 	}
 	if len(es) != 2 || es[0].ID != "txn_a" || es[1].Amount.String() != "16000.00" {
 		t.Fatalf("entries %+v", es)
@@ -220,6 +271,7 @@ func TestRecordAllIsOneAtomicBatch(t *testing.T) {
 func TestRecordAllReportsAFailedReadBack(t *testing.T) {
 	s, f := newService(t)
 	f.On("POST /transactions/bulk", 201, `{"batch_id":"bulk_1","status":"applied","transaction_count":1}`)
+	f.On("PUT /transactions/inflight/bulk_1", 200, `{}`)
 	es, err := s.RecordAll(context.Background(), []types.Transaction{
 		{Ref: "fx:2:usd", From: types.Single("bln_usd", money.MustParse("10", blnkfake.USD)), To: types.Single("bln_usd2", money.MustParse("10", blnkfake.USD)), Description: "d"},
 	})

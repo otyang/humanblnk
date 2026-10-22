@@ -72,9 +72,10 @@ func main() {
 	// end-snippet
 
 	// 4. Ada's history: money out of her wallet, newest first. (Money into
-	// it is a second query with To set.)
+	// it is a second query with To set.) StatusApplied leaves out the holds
+	// Record captured: what moved, not what was reserved on the way.
 	// snippet:history
-	out, n, err := hb.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
+	out, n, err := hb.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Status: humanblnk.StatusApplied, Limit: 10})
 	if err != nil {
 		log.Fatal(err)
 	}

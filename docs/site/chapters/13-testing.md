@@ -61,10 +61,8 @@ on:
   first time a transaction names them.
 - A reused reference is refused, so `ErrDuplicate` and `ErrReferenceUsed`
   come back as they would.
-- A split is recorded a posting at a time. If a later posting fails, the
-  earlier ones move and are refunded about 200 ms later, as Blnk's worker
-  does. `humanblnktest.WithRollbackDelay` stretches that window, to test what
-  your code sees inside it.
+- A split is held a posting at a time. If a later posting fails, the
+  earlier holds are released at once, as Blnk does.
 - Holds stay `INFLIGHT`; captures and releases are transactions of their own.
 - Watches fire `balance.monitor`: `humanblnktest.WithWebhook(url, secret)`
   sends signed webhooks to your handler, so `VerifyWebhook` can be tested end
@@ -91,7 +89,7 @@ could.
 | Option | For |
 | --- | --- |
 | `WithCustomerLedger("Savings")` | another customer ledger; its id is `hb.CustomerLedgers["Savings"]` |
-| `WithRollbackDelay(d)` | how long a failed split's applied part stays before its refund |
+| `WithRollbackDelay(d)` | how long a split or batch applied directly (not through humanblnk) stays before Blnk's refund |
 | `WithWebhook(url, secret)` | send Blnk's webhooks to a test server |
 | `WithClientOptions(...)` | pass options to `humanblnk.New`, such as `WithAccountCacheSize` |
 

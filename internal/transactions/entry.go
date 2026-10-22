@@ -21,7 +21,11 @@ func (s *Service) GetByReference(ctx context.Context, ref string) (types.Entry, 
 }
 
 // List returns the entries q selects, newest first, and how many there are
-// in all. Each posting of a split is listed as its own entry. A system
+// in all. They are Blnk's own records: each posting of a split is listed as
+// its own entry, and a split or RecordAll batch, which Record holds and
+// captures, as its postings held (StatusHeld) and their captures
+// (StatusApplied), the captures under its reference. Set q.Status to
+// StatusApplied for the money that moved. A system
 // account in From or To (such as humanblnk.ClearingAccount("paystack")) means
 // its balance in every currency.
 func (s *Service) List(ctx context.Context, q types.EntryQuery) ([]types.Entry, int, error) {

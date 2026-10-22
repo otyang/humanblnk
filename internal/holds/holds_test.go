@@ -111,9 +111,14 @@ func TestSplitHoldCapturesInFull(t *testing.T) {
 	}
 
 	// The split isn't stored under its own id; its postings name it as parent.
-	f.On("POST /transactions/filter", 200, `[
+	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
+		if c.Body["filters"].([]any)[0].(map[string]any)["value"] != "hp" {
+			return 200, `[]` // nothing captured or released yet
+		}
+		return 200, `[
 		{"transaction_id":"c1","reference":"payout:po_2-1","parent_transaction":"hp","status":"INFLIGHT","currency":"USD","precise_amount":10000,"precision":100,"source":"bln_usd","destination":"@World"},
-		{"transaction_id":"c2","reference":"payout:po_2-2","parent_transaction":"hp","status":"INFLIGHT","currency":"USD","precise_amount":100,"precision":100,"source":"bln_usd","destination":"@FeeIncome"}]`)
+		{"transaction_id":"c2","reference":"payout:po_2-2","parent_transaction":"hp","status":"INFLIGHT","currency":"USD","precise_amount":100,"precision":100,"source":"bln_usd","destination":"@FeeIncome"}]`
+	})
 	if _, err := s.Capture(context.Background(), h, money.MustParse("50", blnkfake.USD)); !errors.Is(err, types.ErrInvalid) {
 		t.Fatalf("partial capture of a split: %v", err)
 	}
@@ -187,15 +192,23 @@ func TestCaptureLostAnswer(t *testing.T) {
 
 // splitHold answers like Blnk for split hold s1, whose postings l1 and l2
 // have been captured as captured says.
-func splitHold(f *blnkfake.Fake, captured map[string]bool) {
+// splitHold answers for split hold s1, its postings l1 and l2 each
+// captured, voided or still held as settled says ("APPLIED", "VOID", or
+// absent).
+func splitHold(f *blnkfake.Fake, settled map[string]string) {
 	f.OnFunc("POST /transactions/filter", func(c blnkfake.Call) (int, string) {
-		switch parent := c.Body["filters"].([]any)[0].(map[string]any)["value"]; {
+		fs := c.Body["filters"].([]any)
+		status := ""
+		if len(fs) > 1 {
+			status, _ = fs[1].(map[string]any)["value"].(string)
+		}
+		switch parent := fs[0].(map[string]any)["value"].(string); {
 		case parent == "s1":
 			return 200, `[
 				{"transaction_id":"l1","parent_transaction":"s1","reference":"payout:po_1-1","status":"INFLIGHT","currency":"USD","precise_amount":9900,"precision":100,"source":"bln_usd","destination":"@World"},
 				{"transaction_id":"l2","parent_transaction":"s1","reference":"payout:po_1-2","status":"INFLIGHT","currency":"USD","precise_amount":100,"precision":100,"source":"bln_usd","destination":"@FeeIncome"}]`
-		case captured[parent.(string)]:
-			return 200, `[{"transaction_id":"c_` + parent.(string) + `","parent_transaction":"` + parent.(string) + `","status":"APPLIED","currency":"USD","precise_amount":1,"precision":100}]`
+		case settled[parent] != "" && (status == "" || status == settled[parent]):
+			return 200, `[{"transaction_id":"c_` + parent + `","parent_transaction":"` + parent + `","status":"` + settled[parent] + `","currency":"USD","precise_amount":1,"precision":100}]`
 		}
 		return 200, `[]`
 	})
@@ -203,7 +216,7 @@ func splitHold(f *blnkfake.Fake, captured map[string]bool) {
 
 func TestSplitCaptureRepeat(t *testing.T) {
 	s, f := newService(t)
-	splitHold(f, map[string]bool{"l1": true, "l2": true})
+	splitHold(f, map[string]string{"l1": "APPLIED", "l2": "APPLIED"})
 	f.On("PUT /transactions/inflight/s1", 400, blnkfake.APIError("TXN_ALREADY_COMMITTED"))
 	e, err := s.Capture(context.Background(), "s1", money.Money{})
 	if err != nil || e.Status != types.StatusApplied || e.Amount.String() != "100.00" {
@@ -211,14 +224,17 @@ func TestSplitCaptureRepeat(t *testing.T) {
 	}
 }
 
-// Blnk says ALREADY_COMMITTED when any posting was, even if the fee posting
-// was voided meanwhile: that isn't a full capture.
+// A split hold whose fee posting was voided (an expiry racing the capture)
+// isn't committed: Blnk would commit the rest and move part of the split.
 func TestSplitCapturePartlyVoided(t *testing.T) {
 	s, f := newService(t)
-	splitHold(f, map[string]bool{"l1": true}) // l2 voided
-	f.On("PUT /transactions/inflight/s1", 400, blnkfake.APIError("TXN_ALREADY_COMMITTED"))
+	splitHold(f, map[string]string{"l2": "VOID"})
+	f.On("PUT /transactions/inflight/s1", 400, blnkfake.APIError("TXN_ALREADY_VOIDED"))
 	if _, err := s.Capture(context.Background(), "s1", money.Money{}); !errors.Is(err, types.ErrHoldSettled) {
 		t.Fatalf("got %v", err)
+	}
+	if n := len(f.Sent("PUT /transactions/inflight/s1")); n != 0 {
+		t.Fatalf("sent %d commits; a split with a posting released must not be committed", n)
 	}
 }
 

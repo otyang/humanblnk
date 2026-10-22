@@ -42,6 +42,12 @@ webhooks to:
 | `Entry` | for `transaction.*` events: the entry |
 | `Data` | the raw data, as Blnk sent it |
 
+`Record` sends a split as a hold and captures it at once (chapter 5), and
+`RecordAll` its batch, so Blnk sends `transaction.inflight` for each posting
+and then `transaction.applied` for each capture. The applied ones carry the
+transaction's own `Ref` in `Entry.Ref`. React to `transaction.applied` for
+money that moved.
+
 The tolerance rejects old deliveries replayed by an attacker; five minutes is
 sensible, and is what `VerifyWebhook` uses if you pass 0. Answer anything
 that isn't 2xx and Blnk sends the webhook again, so reject only a bad

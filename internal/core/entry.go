@@ -29,6 +29,9 @@ func (k *Core) GetEntry(ctx context.Context, id string) (types.Entry, error) {
 		if err != nil {
 			return types.Entry{}, err
 		}
+		if Recorded(e) {
+			return k.settleRecorded(ctx, e)
+		}
 		return k.MarkRolledBack(ctx, e, id)
 	}
 	if !blnk.IsNotFound(err) {
@@ -52,11 +55,124 @@ func (k *Core) GetEntry(ctx context.Context, id string) (types.Entry, error) {
 	if err != nil {
 		return types.Entry{}, err
 	}
+	if Recorded(e) {
+		return k.settleRecorded(ctx, e)
+	}
 	ids := make([]string, len(children))
 	for i := range children {
 		ids[i] = children[i].GetID()
 	}
 	return k.MarkRolledBack(ctx, e, ids...)
+}
+
+// MetaRecorded is the metadata key a transaction recorded as a hold is
+// stamped with, its reference the value. Record sends a split as a hold and
+// captures it at once (and RecordAll a batch), because a held split Blnk
+// refuses partway is released before it answers, where an applied one
+// moves money it refunds only later. Blnk copies the key onto the
+// captures, which tells them from a caller's own holds.
+const MetaRecorded = "ledger_recorded"
+
+// Recorded reports whether e was recorded as a hold (see MetaRecorded):
+// the hold itself, one of its postings, or a capture.
+func Recorded(e types.Entry) bool {
+	ref, _ := e.Meta[MetaRecorded].(string)
+	return ref != ""
+}
+
+// settleRecorded is what recorded hold e (StatusHeld, as Blnk keeps a
+// hold) stands for: the entry it applied once every posting is captured,
+// under e's own id and reference; StatusRejected once released without a
+// capture, refused partway or expired before one; still StatusHeld while
+// the capture is under way. A mix of captured and released postings has no
+// status: look at the postings' own entries.
+func (k *Core) settleRecorded(ctx context.Context, e types.Entry) (types.Entry, error) {
+	if e.Status != types.StatusHeld {
+		return e, nil // a capture, read on its own
+	}
+	captured, ok, err := k.Captured(ctx, e)
+	if err != nil {
+		return types.Entry{}, err
+	}
+	if ok {
+		captured.ID, captured.Ref, captured.Description, captured.Meta, captured.CreatedAt = e.ID, e.Ref, e.Description, e.Meta, e.CreatedAt
+		return captured, nil
+	}
+	holds := []string{e.ID}
+	if IsSplit(e) {
+		legs, err := k.children(ctx, e.ID, types.StatusHeld)
+		if err != nil {
+			return types.Entry{}, err
+		}
+		holds = holds[:0]
+		for i := range legs {
+			holds = append(holds, legs[i].GetID())
+		}
+	}
+	var applied, voided bool
+	for _, h := range holds {
+		kids, err := k.children(ctx, h, "")
+		if err != nil {
+			return types.Entry{}, err
+		}
+		for i := range kids {
+			applied = applied || kids[i].Status == types.StatusApplied
+			voided = voided || kids[i].Status == types.StatusVoid
+		}
+	}
+	switch {
+	case voided && applied:
+		e.Status = ""
+	case voided:
+		e.Status = types.StatusRejected
+	}
+	return e, nil
+}
+
+// IsSplit reports whether e is a split: several postings on a side, or
+// stamped as one (a split refused partway may have only its first posting
+// to read).
+func IsSplit(e types.Entry) bool {
+	_, stamped := e.Meta[MetaSplitPostings]
+	return stamped || len(e.From) > 1 || len(e.To) > 1
+}
+
+// children are the transactions naming parent as theirs, with status if
+// it isn't empty.
+func (k *Core) children(ctx context.Context, parent, status string) ([]blnk.Transaction, error) {
+	filters := []blnk.Filter{{Field: "parent_transaction", Operator: "eq", Value: parent}}
+	if status != "" {
+		filters = append(filters, blnk.Filter{Field: "status", Operator: "eq", Value: status})
+	}
+	txs, _, err := k.C.Transactions.Filter(ctx, blnk.FilterRequest{Filters: filters, Limit: 100})
+	return txs, MapErr(err)
+}
+
+// RecordedOwner is the entry Blnk transaction id is part of when it is a
+// posting or capture of one recorded as a hold, and that isn't id itself.
+// Reversing such a part on its own would let the same money be reversed
+// twice, under two ids.
+func (k *Core) RecordedOwner(ctx context.Context, id string) (string, bool, error) {
+	tx, err := k.C.Transactions.Get(ctx, id)
+	if blnk.IsNotFound(err) {
+		return "", false, nil // a split or batch: its id isn't a transaction
+	}
+	if err != nil {
+		return "", false, MapErr(err)
+	}
+	if ref, _ := tx.MetaData[MetaRecorded].(string); ref == "" {
+		return "", false, nil
+	}
+	if tx.Status != types.StatusHeld { // a capture: what it captured is its parent
+		if tx, err = k.C.Transactions.Get(ctx, tx.ParentTransaction); err != nil {
+			return "", false, MapErr(err)
+		}
+	}
+	owner := tx.GetID()
+	if _, split := tx.MetaData[MetaSplitPostings]; split {
+		owner = tx.ParentTransaction
+	}
+	return owner, owner != id, nil
 }
 
 // BaseRef is ref without the "-n" Blnk adds to each posting of a split.
@@ -271,6 +387,9 @@ func Entry(tx *blnk.Transaction) (types.Entry, error) {
 		ID: tx.GetID(), Ref: tx.Reference, Status: tx.Status, Amount: amount,
 		Description: tx.Description, Meta: types.Meta(tx.MetaData), CreatedAt: tx.CreatedAt.Time,
 	}
+	if ref, _ := tx.MetaData[MetaRecorded].(string); ref != "" && tx.Status != types.StatusHeld {
+		e.Ref = ref // a capture of a recorded transaction: Blnk names it ref_<uuid>
+	}
 	if e.From, err = side(tx.Sources, tx.Source, amount); err != nil {
 		return types.Entry{}, err
 	}
@@ -381,17 +500,8 @@ func addTo(totals map[types.AccountRef]money.Money, order *[]types.AccountRef, p
 //
 // ok is false if nothing, or for a split not every posting, was captured.
 func (k *Core) Captured(ctx context.Context, held types.Entry) (types.Entry, bool, error) {
-	children := func(parent, status string) ([]blnk.Transaction, error) {
-		txs, _, err := k.C.Transactions.Filter(ctx, blnk.FilterRequest{
-			Filters: []blnk.Filter{
-				{Field: "parent_transaction", Operator: "eq", Value: parent},
-				{Field: "status", Operator: "eq", Value: status},
-			},
-			Limit: 100,
-		})
-		return txs, MapErr(err)
-	}
-	if len(held.From) == 1 && len(held.To) == 1 {
+	children := func(parent, status string) ([]blnk.Transaction, error) { return k.children(ctx, parent, status) }
+	if !IsSplit(held) {
 		caps, err := children(held.ID, types.StatusApplied)
 		if err != nil || len(caps) == 0 {
 			return types.Entry{}, false, err

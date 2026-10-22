@@ -11,7 +11,7 @@ Blnk's, for your logs. A Blnk error humanblnk has no name for comes back as a
 | --- | --- | --- |
 | `humanblnk.ErrInsufficientFunds` | the source account can't cover it | tell the customer; nothing moved |
 | `humanblnk.ErrDuplicate` | this exact write already happened, applied | treat as **success**; the existing entry comes back with it |
-| `humanblnk.ErrReferenceUsed` | this write didn't apply: the reference holds a different transaction, or this one rolled back | after a rollback, record again under a **new** reference; otherwise investigate how two writes got the same reference |
+| `humanblnk.ErrReferenceUsed` | this write didn't apply: the reference holds a different transaction, or this one was refused partway | after a refusal, record again under a **new** reference; otherwise investigate how two writes got the same reference |
 | `humanblnk.ErrNotFound` | no such account, entry or hold | check the id |
 | `humanblnk.ErrUnbalanced` | `From` and `To` don't add up to the same amount | fix the postings |
 | `humanblnk.ErrAlreadyReversed` | nothing (or not that much) is left to reverse | nothing to do; pass a `Ref` to get your own reversal back on a retry |
@@ -62,19 +62,19 @@ reference, so Blnk can refuse to apply it twice.
 
 ## When a split or batch fails partway
 
-Blnk records a split (and a `RecordAll` batch) one part at a time. If a later
-part fails:
+Blnk moves a split (and a `RecordAll` batch) one part at a time. humanblnk
+sends it as a hold and captures it at once, so if a later part fails:
 
-1. You get the error (say `ErrInsufficientFunds`), but the earlier parts have
-   already moved.
-2. Blnk refunds them from its background worker a moment later (about
-   200 ms). Until then they show in the accounts.
-3. The references stay used. Once Blnk's refund has landed, recording again
-   with the same `Ref` returns `ErrReferenceUsed`; use a new one.
+1. You get the error (say `ErrInsufficientFunds`), and nothing moved: Blnk
+   released the earlier parts' holds before it answered.
+2. The references stay used. Recording again with the same `Ref` returns
+   `ErrReferenceUsed`; use a new one.
 
-`Get` and `GetByReference` show a split's entry as `StatusRejected`, even
-before the refund lands. An earlier part of a `RecordAll` batch shows as
-`StatusRejected` only once its refund lands: until then it reads
-`StatusApplied`, and retrying the batch returns a lookup error ("looking it
-up failed") for the part Blnk never recorded. Wait and retry. Keep Blnk's worker running and monitored: if it's
-down, the earlier parts stay moved until it restarts.
+`Get` and `GetByReference` show the entry as `StatusRejected`.
+
+If your process stops between the hold and its capture (a crash, a deploy),
+the money is reserved but hasn't moved. Retry with the same `Ref` within
+`humanblnk.RecordHold` (15 minutes) and the capture finishes. After that the
+hold expires, the money goes back, and the reference reads as
+`ErrReferenceUsed`. Keep Blnk's worker running and monitored: it expires
+holds.

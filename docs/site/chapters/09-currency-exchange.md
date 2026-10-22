@@ -46,6 +46,5 @@ A retry after a timeout moves nothing twice:
 
 {{run 09-exchange}}
 
-If a later item fails after an earlier one applied, Blnk refunds the earlier
-one from its background worker a moment later, just as for a split
-(chapter 5).
+`RecordAll` holds the batch and captures it at once, as `Record` does a
+split (chapter 5), so if a later item fails, the earlier ones never move.

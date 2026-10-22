@@ -43,8 +43,11 @@ If Ada can't afford it, the dry run says why, and `Record` refuses with
 
 {{code 05-transfers/main.go history}}
 
-Newest first. `List` shows each posting of a split as its own entry (`…-1`,
-`…-2`). Blnk can't combine "from or to" with other conditions, so a full
+Newest first. `List` shows Blnk's own records, each posting of a split as its
+own entry. `Record` sends a split as a hold and captures it at once (see
+below), so Blnk keeps each posting twice: held (`StatusHeld`) and captured
+(`StatusApplied`, under the transfer's reference). The example asks for
+`StatusApplied`: the money that moved. Blnk can't combine "from or to" with other conditions, so a full
 history is two queries: one with `From`, one with `To`. `EntryQuery` also
 filters by `Status`, `Since` and `Until`.
 
@@ -54,11 +57,13 @@ filters by `Status`, `Since` and `Until`.
 
 ## Good to know
 
-- **A split that fails partway.** Blnk records a split one posting at a time.
-  If a later posting fails, the earlier ones have already moved, and Blnk
-  refunds them from its background worker a moment later (about 200 ms).
-  Until then they show in the accounts. `Record` still returns the error.
-  Keep Blnk's worker running and monitored.
+- **A split that fails partway moves nothing.** Blnk moves a split one
+  posting at a time: applied directly, a later posting that fails leaves the
+  earlier ones moved until Blnk's worker refunds them. So `Record` holds the
+  split first and captures it at once. A hold that fails partway is released
+  before Blnk answers: `Record` returns the error and no account ever shows
+  the earlier postings. The entry still reads as one applied transaction,
+  with the id `Record` returned.
 - **Retrying that split** with the same `Ref` returns `ErrReferenceUsed`, not
   `ErrDuplicate`: nothing stands under that reference, so record it again
   under a new one (chapter 12).

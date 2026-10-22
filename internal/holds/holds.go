@@ -81,6 +81,11 @@ func (s *Service) Place(ctx context.Context, t types.Transaction, expires time.T
 // the retry met the reference already used.
 func (s *Service) placed(ctx context.Context, t types.Transaction) (types.HoldID, error) {
 	e, err := s.k.GetEntryByReference(ctx, t.Ref)
+	if errors.Is(err, types.ErrNotFound) {
+		// Blnk holds the reference, but nothing is recorded under it: it
+		// holds "<ref>-1" of something else, such as a single transaction.
+		return "", fmt.Errorf("%w: %s is held by something not recorded under it", types.ErrReferenceUsed, t.Ref)
+	}
 	if err != nil {
 		return "", fmt.Errorf("humanblnk: reference %s is already used, and looking it up failed (check again before retrying): %w", t.Ref, err)
 	}
@@ -150,7 +155,9 @@ func (s *Service) released(ctx context.Context, h types.HoldID, split bool) (boo
 //
 // Capture is safe to repeat with the same amount, even after a timeout: it
 // finds the capture an earlier attempt made and finishes it rather than
-// moving the money again. A different amount is ErrHoldSettled. One gap
+// moving the money again, including a split whose earlier commit stopped
+// partway. A different amount is ErrHoldSettled, and so is a split with a
+// posting released (say, by its expiry): it can't be captured whole. One gap
 // remains: a partial capture retried while Blnk is still working on the
 // first attempt can capture twice, so wait a few seconds before retrying one.
 func (s *Service) Capture(ctx context.Context, h types.HoldID, amount money.Money) (types.Entry, error) {
@@ -196,6 +203,12 @@ func (s *Service) Capture(ctx context.Context, h types.HoldID, amount money.Mone
 		if captured, done, err = s.captured(ctx, h); err != nil {
 			return types.Entry{}, err
 		}
+	} else if leg, released, err := s.legReleased(ctx, h); err != nil {
+		return types.Entry{}, err
+	} else if released {
+		// Blnk would commit the other postings and answer ALREADY_VOIDED:
+		// part of the split moved without the rest.
+		return types.Entry{}, fmt.Errorf("%w: posting %s of split hold %s was released (cancelled or expired), so the split can't be captured whole", types.ErrHoldSettled, leg, h)
 	}
 	if !done {
 		if captured, err = s.commit(ctx, h, held, want, full, split); err != nil {
@@ -241,8 +254,10 @@ func (s *Service) commit(ctx context.Context, h types.HoldID, held types.Entry, 
 	case err == nil:
 		return core.Entry(&res.Transaction)
 	case split && (blnk.HasCode(err, blnk.CodeAlreadyCommitted) || unanswered(err)):
-		// Blnk answers ALREADY_COMMITTED if any posting was, even when
-		// another was voided, so check that every one was captured.
+		// A split committed partway (an earlier attempt cut short) is
+		// finished by this commit: Blnk commits the postings still held, then
+		// answers ALREADY_COMMITTED for the ones that weren't. It answers so
+		// even when another was voided, so check every one was captured.
 		if all, lerr := s.splitCaptured(ctx, h); lerr == nil && all {
 			held.Status = types.StatusApplied // an earlier attempt captured it
 			return held, nil
@@ -253,6 +268,39 @@ func (s *Service) commit(ctx context.Context, h types.HoldID, held types.Entry, 
 		}
 	}
 	return types.Entry{}, core.MapErr(err)
+}
+
+// legReleased reports whether a posting of split hold h was released,
+// cancelled or expired, and which. Committing h settles every posting still
+// held, whatever became of the others, so a split with one released can
+// only be captured in part.
+func (s *Service) legReleased(ctx context.Context, h types.HoldID) (string, bool, error) {
+	legs, _, err := s.k.C.Transactions.Filter(ctx, blnk.FilterRequest{
+		Filters: []blnk.Filter{
+			{Field: "parent_transaction", Operator: "eq", Value: string(h)},
+			{Field: "status", Operator: "eq", Value: types.StatusHeld},
+		},
+		Limit: 100,
+	})
+	if err != nil {
+		return "", false, core.MapErr(err)
+	}
+	for i := range legs {
+		voids, _, err := s.k.C.Transactions.Filter(ctx, blnk.FilterRequest{
+			Filters: []blnk.Filter{
+				{Field: "parent_transaction", Operator: "eq", Value: legs[i].GetID()},
+				{Field: "status", Operator: "eq", Value: types.StatusVoid},
+			},
+			Limit: 1,
+		})
+		if err != nil {
+			return "", false, core.MapErr(err)
+		}
+		if len(voids) > 0 {
+			return legs[i].Reference, true, nil
+		}
+	}
+	return "", false, nil
 }
 
 // splitCaptured reports whether every posting of split hold h has been
