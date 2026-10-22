@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10. Watches and webhooks · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html" class="current" aria-current="page"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 10 · Running it</p>
+    <h1 id="watches-and-webhooks"><a class="anchor" href="#watches-and-webhooks">Watches and webhooks</a></h1>
+<p><strong>Scenario:</strong> HumanBlnk texts Ada when her balance drops below ₦2,000. Blnk tells HumanBlnk through a webhook, and HumanBlnk must be sure each webhook really came from Blnk.</p>
+<h2 id="step-1-watch-the-balance"><a class="anchor" href="#step-1-watch-the-balance">Step 1: watch the balance</a></h2>
+<p>A <strong>watch</strong> is a threshold on one account. While it holds, Blnk sends the webhook event <code>balance.monitor</code> after every update of the account.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">low, err := books.Watches.Create(ctx, ledger.Watch{
+    Account: ledger.AccountRef(ada.ID), Field: ledger.WatchBalance, Op: ledger.WatchBelow,
+    Threshold: money.MustParse(&#34;1000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
+})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;watch&#34;, low.ID, &#34;on&#34;, low.Account, low.Field, low.Op, low.Threshold)</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th>Field</th><th>Values</th></tr></thead><tbody>
+<tr><td><code>Field</code></td><td><code>WatchBalance</code> (Total), <code>WatchCredits</code>, <code>WatchDebits</code>, <code>WatchHeld</code> (held out of it), <code>WatchIncomingHeld</code>, <code>WatchHeldNet</code></td></tr>
+<tr><td><code>Op</code></td><td><code>WatchAbove</code>, <code>WatchAtLeast</code>, <code>WatchBelow</code>, <code>WatchAtMost</code>, <code>WatchEquals</code>, <code>WatchNotEquals</code></td></tr>
+<tr><td><code>Threshold</code></td><td>a <code>money.Money</code> in the account&#39;s currency, at most 2^53 in its smallest unit (about ₦90 trillion, or 0.009 ETH). Larger is <code>ErrInvalid</code>: Blnk can&#39;t store it exactly.</td></tr>
+</tbody></table></div>
+<h2 id="step-2-move-the-line"><a class="anchor" href="#step-2-move-the-line">Step 2: move the line</a></h2>
+<p><code>Change</code> returns a watch with a <strong>new id</strong>: Blnk can&#39;t change a threshold in place, so the new watch is made before the old one is deleted. The account is never unwatched in between, but both may fire once. <code>List</code> with <code>&#34;&#34;</code> lists every watch.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">low, err = books.Watches.Change(ctx, low.ID, ledger.Watch{
+    Account: ledger.AccountRef(ada.ID), Field: ledger.WatchBalance, Op: ledger.WatchBelow,
+    Threshold: money.MustParse(&#34;2000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
+})
+if err != nil {
+    log.Fatal(err)
+}
+watches, _ := books.Watches.List(ctx, ledger.AccountRef(ada.ID))
+fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, watches[0].Threshold)</code></pre></figure>
+<h2 id="step-3-receive-webhooks-safely"><a class="anchor" href="#step-3-receive-webhooks-safely">Step 3: receive webhooks safely</a></h2>
+<p>Blnk signs each webhook with its <code>server.secret_key</code>. <code>ledger.VerifyWebhook</code> checks the signature and the age, then decodes it. Never act on a body that fails the check. This is the handler you mount at the URL Blnk sends webhooks to:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func webhook(w http.ResponseWriter, r *http.Request) {
+    ev, err := ledger.VerifyWebhook(secret, r, 5*time.Minute)
+    if err != nil {
+        http.Error(w, &#34;bad signature&#34;, http.StatusUnauthorized) // never act on its body
+        fmt.Println(&#34;  rejected:&#34;, err)
+        return
+    }
+    switch {
+    case ev.Kind == &#34;balance.monitor&#34;:
+        fmt.Println(&#34;  watch&#34;, ev.Watch, &#34;fired on&#34;, ev.Account, &#34;- e.g. text the customer &#39;low balance&#39;&#34;)
+    case ev.Entry != nil: // transaction.applied, transaction.rejected, …
+        fmt.Println(&#34;  &#34;, ev.Kind, ev.Entry.Ref, ev.Entry.Amount)
+    }
+    w.WriteHeader(http.StatusOK)
+}</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th><code>Event</code> field</th><th></th></tr></thead><tbody>
+<tr><td><code>Kind</code></td><td>the event, such as <code>&#34;balance.monitor&#34;</code> or <code>&#34;transaction.applied&#34;</code></td></tr>
+<tr><td><code>Watch</code>, <code>Account</code></td><td>for <code>balance.monitor</code>: which watch fired, on which account</td></tr>
+<tr><td><code>Entry</code></td><td>for <code>transaction.*</code> events: the entry</td></tr>
+<tr><td><code>Data</code></td><td>the raw data, as Blnk sent it</td></tr>
+</tbody></table></div>
+<p>The tolerance rejects old deliveries replayed by an attacker; five minutes is sensible. The example signs requests the way Blnk does and sends a genuine one and a forged one to a test server.</p>
+<h2 id="step-4-stop-watching"><a class="anchor" href="#step-4-stop-watching">Step 4: stop watching</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">if err := books.Watches.Delete(ctx, low.ID); err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;watch deleted&#34;)</code></pre></figure>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/10-watches-and-webhooks</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 10: watch an account&#39;s balance, and receive Blnk&#39;s webhooks
+// safely.
+package main
+
+import (
+    &#34;bytes&#34;
+    &#34;fmt&#34;
+    &#34;log&#34;
+    &#34;net/http&#34;
+    &#34;net/http/httptest&#34;
+    &#34;strconv&#34;
+    &#34;time&#34;
+
+    &#34;github.com/otyang/humanblnk/clients/blnk&#34;
+    &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
+    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+)
+
+// secret is Blnk&#39;s server.secret_key, which signs its webhooks.
+const secret = &#34;change-me&#34;
+
+// webhook is the handler you mount at the URL Blnk sends webhooks to.
+func webhook(w http.ResponseWriter, r *http.Request) {
+    ev, err := ledger.VerifyWebhook(secret, r, 5*time.Minute)
+    if err != nil {
+        http.Error(w, &#34;bad signature&#34;, http.StatusUnauthorized) // never act on its body
+        fmt.Println(&#34;  rejected:&#34;, err)
+        return
+    }
+    switch {
+    case ev.Kind == &#34;balance.monitor&#34;:
+        fmt.Println(&#34;  watch&#34;, ev.Watch, &#34;fired on&#34;, ev.Account, &#34;- e.g. text the customer &#39;low balance&#39;&#34;)
+    case ev.Entry != nil: // transaction.applied, transaction.rejected, …
+        fmt.Println(&#34;  &#34;, ev.Kind, ev.Entry.Ref, ev.Entry.Amount)
+    }
+    w.WriteHeader(http.StatusOK)
+}
+
+func main() {
+    ctx, books := demo.Setup()
+    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
+    demo.Deposit(ctx, books, ada, &#34;5000&#34;)
+
+    // 1. Tell Blnk to fire &#34;balance.monitor&#34; while Ada&#39;s balance is under ₦1,000.
+    low, err := books.Watches.Create(ctx, ledger.Watch{
+        Account: ledger.AccountRef(ada.ID), Field: ledger.WatchBalance, Op: ledger.WatchBelow,
+        Threshold: money.MustParse(&#34;1000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;watch&#34;, low.ID, &#34;on&#34;, low.Account, low.Field, low.Op, low.Threshold)
+
+    // Move the line: Change makes the new watch before deleting the old one.
+    low, err = books.Watches.Change(ctx, low.ID, ledger.Watch{
+        Account: ledger.AccountRef(ada.ID), Field: ledger.WatchBalance, Op: ledger.WatchBelow,
+        Threshold: money.MustParse(&#34;2000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    watches, _ := books.Watches.List(ctx, ledger.AccountRef(ada.ID))
+    fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, watches[0].Threshold)
+
+    // 2. Receive webhooks. Here a test server stands in for your service,
+    // and the requests are signed the way Blnk signs them.
+    srv := httptest.NewServer(http.HandlerFunc(webhook))
+    defer srv.Close()
+    send := func(sign string, body string) {
+        ts := strconv.FormatInt(time.Now().Unix(), 10)
+        req, _ := http.NewRequest(http.MethodPost, srv.URL, bytes.NewBufferString(body))
+        req.Header.Set(blnk.HeaderTimestamp, ts)
+        req.Header.Set(blnk.HeaderSignature, blnk.Sign(sign, ts, []byte(body)))
+        res, err := http.DefaultClient.Do(req)
+        if err != nil {
+            log.Fatal(err)
+        }
+        res.Body.Close()
+        fmt.Println(&#34;  -&gt;&#34;, res.Status)
+    }
+    body := `{&#34;event&#34;:&#34;balance.monitor&#34;,&#34;data&#34;:{&#34;monitor_id&#34;:&#34;` + string(low.ID) + `&#34;,&#34;balance_id&#34;:&#34;` + ada.ID + `&#34;}}`
+    fmt.Println(&#34;a genuine webhook:&#34;)
+    send(secret, body)
+    fmt.Println(&#34;a forged one:&#34;)
+    send(&#34;not-the-secret&#34;, body)
+
+    // 3. Stop watching.
+    if err := books.Watches.Delete(ctx, low.ID); err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;watch deleted&#34;)
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">watch mon_7a30c4bc-caaa-4da0-a4d0-f91cd0912cdf on bln_b8469f1d-e935-424c-8b27-ce4f4eea5ba8 balance &lt; 1000.00
+watches on Ada: 1 | threshold now 2000.00
+a genuine webhook:
+  watch mon_57366f82-1d37-4179-9434-bc1cd2481278 fired on bln_b8469f1d-e935-424c-8b27-ce4f4eea5ba8 - e.g. text the customer &#39;low balance&#39;
+  -&gt; 200 OK
+a forged one:
+  rejected: blnk: webhook signature mismatch
+  -&gt; 401 Unauthorized
+watch deleted</code></pre></figure>
+</div>
+</div>
+<p>To receive real webhooks, set Blnk&#39;s webhook URL to your handler, and give your service the same secret as Blnk&#39;s <code>server.secret_key</code> (see Blnk&#39;s configuration docs).</p>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="currency-exchange.html"><small>Previous</small>Currency exchange</a>
+    <a class="next" href="reconciliation.html"><small>Next</small>Reconciliation</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

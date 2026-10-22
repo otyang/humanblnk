@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3. Money · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html" class="current" aria-current="page"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 3 · Foundations</p>
+    <h1 id="money"><a class="anchor" href="#money">Money</a></h1>
+<p><strong>Scenario:</strong> a price of ₦1,500.50, a 1.5% fee, and the total that goes into the ledger and out as JSON.</p>
+<p><code>money.Money</code> is an exact amount in one currency. It is never a float: amounts are parsed from the decimal someone wrote and kept exact. Every amount you give the ledger is a <code>money.Money</code>. This chapter needs no Blnk.</p>
+<h2 id="currencies"><a class="anchor" href="#currencies">Currencies</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">ngn, ok := currency.Get(&#34;NGN&#34;)
+if !ok {
+    panic(&#34;no NGN&#34;)
+}
+usd := currency.MustGet(currency.USD) // for constants you know exist</code></pre></figure>
+<h2 id="parsing"><a class="anchor" href="#parsing">Parsing</a></h2>
+<p>Parsing is strict, so a bad amount is caught at the edge of your system.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">price, err := money.Parse(&#34;1500.50&#34;, ngn)
+fmt.Println(&#34;price:&#34;, price, price.Code(), err)
+
+for _, bad := range []string{&#34;1500.505&#34;, &#34;1e3&#34;, &#34;1,500&#34;} {
+    _, err := money.Parse(bad, ngn)
+    fmt.Printf(&#34;Parse(%q): %v\n&#34;, bad, err)
+}</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th>Input</th><th>Result</th></tr></thead><tbody>
+<tr><td><code>&#34;1500.50&#34;</code>, <code>&#34;-3&#34;</code>, <code>&#34;1500&#34;</code></td><td>fine</td></tr>
+<tr><td><code>&#34;1500.505&#34;</code></td><td><code>ErrTooManyDecimals</code>: NGN has 2</td></tr>
+<tr><td><code>&#34;1e3&#34;</code>, <code>&#34;1,500&#34;</code>, <code>&#34;.5&#34;</code>, <code>&#34;+3&#34;</code></td><td><code>ErrInvalidAmount</code></td></tr>
+</tbody></table></div>
+<p><code>money.MustParse</code> panics instead of returning an error. Use it only for constants in your own code, never for what a client sent.</p>
+<h2 id="arithmetic"><a class="anchor" href="#arithmetic">Arithmetic</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">fee, _ := price.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
+total, _ := price.Add(fee)
+fmt.Println(&#34;fee:&#34;, fee, &#34;| total:&#34;, total)
+
+// Only one currency at a time.
+_, err = price.Add(money.MustParse(&#34;10&#34;, usd))
+fmt.Println(&#34;NGN + USD:&#34;, err, &#34;| is ErrCurrencyMismatch:&#34;, errors.Is(err, money.ErrCurrencyMismatch))
+
+// Compare with Cmp and Equal, never ==.
+cmp, _ := total.Cmp(price)
+fmt.Println(&#34;total &gt; price:&#34;, cmp &gt; 0, &#34;| 1.5 equals 1.50:&#34;, money.MustParse(&#34;1.5&#34;, usd).Equal(money.MustParse(&#34;1.50&#34;, usd)))</code></pre></figure>
+<ul>
+<li><code>Add</code>, <code>Sub</code> and <code>Cmp</code> work only within one currency; anything else is <code>money.ErrCurrencyMismatch</code>.</li>
+<li>Compare with <code>Equal</code> or <code>Cmp</code>, <strong>never <code>==</code></strong>. <code>1.5</code> and <code>1.50</code> USD are <code>Equal</code>.</li>
+<li>Also: <code>IsPositive</code>, <code>IsNegative</code>, <code>IsZeroAmount</code>, <code>Sign</code>, <code>Neg</code>, <code>Abs</code>, <code>Amount</code> (the decimal), <code>Code</code>, <code>Currency</code>, <code>Valid</code>.</li>
+</ul>
+<h2 id="the-smallest-unit"><a class="anchor" href="#the-smallest-unit">The smallest unit</a></h2>
+<p>Ledgers store integers: kobo, cents, wei. <code>Minor</code> and <code>FromMinor</code> convert exactly, even for 18-decimal crypto.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">minor, _ := total.Minor()
+fmt.Println(&#34;in kobo:&#34;, minor, &#34;| precision:&#34;, total.Precision())
+back, _ := money.FromMinor(minor, ngn)
+fmt.Println(&#34;back from kobo:&#34;, back)</code></pre></figure>
+<h2 id="rounding-only-where-you-ask"><a class="anchor" href="#rounding-only-where-you-ask">Rounding: only where you ask</a></h2>
+<p>Nothing rounds by itself. Where you need it, you choose the direction.</p>
+<div class="table"><table>
+<thead><tr><th>Mode</th><th>Use for</th></tr></thead><tbody>
+<tr><td><code>money.Up</code></td><td>a fee HumanBlnk charges: never undercharge by a fraction of a kobo</td></tr>
+<tr><td><code>money.Down</code></td><td>an amount paid out or credited: never pay out more than exists</td></tr>
+<tr><td><code>money.HalfEven</code></td><td>reports</td></tr>
+</tbody></table></div>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">share := decimal.RequireFromString(&#34;100&#34;).Div(decimal.NewFromInt(3)) // 33.333…
+payout, _ := money.Round(share, ngn, money.Down)                     // pay out: round down
+fmt.Println(&#34;a third of 100, paid out:&#34;, payout)</code></pre></figure>
+<h2 id="json"><a class="anchor" href="#json">JSON</a></h2>
+<p>The amount is a string, so nothing in between turns it into a float. Decoding is strict: exactly <code>amount</code> and <code>currency</code>, with the code in capitals.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">b, _ := json.Marshal(total)
+fmt.Println(&#34;JSON:&#34;, string(b))
+var decoded money.Money
+err = json.Unmarshal([]byte(`{&#34;amount&#34;:&#34;99.99&#34;,&#34;currency&#34;:&#34;USD&#34;}`), &amp;decoded)
+fmt.Println(&#34;decoded:&#34;, decoded, decoded.Code(), err)</code></pre></figure>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/03-money</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 3: exact amounts with money. No Blnk needed.
+package main
+
+import (
+    &#34;encoding/json&#34;
+    &#34;errors&#34;
+    &#34;fmt&#34;
+
+    &#34;github.com/otyang/humanblnk/money&#34;
+    &#34;github.com/otyang/humanblnk/money/currency&#34;
+    &#34;github.com/shopspring/decimal&#34;
+)
+
+func main() {
+    // Look the currency up once. Get is for codes people type; Lookup for
+    // codes from storage.
+    ngn, ok := currency.Get(&#34;NGN&#34;)
+    if !ok {
+        panic(&#34;no NGN&#34;)
+    }
+    usd := currency.MustGet(currency.USD) // for constants you know exist
+
+    // Parse what a person or client wrote.
+    price, err := money.Parse(&#34;1500.50&#34;, ngn)
+    fmt.Println(&#34;price:&#34;, price, price.Code(), err)
+
+    for _, bad := range []string{&#34;1500.505&#34;, &#34;1e3&#34;, &#34;1,500&#34;} {
+        _, err := money.Parse(bad, ngn)
+        fmt.Printf(&#34;Parse(%q): %v\n&#34;, bad, err)
+    }
+
+    // A 1.5% fee, rounded up: HumanBlnk never undercharges by a fraction of a kobo.
+    fee, _ := price.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
+    total, _ := price.Add(fee)
+    fmt.Println(&#34;fee:&#34;, fee, &#34;| total:&#34;, total)
+
+    // Only one currency at a time.
+    _, err = price.Add(money.MustParse(&#34;10&#34;, usd))
+    fmt.Println(&#34;NGN + USD:&#34;, err, &#34;| is ErrCurrencyMismatch:&#34;, errors.Is(err, money.ErrCurrencyMismatch))
+
+    // Compare with Cmp and Equal, never ==.
+    cmp, _ := total.Cmp(price)
+    fmt.Println(&#34;total &gt; price:&#34;, cmp &gt; 0, &#34;| 1.5 equals 1.50:&#34;, money.MustParse(&#34;1.5&#34;, usd).Equal(money.MustParse(&#34;1.50&#34;, usd)))
+
+    // The smallest unit, as a ledger stores it.
+    minor, _ := total.Minor()
+    fmt.Println(&#34;in kobo:&#34;, minor, &#34;| precision:&#34;, total.Precision())
+    back, _ := money.FromMinor(minor, ngn)
+    fmt.Println(&#34;back from kobo:&#34;, back)
+
+    // Rounding only where you ask, in a direction you choose.
+    share := decimal.RequireFromString(&#34;100&#34;).Div(decimal.NewFromInt(3)) // 33.333…
+    payout, _ := money.Round(share, ngn, money.Down)                     // pay out: round down
+    fmt.Println(&#34;a third of 100, paid out:&#34;, payout)
+
+    // JSON is exact both ways.
+    b, _ := json.Marshal(total)
+    fmt.Println(&#34;JSON:&#34;, string(b))
+    var decoded money.Money
+    err = json.Unmarshal([]byte(`{&#34;amount&#34;:&#34;99.99&#34;,&#34;currency&#34;:&#34;USD&#34;}`), &amp;decoded)
+    fmt.Println(&#34;decoded:&#34;, decoded, decoded.Code(), err)
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">price: 1500.50 NGN &lt;nil&gt;
+Parse(&#34;1500.505&#34;): more decimal places than the currency has: 1500.505 has 2 for NGN
+Parse(&#34;1e3&#34;): invalid amount: &#34;1e3&#34;
+Parse(&#34;1,500&#34;): invalid amount: &#34;1,500&#34;
+fee: 22.51 | total: 1523.01
+NGN + USD: currencies differ: NGN and USD | is ErrCurrencyMismatch: true
+total &gt; price: true | 1.5 equals 1.50: true
+in kobo: 152301 | precision: 100
+back from kobo: 1523.01
+a third of 100, paid out: 33.33
+JSON: {&#34;amount&#34;:&#34;1523.01&#34;,&#34;currency&#34;:&#34;NGN&#34;}
+decoded: 99.99 USD &lt;nil&gt;</code></pre></figure>
+</div>
+</div>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="customers-and-accounts.html"><small>Previous</small>Customers and accounts</a>
+    <a class="next" href="deposits.html"><small>Next</small>Deposits</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

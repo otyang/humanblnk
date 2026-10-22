@@ -1,0 +1,12 @@
+price: 1500.50 NGN <nil>
+Parse("1500.505"): more decimal places than the currency has: 1500.505 has 2 for NGN
+Parse("1e3"): invalid amount: "1e3"
+Parse("1,500"): invalid amount: "1,500"
+fee: 22.51 | total: 1523.01
+NGN + USD: currencies differ: NGN and USD | is ErrCurrencyMismatch: true
+total > price: true | 1.5 equals 1.50: true
+in kobo: 152301 | precision: 100
+back from kobo: 1523.01
+a third of 100, paid out: 33.33
+JSON: {"amount":"1523.01","currency":"NGN"}
+decoded: 99.99 USD <nil>

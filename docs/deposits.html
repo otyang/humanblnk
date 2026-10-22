@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4. Deposits · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html" class="current" aria-current="page"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 4 · Moving money</p>
+    <h1 id="deposits"><a class="anchor" href="#deposits">Deposits</a></h1>
+<p><strong>Scenario:</strong> Ada pays ₦25,000 into her wallet by bank transfer through Paystack. Paystack&#39;s webhook tells HumanBlnk, then sends it again. Days later Paystack settles the money into HumanBlnk&#39;s bank account.</p>
+<h2 id="where-the-money-comes-from"><a class="anchor" href="#where-the-money-comes-from">Where the money comes from</a></h2>
+<p>When the webhook arrives, Paystack has the money, not HumanBlnk. So the deposit comes <strong>from Paystack&#39;s clearing account</strong>, <code>ledger.ClearingAccount(&#34;paystack&#34;)</code> (<code>@PaystackClearing</code>). It goes below zero: Paystack owes HumanBlnk that much. When Paystack settles, it returns to zero, so a balance left in a clearing account is money still in transit.</p>
+<h2 id="step-1-record-the-deposit"><a class="anchor" href="#step-1-record-the-deposit">Step 1: record the deposit</a></h2>
+<p>This is what your Paystack webhook handler does with a successful charge:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func deposit(ctx context.Context, books *ledger.Ledger, wallet ledger.Account, paystackRef, amount string) (ledger.Entry, error) {
+    m, err := money.Parse(amount, wallet.Currency) // the amount the webhook carried
+    if err != nil {
+        return ledger.Entry{}, err
+    }
+    return books.Transactions.Record(ctx, ledger.Transaction{
+        Ref:         ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef),
+        From:        ledger.Single(ledger.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes HumanBlnk this
+        To:          ledger.Single(ledger.AccountRef(wallet.ID), m),
+        Description: &#34;Bank transfer&#34;,
+        Meta:        ledger.Meta{&#34;provider&#34;: &#34;paystack&#34;, &#34;provider_ref&#34;: paystackRef},
+    })
+}</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th><code>Transaction</code> field</th><th></th></tr></thead><tbody>
+<tr><td><code>Ref</code></td><td>required. Built with <code>ledger.Reference</code> from <strong>your own ids</strong>, never a random value. Here it&#39;s Paystack&#39;s id for the charge, so a retried webhook carries the same one.</td></tr>
+<tr><td><code>From</code>, <code>To</code></td><td>postings: <code>ledger.Single(account, amount)</code>, or <code>ledger.Many(...)</code> for a split (chapter 5)</td></tr>
+<tr><td><code>Description</code></td><td>required</td></tr>
+<tr><td><code>Meta</code></td><td>optional references, such as the provider&#39;s id</td></tr>
+</tbody></table></div>
+<p><code>ledger.AccountRef(wallet.ID)</code> names a customer&#39;s account; <code>ledger.ClearingAccount(...)</code>, <code>ledger.World</code> and <code>ledger.FeeIncome</code> name system accounts.</p>
+<h2 id="step-2-the-retried-webhook"><a class="anchor" href="#step-2-the-retried-webhook">Step 2: the retried webhook</a></h2>
+<p>Paystack resends webhooks on timeouts. Recording again with the same <code>Ref</code> can&#39;t apply twice:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">again, err := deposit(ctx, books, ada, psRef, &#34;25000&#34;)
+switch {
+case errors.Is(err, ledger.ErrDuplicate):
+    fmt.Println(&#34;retried webhook: already recorded as&#34;, again.ID, &#34;- answer 200 OK and move on&#34;)
+case err != nil:
+    log.Fatal(err)
+}
+fmt.Println(&#34;Ada can still spend:&#34;, demo.Available(ctx, books, ada.ID))</code></pre></figure>
+<p>A forged or buggy webhook that reuses the reference for another amount is caught too:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = deposit(ctx, books, ada, psRef, &#34;99999&#34;)
+fmt.Println(&#34;same reference, different amount:&#34;, errors.Is(err, ledger.ErrReferenceUsed))</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th>Error</th><th>Means</th><th>Do</th></tr></thead><tbody>
+<tr><td><code>ErrDuplicate</code></td><td>this exact deposit already happened</td><td>treat as success; the existing entry comes back with it</td></tr>
+<tr><td><code>ErrReferenceUsed</code></td><td>the reference holds something else</td><td>investigate; never treat as success</td></tr>
+</tbody></table></div>
+<h2 id="step-3-look-it-up"><a class="anchor" href="#step-3-look-it-up">Step 3: look it up</a></h2>
+<p><code>GetByReference</code> is how you ask &#34;did this already happen?&#34;, for example from a support tool. <code>Get(ctx, id)</code> fetches by entry id.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">found, err := books.Transactions.GetByReference(ctx, ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, psRef))
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;found by reference:&#34;, found.ID, found.Amount, found.Meta[&#34;provider_ref&#34;])</code></pre></figure>
+<h2 id="step-4-paystack-settles"><a class="anchor" href="#step-4-paystack-settles">Step 4: Paystack settles</a></h2>
+<p>When the money reaches HumanBlnk&#39;s bank, Paystack no longer owes it. It moves from outside HumanBlnk (<code>@World</code>) into the clearing account, bringing it back to zero:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">settled := money.MustParse(&#34;25000&#34;, demo.NGN)
+if _, err := books.Transactions.Record(ctx, ledger.Transaction{
+    Ref:         ledger.Reference(&#34;settlement&#34;, &#34;paystack&#34;, &#34;stl_&#34;+demo.Run),
+    From:        ledger.Single(ledger.World, settled),
+    To:          ledger.Single(ledger.ClearingAccount(&#34;paystack&#34;), settled),
+    Description: &#34;Paystack settlement&#34;,
+}); err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;settlement recorded&#34;)</code></pre></figure>
+<p>Chapter 11 checks Paystack&#39;s settlement report against these deposits.</p>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/04-deposits</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 4: a deposit through a payment provider, the retried webhook, and
+// the provider settling.
+package main
+
+import (
+    &#34;context&#34;
+    &#34;errors&#34;
+    &#34;fmt&#34;
+    &#34;log&#34;
+
+    &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
+    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+)
+
+// deposit is what your Paystack webhook handler does with a successful
+// charge. paystackRef is Paystack&#39;s own id for it, so a retried webhook
+// carries the same one.
+func deposit(ctx context.Context, books *ledger.Ledger, wallet ledger.Account, paystackRef, amount string) (ledger.Entry, error) {
+    m, err := money.Parse(amount, wallet.Currency) // the amount the webhook carried
+    if err != nil {
+        return ledger.Entry{}, err
+    }
+    return books.Transactions.Record(ctx, ledger.Transaction{
+        Ref:         ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef),
+        From:        ledger.Single(ledger.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes HumanBlnk this
+        To:          ledger.Single(ledger.AccountRef(wallet.ID), m),
+        Description: &#34;Bank transfer&#34;,
+        Meta:        ledger.Meta{&#34;provider&#34;: &#34;paystack&#34;, &#34;provider_ref&#34;: paystackRef},
+    })
+}
+
+func main() {
+    ctx, books := demo.Setup()
+    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
+    psRef := &#34;ps_&#34; + demo.Run
+
+    // The webhook arrives.
+    e, err := deposit(ctx, books, ada, psRef, &#34;25000&#34;)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;recorded&#34;, e.ID, e.Amount, e.Status)
+    fmt.Println(&#34;Ada can spend:&#34;, demo.Available(ctx, books, ada.ID))
+
+    // Paystack sends the same webhook again (it does, on timeouts).
+    again, err := deposit(ctx, books, ada, psRef, &#34;25000&#34;)
+    switch {
+    case errors.Is(err, ledger.ErrDuplicate):
+        fmt.Println(&#34;retried webhook: already recorded as&#34;, again.ID, &#34;- answer 200 OK and move on&#34;)
+    case err != nil:
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;Ada can still spend:&#34;, demo.Available(ctx, books, ada.ID))
+
+    // A forged or buggy webhook reusing the reference for another amount.
+    _, err = deposit(ctx, books, ada, psRef, &#34;99999&#34;)
+    fmt.Println(&#34;same reference, different amount:&#34;, errors.Is(err, ledger.ErrReferenceUsed))
+
+    // Look a deposit up by your reference, e.g. from a support tool.
+    found, err := books.Transactions.GetByReference(ctx, ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, psRef))
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;found by reference:&#34;, found.ID, found.Amount, found.Meta[&#34;provider_ref&#34;])
+
+    // Days later Paystack settles: the money reaches HumanBlnk&#39;s bank account,
+    // and Paystack no longer owes it. The clearing account returns to zero.
+    settled := money.MustParse(&#34;25000&#34;, demo.NGN)
+    if _, err := books.Transactions.Record(ctx, ledger.Transaction{
+        Ref:         ledger.Reference(&#34;settlement&#34;, &#34;paystack&#34;, &#34;stl_&#34;+demo.Run),
+        From:        ledger.Single(ledger.World, settled),
+        To:          ledger.Single(ledger.ClearingAccount(&#34;paystack&#34;), settled),
+        Description: &#34;Paystack settlement&#34;,
+    }); err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;settlement recorded&#34;)
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">recorded txn_c88c0658-90d6-4261-8cf0-da809dff0f7b 25000.00 APPLIED
+Ada can spend: 25000.00 NGN
+retried webhook: already recorded as txn_c88c0658-90d6-4261-8cf0-da809dff0f7b - answer 200 OK and move on
+Ada can still spend: 25000.00 NGN
+same reference, different amount: true
+found by reference: txn_c88c0658-90d6-4261-8cf0-da809dff0f7b 25000.00 ps_1792634713853635000
+settlement recorded</code></pre></figure>
+</div>
+</div>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="money.html"><small>Previous</small>Money</a>
+    <a class="next" href="transfers-and-fees.html"><small>Next</small>Transfers and fees</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

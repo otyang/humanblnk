@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>9. Currency exchange · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html" class="current" aria-current="page"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 9 · Moving money</p>
+    <h1 id="currency-exchange"><a class="anchor" href="#currency-exchange">Currency exchange</a></h1>
+<p><strong>Scenario:</strong> Ada sells $100 at ₦1,550.25 to the dollar. Her USD wallet goes down by $100 and her NGN wallet up by ₦155,025, together or not at all.</p>
+<p>One transaction can&#39;t do this: a transaction is in one currency. So it&#39;s <strong>two</strong> transactions, recorded atomically with <code>RecordAll</code>.</p>
+<h2 id="humanblnk-s-fx-desk"><a class="anchor" href="#humanblnk-s-fx-desk">HumanBlnk&#39;s FX desk</a></h2>
+<p>The other side of each half is HumanBlnk&#39;s own account for currency it buys and sells. Make it a system account, kept in a variable so a typo can&#39;t create another one. As a system account it may go below zero, so it never blocks an exchange.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">var fxDesk = ledger.SystemAccount(&#34;FXDesk&#34;)</code></pre></figure>
+<h2 id="the-exchange"><a class="anchor" href="#the-exchange">The exchange</a></h2>
+<p>The naira amount is a credit to Ada, so it rounds down. The rate goes in <code>Meta</code> on both halves, for statements and audits.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">sell := money.MustParse(&#34;100&#34;, demo.USD)
+rate := decimal.RequireFromString(&#34;1550.25&#34;)
+buy, err := money.Round(sell.Amount().Mul(rate), demo.NGN, money.Down) // credit rounds down
+if err != nil {
+    log.Fatal(err)
+}
+id := &#34;fx_&#34; + demo.Run
+exchange := []ledger.Transaction{
+    {
+        Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;sell&#34;),
+        From: ledger.Single(ledger.AccountRef(usdWallet.ID), sell), To: ledger.Single(fxDesk, sell),
+        Description: &#34;Sell USD&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+    },
+    {
+        Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;buy&#34;),
+        From: ledger.Single(fxDesk, buy), To: ledger.Single(ledger.AccountRef(ngnWallet.ID), buy),
+        Description: &#34;Buy NGN&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+    },
+}
+entries, err := books.Transactions.RecordAll(ctx, exchange)
+if err != nil {
+    log.Fatal(err) // ErrReadBack: it applied, but reading it back failed; look it up, don&#39;t redo it
+}
+for _, e := range entries {
+    fmt.Printf(&#34;%s  %s %s\n&#34;, e.Ref, e.Amount, e.Amount.Code())
+}
+fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))</code></pre></figure>
+<p><code>RecordAll</code> rules:</p>
+<ul>
+<li>Every transaction applies, or none does.</li>
+<li>They may be in different currencies.</li>
+<li>Each has <strong>one posting on each side</strong> (no splits).</li>
+<li>The entries come back in the order you passed.</li>
+</ul>
+<h2 id="retries-and-failures"><a class="anchor" href="#retries-and-failures">Retries and failures</a></h2>
+<p>A retry after a timeout moves nothing twice:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Transactions.RecordAll(ctx, exchange)
+fmt.Println(&#34;retried:&#34;, errors.Is(err, ledger.ErrDuplicate))</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th>Result</th><th>Means</th></tr></thead><tbody>
+<tr><td><code>ErrDuplicate</code>, with the entries</td><td>the whole exchange already happened</td></tr>
+<tr><td><code>ErrReferenceUsed</code></td><td>a reference holds something that didn&#39;t apply: record it again under new ones</td></tr>
+<tr><td><code>ErrInsufficientFunds</code></td><td>nothing applied</td></tr>
+<tr><td><code>ErrReadBack</code></td><td>it <strong>applied</strong>, but reading the entries back failed. Don&#39;t record it again; look it up with <code>GetByReference</code>.</td></tr>
+</tbody></table></div>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/09-exchange</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 9: a currency exchange, two transactions that apply together or
+// not at all.
+package main
+
+import (
+    &#34;errors&#34;
+    &#34;fmt&#34;
+    &#34;log&#34;
+
+    &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
+    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+    &#34;github.com/shopspring/decimal&#34;
+)
+
+// fxDesk is HumanBlnk&#39;s own account for currency it buys and sells: a system
+// account, kept in a variable so a typo can&#39;t create another.
+var fxDesk = ledger.SystemAccount(&#34;FXDesk&#34;)
+
+func main() {
+    ctx, books := demo.Setup()
+    usdWallet := demo.Customer(ctx, books, &#34;ada&#34;, demo.USD)
+    owner := usdWallet.Owner
+    ngnWallet, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+    if err != nil {
+        log.Fatal(err)
+    }
+    demo.Deposit(ctx, books, usdWallet, &#34;200&#34;)
+
+    // Ada sells $100 at ₦1,550.25 to the dollar.
+    sell := money.MustParse(&#34;100&#34;, demo.USD)
+    rate := decimal.RequireFromString(&#34;1550.25&#34;)
+    buy, err := money.Round(sell.Amount().Mul(rate), demo.NGN, money.Down) // credit rounds down
+    if err != nil {
+        log.Fatal(err)
+    }
+    id := &#34;fx_&#34; + demo.Run
+    exchange := []ledger.Transaction{
+        {
+            Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;sell&#34;),
+            From: ledger.Single(ledger.AccountRef(usdWallet.ID), sell), To: ledger.Single(fxDesk, sell),
+            Description: &#34;Sell USD&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+        },
+        {
+            Ref:  ledger.Reference(&#34;fx&#34;, id, &#34;buy&#34;),
+            From: ledger.Single(fxDesk, buy), To: ledger.Single(ledger.AccountRef(ngnWallet.ID), buy),
+            Description: &#34;Buy NGN&#34;, Meta: ledger.Meta{&#34;rate&#34;: rate.String()},
+        },
+    }
+    entries, err := books.Transactions.RecordAll(ctx, exchange)
+    if err != nil {
+        log.Fatal(err) // ErrReadBack: it applied, but reading it back failed; look it up, don&#39;t redo it
+    }
+    for _, e := range entries {
+        fmt.Printf(&#34;%s  %s %s\n&#34;, e.Ref, e.Amount, e.Amount.Code())
+    }
+    fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))
+
+    // The app retries after a timeout: nothing moves twice.
+    _, err = books.Transactions.RecordAll(ctx, exchange)
+    fmt.Println(&#34;retried:&#34;, errors.Is(err, ledger.ErrDuplicate))
+
+    // Selling more than she has: neither half applies.
+    tooMuch := money.MustParse(&#34;500&#34;, demo.USD)
+    _, err = books.Transactions.RecordAll(ctx, []ledger.Transaction{
+        {Ref: ledger.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;sell&#34;), From: ledger.Single(ledger.AccountRef(usdWallet.ID), tooMuch), To: ledger.Single(fxDesk, tooMuch), Description: &#34;Sell USD&#34;},
+        {Ref: ledger.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;buy&#34;), From: ledger.Single(fxDesk, money.MustParse(&#34;775125&#34;, demo.NGN)), To: ledger.Single(ledger.AccountRef(ngnWallet.ID), money.MustParse(&#34;775125&#34;, demo.NGN)), Description: &#34;Buy NGN&#34;},
+    })
+    fmt.Println(&#34;too much:&#34;, errors.Is(err, ledger.ErrInsufficientFunds))
+    fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">fx:fx_1792634717768817000:sell  100.00 USD
+fx:fx_1792634717768817000:buy  155025.00 NGN
+USD: 100.00 USD | NGN: 155025.00 NGN
+retried: true
+too much: true
+USD: 100.00 USD | NGN: 155025.00 NGN</code></pre></figure>
+</div>
+</div>
+<p>If a later item fails after an earlier one applied, Blnk refunds the earlier one from its background worker a moment later, just as for a split (chapter 5).</p>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="refunds-and-reversals.html"><small>Previous</small>Refunds and reversals</a>
+    <a class="next" href="watches-and-webhooks.html"><small>Next</small>Watches and webhooks</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

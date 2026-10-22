@@ -1,0 +1,5 @@
+delivered: <nil> | Ada: 4000.00 NGN
+declined: true | Ada: 4000.00 NGN
+no answer: true | Ada: 3000.00 NGN (1000 still held)
+settled after the webhook | Ada: 3000.00 NGN
+too much: true

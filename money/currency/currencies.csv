@@ -1,0 +1,169 @@
+code,name,kind,decimals
+AED,UAE Dirham,fiat,2
+AFN,Afghani,fiat,2
+ALL,Lek,fiat,2
+AMD,Armenian Dram,fiat,2
+AOA,Kwanza,fiat,2
+ARS,Argentine Peso,fiat,2
+AUD,Australian Dollar,fiat,2
+AWG,Aruban Florin,fiat,2
+AZN,Azerbaijan Manat,fiat,2
+BAM,Convertible Mark,fiat,2
+BBD,Barbados Dollar,fiat,2
+BDT,Taka,fiat,2
+BGN,Bulgarian Lev,fiat,2
+BHD,Bahraini Dinar,fiat,3
+BIF,Burundi Franc,fiat,0
+BMD,Bermudian Dollar,fiat,2
+BND,Brunei Dollar,fiat,2
+BOB,Boliviano,fiat,2
+BRL,Brazilian Real,fiat,2
+BSD,Bahamian Dollar,fiat,2
+BTN,Ngultrum,fiat,2
+BWP,Pula,fiat,2
+BYN,Belarusian Ruble,fiat,2
+BZD,Belize Dollar,fiat,2
+CAD,Canadian Dollar,fiat,2
+CDF,Congolese Franc,fiat,2
+CHF,Swiss Franc,fiat,2
+CLP,Chilean Peso,fiat,0
+CNY,Yuan Renminbi,fiat,2
+COP,Colombian Peso,fiat,2
+CRC,Costa Rican Colon,fiat,2
+CUP,Cuban Peso,fiat,2
+CVE,Cabo Verde Escudo,fiat,2
+CZK,Czech Koruna,fiat,2
+DJF,Djibouti Franc,fiat,0
+DKK,Danish Krone,fiat,2
+DOP,Dominican Peso,fiat,2
+DZD,Algerian Dinar,fiat,2
+EGP,Egyptian Pound,fiat,2
+ERN,Nakfa,fiat,2
+ETB,Ethiopian Birr,fiat,2
+EUR,Euro,fiat,2
+FJD,Fiji Dollar,fiat,2
+FKP,Falkland Islands Pound,fiat,2
+GBP,Pound Sterling,fiat,2
+GEL,Lari,fiat,2
+GHS,Ghana Cedi,fiat,2
+GIP,Gibraltar Pound,fiat,2
+GMD,Dalasi,fiat,2
+GNF,Guinean Franc,fiat,0
+GTQ,Quetzal,fiat,2
+GYD,Guyana Dollar,fiat,2
+HKD,Hong Kong Dollar,fiat,2
+HNL,Lempira,fiat,2
+HTG,Gourde,fiat,2
+HUF,Forint,fiat,2
+IDR,Rupiah,fiat,2
+ILS,New Israeli Sheqel,fiat,2
+INR,Indian Rupee,fiat,2
+IQD,Iraqi Dinar,fiat,3
+IRR,Iranian Rial,fiat,2
+ISK,Iceland Krona,fiat,0
+JMD,Jamaican Dollar,fiat,2
+JOD,Jordanian Dinar,fiat,3
+JPY,Yen,fiat,0
+KES,Kenyan Shilling,fiat,2
+KGS,Som,fiat,2
+KHR,Riel,fiat,2
+KMF,Comorian Franc,fiat,0
+KPW,North Korean Won,fiat,2
+KRW,Won,fiat,0
+KWD,Kuwaiti Dinar,fiat,3
+KYD,Cayman Islands Dollar,fiat,2
+KZT,Tenge,fiat,2
+LAK,Lao Kip,fiat,2
+LBP,Lebanese Pound,fiat,2
+LKR,Sri Lanka Rupee,fiat,2
+LRD,Liberian Dollar,fiat,2
+LSL,Loti,fiat,2
+LYD,Libyan Dinar,fiat,3
+MAD,Moroccan Dirham,fiat,2
+MDL,Moldovan Leu,fiat,2
+MGA,Malagasy Ariary,fiat,2
+MKD,Denar,fiat,2
+MMK,Kyat,fiat,2
+MNT,Tugrik,fiat,2
+MOP,Pataca,fiat,2
+MRU,Ouguiya,fiat,2
+MUR,Mauritius Rupee,fiat,2
+MVR,Rufiyaa,fiat,2
+MWK,Malawi Kwacha,fiat,2
+MXN,Mexican Peso,fiat,2
+MYR,Malaysian Ringgit,fiat,2
+MZN,Mozambique Metical,fiat,2
+NAD,Namibia Dollar,fiat,2
+NGN,Naira,fiat,2
+NIO,Cordoba Oro,fiat,2
+NOK,Norwegian Krone,fiat,2
+NPR,Nepalese Rupee,fiat,2
+NZD,New Zealand Dollar,fiat,2
+OMR,Rial Omani,fiat,3
+PAB,Balboa,fiat,2
+PEN,Sol,fiat,2
+PGK,Kina,fiat,2
+PHP,Philippine Peso,fiat,2
+PKR,Pakistan Rupee,fiat,2
+PLN,Zloty,fiat,2
+PYG,Guarani,fiat,0
+QAR,Qatari Rial,fiat,2
+RON,Romanian Leu,fiat,2
+RSD,Serbian Dinar,fiat,2
+RUB,Russian Ruble,fiat,2
+RWF,Rwanda Franc,fiat,0
+SAR,Saudi Riyal,fiat,2
+SBD,Solomon Islands Dollar,fiat,2
+SCR,Seychelles Rupee,fiat,2
+SDG,Sudanese Pound,fiat,2
+SEK,Swedish Krona,fiat,2
+SGD,Singapore Dollar,fiat,2
+SHP,Saint Helena Pound,fiat,2
+SLE,Leone,fiat,2
+SOS,Somali Shilling,fiat,2
+SRD,Surinam Dollar,fiat,2
+SSP,South Sudanese Pound,fiat,2
+STN,Dobra,fiat,2
+SVC,El Salvador Colon,fiat,2
+SYP,Syrian Pound,fiat,2
+SZL,Lilangeni,fiat,2
+THB,Baht,fiat,2
+TJS,Somoni,fiat,2
+TMT,Turkmenistan New Manat,fiat,2
+TND,Tunisian Dinar,fiat,3
+TOP,Pa'anga,fiat,2
+TRY,Turkish Lira,fiat,2
+TTD,Trinidad and Tobago Dollar,fiat,2
+TWD,New Taiwan Dollar,fiat,2
+TZS,Tanzanian Shilling,fiat,2
+UAH,Hryvnia,fiat,2
+UGX,Uganda Shilling,fiat,0
+USD,US Dollar,fiat,2
+UYU,Peso Uruguayo,fiat,2
+UZS,Uzbekistan Sum,fiat,2
+VED,Bolivar Soberano (digital),fiat,2
+VES,Bolivar Soberano,fiat,2
+VND,Dong,fiat,0
+VUV,Vatu,fiat,0
+WST,Tala,fiat,2
+XAF,CFA Franc BEAC,fiat,0
+XCD,East Caribbean Dollar,fiat,2
+XCG,Caribbean Guilder,fiat,2
+XOF,CFA Franc BCEAO,fiat,0
+XPF,CFP Franc,fiat,0
+YER,Yemeni Rial,fiat,2
+ZAR,Rand,fiat,2
+ZMW,Zambian Kwacha,fiat,2
+ZWG,Zimbabwe Gold,fiat,2
+AVAX,Avalanche,crypto,18
+BNB,BNB,crypto,18
+BTC,Bitcoin,crypto,8
+DAI,Dai,crypto,18
+ETH,Ether,crypto,18
+EURC,Euro Coin,crypto,6
+POL,Polygon Ecosystem Token,crypto,18
+PYUSD,PayPal USD,crypto,6
+SOL,Solana,crypto,9
+TRX,Tron,crypto,6
+USDC,USD Coin,crypto,6
+USDT,Tether USD,crypto,6

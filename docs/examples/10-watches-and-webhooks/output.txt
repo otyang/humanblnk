@@ -1,0 +1,9 @@
+watch mon_7a30c4bc-caaa-4da0-a4d0-f91cd0912cdf on bln_b8469f1d-e935-424c-8b27-ce4f4eea5ba8 balance < 1000.00
+watches on Ada: 1 | threshold now 2000.00
+a genuine webhook:
+  watch mon_57366f82-1d37-4179-9434-bc1cd2481278 fired on bln_b8469f1d-e935-424c-8b27-ce4f4eea5ba8 - e.g. text the customer 'low balance'
+  -> 200 OK
+a forged one:
+  rejected: blnk: webhook signature mismatch
+  -> 401 Unauthorized
+watch deleted

@@ -1,0 +1,8 @@
+paid | Ada: 15000.00 NGN | shop: 15000.00 NGN
+refunded 5000.00 | Ada: 20000.00 NGN
+clicked again, same refund: true <nil>
+more than is left: true
+cancelled, refunded 10000.00 | Ada: 30000.00 NGN | shop: 0.00 NGN
+nothing left to refund: true
+paid out | Ada: 22000.00 NGN
+bounced back | Ada: 30000.00 NGN

@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6. Payouts and holds · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html" class="current" aria-current="page"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 6 · Moving money</p>
+    <h1 id="payouts-and-holds"><a class="anchor" href="#payouts-and-holds">Payouts and holds</a></h1>
+<p><strong>Scenario:</strong> Ada withdraws ₦20,000 to her bank. The money must leave her spendable balance at once, but only really leaves when the bank confirms. A second withdrawal is rejected by the bank. Then she takes a ride: ₦6,000 is reserved on the estimate, and ₦4,200 is charged.</p>
+<h2 id="how-a-hold-works"><a class="anchor" href="#how-a-hold-works">How a hold works</a></h2>
+<ol>
+<li><strong><code>Place</code></strong> reserves the amount. It leaves <code>From</code>&#39;s <code>Available</code> at once, but doesn&#39;t reach <code>To</code> yet.</li>
+<li>When the outside world answers, <strong><code>Capture</code></strong> moves it (all or part; the rest is released), or <strong><code>Cancel</code></strong> gives it all back.</li>
+<li>An optional <strong>expiry</strong> cancels the hold if neither happens in time.</li>
+</ol>
+<h2 id="step-1-place-the-hold"><a class="anchor" href="#step-1-place-the-hold">Step 1: place the hold</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">payout := ledger.Transaction{
+    Ref:         ledger.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
+    From:        ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
+    To:          ledger.Single(ledger.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
+    Description: &#34;Withdrawal to GTBank ****1234&#34;,
+}
+hold, err := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
+if err != nil {
+    log.Fatal(err) // ledger.ErrInsufficientFunds: tell Ada
+}
+acct, _ := books.Accounts.Get(ctx, ada.ID)
+fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Total, acct.Held, acct.Available)
+
+// Placing it again (a retry) gives back the same hold.
+same, _ := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
+fmt.Println(&#34;placed again, same hold:&#34;, same == hold)</code></pre></figure>
+<p>While it&#39;s held, <code>Accounts.Get</code> shows <code>Held</code> 20,000 and <code>Available</code> 20,000 less. Store the hold id with your payout, so the bank&#39;s callback can find it. Placing the same transaction again (a retry) returns the same hold.</p>
+<aside class="note"><p><strong>Expiry:</strong> <code>time.Time{}</code> means none. If a payout&#39;s hold expires while the bank actually sent the money, HumanBlnk has paid out without taking it. For payouts, prefer no expiry and a job that chases stuck ones.</p></aside>
+<h2 id="step-2-the-bank-confirms"><a class="anchor" href="#step-2-the-bank-confirms">Step 2: the bank confirms</a></h2>
+<p>The zero <code>Money</code> captures all of it. Capturing again (a retried callback) returns the same capture and moves nothing more:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">e, err := books.Holds.Capture(ctx, hold, money.Money{})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;captured&#34;, e.Amount, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+
+// Capturing again (a retried callback) finishes nothing twice.
+again, err := books.Holds.Capture(ctx, hold, money.Money{})
+fmt.Println(&#34;captured again:&#34;, again.Amount, err)</code></pre></figure>
+<h2 id="step-3-the-bank-rejects-one"><a class="anchor" href="#step-3-the-bank-rejects-one">Step 3: the bank rejects one</a></h2>
+<p><code>Cancel</code> gives the money back, and is safe to repeat. Capturing after a cancel is <code>ErrHoldSettled</code>:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">h2, err := books.Holds.Place(ctx, ledger.Transaction{
+    Ref:  ledger.Reference(&#34;payout&#34;, &#34;po_2_&#34;+demo.Run),
+    From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;5000&#34;)), To: ledger.Single(ledger.World, ngn(&#34;5000&#34;)),
+    Description: &#34;Withdrawal to a closed account&#34;,
+}, time.Time{}) // no expiry: only the bank&#39;s answer settles it
+if err != nil {
+    log.Fatal(err)
+}
+if err := books.Holds.Cancel(ctx, h2); err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;bank rejected, cancelled | Ada:&#34;, demo.Available(ctx, books, ada.ID))
+fmt.Println(&#34;cancel again:&#34;, books.Holds.Cancel(ctx, h2)) // safe to repeat
+_, err = books.Holds.Capture(ctx, h2, money.Money{})
+fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, ledger.ErrHoldSettled))</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th>Call</th><th>Repeated</th></tr></thead><tbody>
+<tr><td><code>Capture(ctx, hold, sameAmount)</code></td><td>returns the same capture, moves nothing more</td></tr>
+<tr><td><code>Cancel(ctx, hold)</code></td><td><code>nil</code></td></tr>
+<tr><td><code>Capture</code> after <code>Cancel</code>, or a different amount after a capture</td><td><code>ErrHoldSettled</code></td></tr>
+</tbody></table></div>
+<h2 id="a-partial-capture"><a class="anchor" href="#a-partial-capture">A partial capture</a></h2>
+<p>The ride reserved ₦6,000 on the estimate; the fare was ₦4,200. ₦4,200 moves and the other ₦1,800 goes back to Ada at once:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">h3, err := books.Holds.Place(ctx, ledger.Transaction{
+    Ref:  ledger.Reference(&#34;ride&#34;, &#34;rd_&#34;+demo.Run),
+    From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;6000&#34;)), To: ledger.Single(ledger.SystemAccount(&#34;RidesClearing&#34;), ngn(&#34;6000&#34;)),
+    Description: &#34;Ride estimate&#34;,
+}, time.Now().Add(2*time.Hour))
+if err != nil {
+    log.Fatal(err)
+}
+fare, err := books.Holds.Capture(ctx, h3, ngn(&#34;4200&#34;)) // the actual fare; the rest goes back
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;ride charged&#34;, fare.Amount, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))</code></pre></figure>
+<p>A capture is final: whatever isn&#39;t captured is released. A split hold (a payout and its fee, say) can only be captured in full.</p>
+<aside class="note"><p><strong>Retrying a partial capture after a timeout:</strong> wait a few seconds first. Blnk can&#39;t tell a repeated partial capture from a new one, so a retry that arrives while Blnk is still processing the first can capture twice. Full captures and cancels don&#39;t have this problem.</p></aside>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/06-payouts</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 6: holds. Reserve money now, settle it when the outside world
+// answers.
+package main
+
+import (
+    &#34;errors&#34;
+    &#34;fmt&#34;
+    &#34;log&#34;
+    &#34;time&#34;
+
+    &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
+    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+)
+
+func main() {
+    ctx, books := demo.Setup()
+    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
+    demo.Deposit(ctx, books, ada, &#34;50000&#34;)
+    ngn := func(v string) money.Money { return money.MustParse(v, demo.NGN) }
+
+    // --- A withdrawal to Ada&#39;s bank account ---
+    payout := ledger.Transaction{
+        Ref:         ledger.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
+        From:        ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
+        To:          ledger.Single(ledger.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
+        Description: &#34;Withdrawal to GTBank ****1234&#34;,
+    }
+    hold, err := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
+    if err != nil {
+        log.Fatal(err) // ledger.ErrInsufficientFunds: tell Ada
+    }
+    acct, _ := books.Accounts.Get(ctx, ada.ID)
+    fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Total, acct.Held, acct.Available)
+
+    // Placing it again (a retry) gives back the same hold.
+    same, _ := books.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
+    fmt.Println(&#34;placed again, same hold:&#34;, same == hold)
+
+    // The bank confirms: capture all of it.
+    e, err := books.Holds.Capture(ctx, hold, money.Money{})
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;captured&#34;, e.Amount, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+
+    // Capturing again (a retried callback) finishes nothing twice.
+    again, err := books.Holds.Capture(ctx, hold, money.Money{})
+    fmt.Println(&#34;captured again:&#34;, again.Amount, err)
+
+    // --- A withdrawal the bank rejects ---
+    h2, err := books.Holds.Place(ctx, ledger.Transaction{
+        Ref:  ledger.Reference(&#34;payout&#34;, &#34;po_2_&#34;+demo.Run),
+        From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;5000&#34;)), To: ledger.Single(ledger.World, ngn(&#34;5000&#34;)),
+        Description: &#34;Withdrawal to a closed account&#34;,
+    }, time.Time{}) // no expiry: only the bank&#39;s answer settles it
+    if err != nil {
+        log.Fatal(err)
+    }
+    if err := books.Holds.Cancel(ctx, h2); err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;bank rejected, cancelled | Ada:&#34;, demo.Available(ctx, books, ada.ID))
+    fmt.Println(&#34;cancel again:&#34;, books.Holds.Cancel(ctx, h2)) // safe to repeat
+    _, err = books.Holds.Capture(ctx, h2, money.Money{})
+    fmt.Println(&#34;capture after cancel is settled:&#34;, errors.Is(err, ledger.ErrHoldSettled))
+
+    // --- A partial capture: a ride, estimated then charged ---
+    h3, err := books.Holds.Place(ctx, ledger.Transaction{
+        Ref:  ledger.Reference(&#34;ride&#34;, &#34;rd_&#34;+demo.Run),
+        From: ledger.Single(ledger.AccountRef(ada.ID), ngn(&#34;6000&#34;)), To: ledger.Single(ledger.SystemAccount(&#34;RidesClearing&#34;), ngn(&#34;6000&#34;)),
+        Description: &#34;Ride estimate&#34;,
+    }, time.Now().Add(2*time.Hour))
+    if err != nil {
+        log.Fatal(err)
+    }
+    fare, err := books.Holds.Capture(ctx, h3, ngn(&#34;4200&#34;)) // the actual fare; the rest goes back
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;ride charged&#34;, fare.Amount, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">held txn_cfe718da-ff3a-4630-bab2-0b9a634c9c0f: Total 50000.00, Held 20000.00, Available 30000.00
+placed again, same hold: true
+captured 20000.00 | Ada: 30000.00 NGN
+captured again: 20000.00 &lt;nil&gt;
+bank rejected, cancelled | Ada: 30000.00 NGN
+cancel again: &lt;nil&gt;
+capture after cancel is settled: true
+ride charged 4200.00 | Ada: 25800.00 NGN</code></pre></figure>
+</div>
+</div>
+<h2 id="good-to-know"><a class="anchor" href="#good-to-know">Good to know</a></h2>
+<ul>
+<li>A hold&#39;s own transaction stays <code>StatusHeld</code> (<code>INFLIGHT</code>) for good. The capture and the release are separate transactions under it, so don&#39;t use the hold&#39;s status to ask &#34;did it settle?&#34;. <code>Capture</code>&#39;s return value, or <code>ErrHoldSettled</code>, tells you.</li>
+<li>To undo money a capture already moved, use <code>Transactions.Reverse</code> (chapter 8). <code>Cancel</code> only releases money still held.</li>
+</ul>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="transfers-and-fees.html"><small>Previous</small>Transfers and fees</a>
+    <a class="next" href="building-a-service.html"><small>Next</small>Building a service: airtime</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

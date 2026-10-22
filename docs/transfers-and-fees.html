@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5. Transfers and fees · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html" class="current" aria-current="page"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 5 · Moving money</p>
+    <h1 id="transfers-and-fees"><a class="anchor" href="#transfers-and-fees">Transfers and fees</a></h1>
+<p><strong>Scenario:</strong> Ada sends Bola ₦10,000. HumanBlnk charges a 1.5% fee on top. The app shows Ada what will happen before she confirms, and refuses if she can&#39;t afford it.</p>
+<h2 id="step-1-build-the-transfer-as-one-split"><a class="anchor" href="#step-1-build-the-transfer-as-one-split">Step 1: build the transfer as one split</a></h2>
+<p>The payment to Bola and HumanBlnk&#39;s fee are <strong>one</strong> transaction with two postings on the <code>To</code> side. It applies in full or not at all: Bola is never paid without the fee being recorded, or the other way round.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func transfer(id string, from, to ledger.Account, amount money.Money) ledger.Transaction {
+    fee, _ := amount.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
+    total, _ := amount.Add(fee)
+    return ledger.Transaction{
+        Ref:  ledger.Reference(&#34;transfer&#34;, id),
+        From: ledger.Single(ledger.AccountRef(from.ID), total),
+        To: ledger.Many(
+            ledger.Posting{Account: ledger.AccountRef(to.ID), Amount: amount},
+            ledger.Posting{Account: ledger.FeeIncome, Amount: fee},
+        ),
+        Description: &#34;Transfer to Bola&#34;,
+    }
+}</code></pre></figure>
+<p>Both sides must add up to the same amount, or it&#39;s <code>ErrUnbalanced</code>. One side may have several postings, but not both: Blnk moves one account to many, or many to one.</p>
+<h2 id="step-2-the-dry-run"><a class="anchor" href="#step-2-the-dry-run">Step 2: the dry run</a></h2>
+<p><code>Preview</code> checks the transaction exactly as <code>Record</code> would, funds included, but moves nothing and leaves the reference unused:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">p, err := books.Transactions.Preview(ctx, t)
+if err != nil {
+    log.Fatal(err) // the request itself is wrong: bad account, currency, …
+}
+fmt.Println(&#34;would apply:&#34;, p.WouldApply)
+for _, c := range p.Changes {
+    fmt.Printf(&#34;  %s: %s -&gt; %s\n&#34;, c.Account, c.AvailableBefore, c.AvailableAfter)
+}</code></pre></figure>
+<p>When it wouldn&#39;t apply, the reason is in <code>p.Rejection</code> and <code>err</code> is nil. <code>errors.Is(p.Rejection, ledger.ErrInsufficientFunds)</code> works.</p>
+<aside class="note"><p><strong>A preview is not a reservation.</strong> Another payment can spend the money between <code>Preview</code> and <code>Record</code>, and <code>Record</code> checks funds again. To reserve money, use a hold (chapter 6).</p></aside>
+<h2 id="step-3-record-it"><a class="anchor" href="#step-3-record-it">Step 3: record it</a></h2>
+<p>The same transaction, for real:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">e, err := books.Transactions.Record(ctx, t)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf(&#34;recorded %s: %s from Ada, %d postings to\n&#34;, e.ID, e.Amount, len(e.To))
+fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, books, bola.ID))</code></pre></figure>
+<p>If Ada can&#39;t afford it, the dry run says why, and <code>Record</code> refuses with <code>ledger.ErrInsufficientFunds</code>. Nothing moves:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">big := transfer(&#34;tr_big_&#34;+demo.Run, ada, bola, money.MustParse(&#34;100000&#34;, demo.NGN))
+p, _ = books.Transactions.Preview(ctx, big)
+fmt.Println(&#34;too much, would apply:&#34;, p.WouldApply, &#34;| because:&#34;, p.Rejection)
+_, err = books.Transactions.Record(ctx, big)
+fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, ledger.ErrInsufficientFunds))</code></pre></figure>
+<h2 id="step-4-her-history"><a class="anchor" href="#step-4-her-history">Step 4: her history</a></h2>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">out, n, err := books.Transactions.List(ctx, ledger.EntryQuery{From: ledger.AccountRef(ada.ID), Limit: 10})
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Printf(&#34;%d entries out of Ada&#39;s wallet:\n&#34;, n)
+for _, e := range out {
+    fmt.Printf(&#34;  %s  %s  %s\n&#34;, e.Ref, e.Amount, e.Status)
+}</code></pre></figure>
+<p>Newest first. <code>List</code> shows each posting of a split as its own entry (<code>…-1</code>, <code>…-2</code>). Blnk can&#39;t combine &#34;from or to&#34; with other conditions, so a full history is two queries: one with <code>From</code>, one with <code>To</code>. <code>EntryQuery</code> also filters by <code>Status</code>, <code>Since</code> and <code>Until</code>.</p>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/05-transfers</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 5: a transfer between customers with a fee, checked first with a
+// dry run.
+package main
+
+import (
+    &#34;errors&#34;
+    &#34;fmt&#34;
+    &#34;log&#34;
+
+    &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
+    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+    &#34;github.com/shopspring/decimal&#34;
+)
+
+// transfer builds Ada-pays-Bola with HumanBlnk&#39;s 1.5% fee on top, as one split:
+// Bola is never paid without the fee being recorded, or the other way round.
+func transfer(id string, from, to ledger.Account, amount money.Money) ledger.Transaction {
+    fee, _ := amount.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
+    total, _ := amount.Add(fee)
+    return ledger.Transaction{
+        Ref:  ledger.Reference(&#34;transfer&#34;, id),
+        From: ledger.Single(ledger.AccountRef(from.ID), total),
+        To: ledger.Many(
+            ledger.Posting{Account: ledger.AccountRef(to.ID), Amount: amount},
+            ledger.Posting{Account: ledger.FeeIncome, Amount: fee},
+        ),
+        Description: &#34;Transfer to Bola&#34;,
+    }
+}
+
+func main() {
+    ctx, books := demo.Setup()
+    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
+    bola := demo.Customer(ctx, books, &#34;bola&#34;, demo.NGN)
+    demo.Deposit(ctx, books, ada, &#34;50000&#34;)
+
+    t := transfer(&#34;tr_&#34;+demo.Run, ada, bola, money.MustParse(&#34;10000&#34;, demo.NGN))
+
+    // 1. Dry run: what would happen? Nothing moves, and the reference stays free.
+    p, err := books.Transactions.Preview(ctx, t)
+    if err != nil {
+        log.Fatal(err) // the request itself is wrong: bad account, currency, …
+    }
+    fmt.Println(&#34;would apply:&#34;, p.WouldApply)
+    for _, c := range p.Changes {
+        fmt.Printf(&#34;  %s: %s -&gt; %s\n&#34;, c.Account, c.AvailableBefore, c.AvailableAfter)
+    }
+
+    // 2. Do it, with the same transaction.
+    e, err := books.Transactions.Record(ctx, t)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf(&#34;recorded %s: %s from Ada, %d postings to\n&#34;, e.ID, e.Amount, len(e.To))
+    fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, books, bola.ID))
+
+    // 3. Too much: the dry run says why, and Record refuses.
+    big := transfer(&#34;tr_big_&#34;+demo.Run, ada, bola, money.MustParse(&#34;100000&#34;, demo.NGN))
+    p, _ = books.Transactions.Preview(ctx, big)
+    fmt.Println(&#34;too much, would apply:&#34;, p.WouldApply, &#34;| because:&#34;, p.Rejection)
+    _, err = books.Transactions.Record(ctx, big)
+    fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, ledger.ErrInsufficientFunds))
+
+    // 4. Ada&#39;s history: money out of her wallet, newest first. (Money into
+    // it is a second query with To set.)
+    out, n, err := books.Transactions.List(ctx, ledger.EntryQuery{From: ledger.AccountRef(ada.ID), Limit: 10})
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Printf(&#34;%d entries out of Ada&#39;s wallet:\n&#34;, n)
+    for _, e := range out {
+        fmt.Printf(&#34;  %s  %s  %s\n&#34;, e.Ref, e.Amount, e.Status)
+    }
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">would apply: true
+  bln_c0f2245d-b8a2-4535-9c2e-99e592c6fdc6: 50000.00 -&gt; 39850.00
+  bln_12f40edb-c3c1-4013-aa06-466454836f78: 0.00 -&gt; 10000.00
+  bln_f308c9b3-5ad0-444a-a8e9-3a0ccc80c2fe: 300.00 -&gt; 450.00
+recorded txn_b2806c40-671a-422a-9d0d-2cea4c5e77b5: 10150.00 from Ada, 2 postings to
+Ada: 39850.00 NGN | Bola: 10000.00 NGN
+too much, would apply: false | because: ledger: insufficient funds: failed to apply transaction to balances: insufficient funds in source balance
+recording it anyway: insufficient funds? true
+2 entries out of Ada&#39;s wallet:
+  transfer:tr_1792634714614537000-1  10000.00  APPLIED
+  transfer:tr_1792634714614537000-2  150.00  APPLIED</code></pre></figure>
+</div>
+</div>
+<h2 id="good-to-know"><a class="anchor" href="#good-to-know">Good to know</a></h2>
+<ul>
+<li><strong>A split that fails partway.</strong> Blnk records a split one posting at a time. If a later posting fails, the earlier ones have already moved, and Blnk refunds them from its background worker a moment later (about 200 ms). Until then they show in the accounts. <code>Record</code> still returns the error. Keep Blnk&#39;s worker running and monitored.</li>
+<li><strong>Retrying that split</strong> with the same <code>Ref</code> returns <code>ErrReferenceUsed</code>, not <code>ErrDuplicate</code>: nothing stands under that reference, so record it again under a new one (chapter 12).</li>
+</ul>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="deposits.html"><small>Previous</small>Deposits</a>
+    <a class="next" href="payouts-and-holds.html"><small>Next</small>Payouts and holds</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

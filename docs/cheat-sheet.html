@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>13. Cheat sheet · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html" class="current" aria-current="page"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 13 · Running it</p>
+    <h1 id="cheat-sheet"><a class="anchor" href="#cheat-sheet">Cheat sheet</a></h1>
+<p>Everything on one page. Import <code>github.com/otyang/humanblnk/ledger</code>; every type below is <code>ledger.X</code>. Build one <code>*ledger.Ledger</code> at start-up with <code>ledger.New(client, ledger.WithAccountLedger(id), ledger.WithCustomerLedgers(ids...))</code> (chapter 1).</p>
+<h2 id="services"><a class="anchor" href="#services">Services</a></h2>
+<div class="table"><table>
+<thead><tr><th>Service</th><th>Methods</th></tr></thead><tbody>
+<tr><td><code>books.Identities</code></td><td><code>Create(ctx, meta) (string, error)</code>, <code>Get(ctx, id)</code>, <code>UpdateMeta(ctx, id, meta)</code>, <code>FindByCustomer(ctx, customerID)</code></td></tr>
+<tr><td><code>books.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, AccountQuery)</code></td></tr>
+<tr><td><code>books.Transactions</code></td><td><code>Record(ctx, Transaction)</code>, <code>RecordAll(ctx, []Transaction)</code>, <code>Preview(ctx, Transaction)</code>, <code>Reverse(ctx, Reversal)</code>, <code>Get(ctx, id)</code>, <code>GetByReference(ctx, ref)</code>, <code>List(ctx, EntryQuery)</code></td></tr>
+<tr><td><code>books.Holds</code></td><td><code>Place(ctx, Transaction, expires) (HoldID, error)</code>, <code>Capture(ctx, HoldID, amount)</code>, <code>Cancel(ctx, HoldID)</code></td></tr>
+<tr><td><code>books.Watches</code></td><td><code>Create(ctx, Watch)</code>, <code>Get(ctx, WatchID)</code>, <code>List(ctx, account)</code>, <code>Change(ctx, WatchID, Watch)</code>, <code>Delete(ctx, WatchID)</code></td></tr>
+<tr><td><code>books.Reconciliation</code></td><td><code>AddRule</code>, <code>ChangeRule</code>, <code>RemoveRule</code>, <code>Upload(ctx, source, filename, r)</code>, <code>Run(ctx, StatementID, Run)</code>, <code>RunLines(ctx, []StatementLine, Run)</code>, <code>Result(ctx, RunID)</code></td></tr>
+<tr><td><code>books.Books</code></td><td><code>Create(ctx, name, meta)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, limit, offset)</code>, <code>Rename(ctx, id, name)</code></td></tr>
+<tr><td>package function</td><td><code>ledger.VerifyWebhook(secret, r, tolerance) (Event, error)</code></td></tr>
+</tbody></table></div>
+<h2 id="naming-accounts"><a class="anchor" href="#naming-accounts">Naming accounts</a></h2>
+<div class="table"><table>
+<thead><tr><th>Helper</th><th>Gives</th><th>For</th></tr></thead><tbody>
+<tr><td><code>ledger.AccountRef(&#34;bln_…&#34;)</code></td><td>that account</td><td>a customer or internal account, by id</td></tr>
+<tr><td><code>ledger.World</code></td><td><code>@World</code></td><td>outside HumanBlnk: deposits come from it, payouts go to it</td></tr>
+<tr><td><code>ledger.FeeIncome</code></td><td><code>@FeeIncome</code></td><td>fees HumanBlnk earned</td></tr>
+<tr><td><code>ledger.Adjustments</code></td><td><code>@Adjustments</code></td><td>staff corrections</td></tr>
+<tr><td><code>ledger.ClearingAccount(&#34;paystack&#34;)</code></td><td><code>@PaystackClearing</code></td><td>money a provider owes HumanBlnk, or HumanBlnk owes it</td></tr>
+<tr><td><code>ledger.SystemAccount(&#34;FXDesk&#34;)</code></td><td><code>@FXDesk</code></td><td>any other system account; keep it in a variable</td></tr>
+</tbody></table></div>
+<h2 id="building-requests"><a class="anchor" href="#building-requests">Building requests</a></h2>
+<div class="table"><table>
+<thead><tr><th>Helper or type</th><th></th></tr></thead><tbody>
+<tr><td><code>ledger.Reference(&#34;payout&#34;, &#34;po_123&#34;)</code></td><td><code>&#34;payout:po_123&#34;</code>: build it from your own ids</td></tr>
+<tr><td><code>ledger.Single(account, amount)</code></td><td>one posting</td></tr>
+<tr><td><code>ledger.Many(ledger.Posting{…}, …)</code></td><td>several postings, for one side of a split</td></tr>
+<tr><td><code>Transaction</code></td><td><code>Ref</code>, <code>From</code>, <code>To</code>, <code>Description</code>, <code>Meta</code></td></tr>
+<tr><td><code>Reversal</code></td><td><code>Ref</code>, <code>Entry</code>, <code>Amount</code>, <code>Reason</code></td></tr>
+<tr><td><code>CustomerAccount</code></td><td><code>Owner</code>, <code>Currency</code>, <code>Ledger</code></td></tr>
+<tr><td><code>NewAccount</code></td><td><code>Ledger</code>, <code>Owner</code>, <code>Currency</code>, <code>Meta</code></td></tr>
+<tr><td><code>Watch</code></td><td><code>Account</code>, <code>Field</code>, <code>Op</code>, <code>Threshold</code>, <code>Description</code></td></tr>
+</tbody></table></div>
+<h2 id="what-comes-back"><a class="anchor" href="#what-comes-back">What comes back</a></h2>
+<div class="table"><table>
+<thead><tr><th>Type</th><th>Fields</th></tr></thead><tbody>
+<tr><td><code>Account</code></td><td><code>ID</code>, <code>Ledger</code>, <code>Owner</code>, <code>Currency</code>, <code>Total</code>, <code>Held</code>, <code>Available</code>, <code>Meta</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>Entry</code></td><td><code>ID</code>, <code>Ref</code>, <code>Status</code>, <code>Amount</code>, <code>From</code>, <code>To</code>, <code>Description</code>, <code>Meta</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>Preview</code></td><td><code>WouldApply</code>, <code>Rejection</code>, <code>Changes []AccountChange</code>, <code>Notes</code></td></tr>
+<tr><td><code>Identity</code></td><td><code>ID</code>, <code>Meta</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>Event</code></td><td><code>Kind</code>, <code>Entry</code>, <code>Watch</code>, <code>Account</code>, <code>Data</code></td></tr>
+</tbody></table></div>
+<p>Entry statuses: <code>StatusApplied</code> (money moved), <code>StatusHeld</code> (a hold), <code>StatusVoid</code> (a released hold), <code>StatusRejected</code> (refused or rolled back), <code>StatusQueued</code>.</p>
+<h2 id="ids"><a class="anchor" href="#ids">Ids</a></h2>
+<p><code>HoldID</code>, <code>WatchID</code>, <code>StatementID</code>, <code>RuleID</code> and <code>RunID</code> are strings; convert an id you stored, as in <code>ledger.HoldID(s)</code>. Owner (<code>idt_…</code>) and ledger (<code>ldg_…</code>) ids are plain strings.</p>
+<h2 id="money"><a class="anchor" href="#money">Money</a></h2>
+<div class="table"><table>
+<thead><tr><th>Call</th><th></th></tr></thead><tbody>
+<tr><td><code>currency.Get(code)</code>, <code>currency.Lookup(code)</code>, <code>currency.MustGet(code)</code></td><td>a currency: typed, stored, constant</td></tr>
+<tr><td><code>money.Parse(s, c)</code></td><td>an exact amount</td></tr>
+<tr><td><code>m.Add</code>, <code>m.Sub</code>, <code>m.Cmp</code>, <code>m.Equal</code></td><td>one currency only</td></tr>
+<tr><td><code>m.Percent(p, mode)</code>, <code>money.Round(d, c, mode)</code></td><td>with <code>money.Up</code>, <code>money.Down</code> or <code>money.HalfEven</code></td></tr>
+<tr><td><code>m.Minor()</code>, <code>money.FromMinor(n, c)</code></td><td>to and from the smallest unit</td></tr>
+</tbody></table></div>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="errors-and-retries.html"><small>Previous</small>Errors and retries</a>
+    
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

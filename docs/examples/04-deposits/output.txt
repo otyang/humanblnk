@@ -1,0 +1,7 @@
+recorded txn_c88c0658-90d6-4261-8cf0-da809dff0f7b 25000.00 APPLIED
+Ada can spend: 25000.00 NGN
+retried webhook: already recorded as txn_c88c0658-90d6-4261-8cf0-da809dff0f7b - answer 200 OK and move on
+Ada can still spend: 25000.00 NGN
+same reference, different amount: true
+found by reference: txn_c88c0658-90d6-4261-8cf0-da809dff0f7b 25000.00 ps_1792634713853635000
+settlement recorded

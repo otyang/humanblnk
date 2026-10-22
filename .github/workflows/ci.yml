@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go mod tidy
+        run: go mod tidy -diff
+      - name: currency list is generated
+        run: go generate ./money/currency && git diff --exit-code money/currency/list.go
+      - run: go vet ./...
+      - run: go vet -tags integration ./...
+      - run: go test -race ./...
+
+  integration:
+    runs-on: ubuntu-latest
+    needs: test
+    env:
+      BLNK_URL: http://localhost:5001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: start Blnk
+        run: |
+          docker compose -f deploy/docker-compose.yml up -d
+          for i in $(seq 1 60); do curl -sf "$BLNK_URL/health" && exit 0; sleep 2; done
+          docker compose -f deploy/docker-compose.yml logs
+          exit 1
+      - run: go test -race -tags integration -count=1 ./...
+      - name: logs on failure
+        if: failure()
+        run: docker compose -f deploy/docker-compose.yml logs

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>11. Reconciliation · HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  
+  
+  <ul>
+    <li><a href="index.html">Introduction</a></li>
+    
+  </ul>
+  
+  <p class="section">Foundations</p>
+  <ul>
+    <li><a href="setup.html"><span class="num">1</span>Setting up</a></li>
+    <li><a href="customers-and-accounts.html"><span class="num">2</span>Customers and accounts</a></li>
+    <li><a href="money.html"><span class="num">3</span>Money</a></li>
+    
+  </ul>
+  
+  <p class="section">Moving money</p>
+  <ul>
+    <li><a href="deposits.html"><span class="num">4</span>Deposits</a></li>
+    <li><a href="transfers-and-fees.html"><span class="num">5</span>Transfers and fees</a></li>
+    <li><a href="payouts-and-holds.html"><span class="num">6</span>Payouts and holds</a></li>
+    <li><a href="building-a-service.html"><span class="num">7</span>Building a service: airtime</a></li>
+    <li><a href="refunds-and-reversals.html"><span class="num">8</span>Refunds and reversals</a></li>
+    <li><a href="currency-exchange.html"><span class="num">9</span>Currency exchange</a></li>
+    
+  </ul>
+  
+  <p class="section">Running it</p>
+  <ul>
+    <li><a href="watches-and-webhooks.html"><span class="num">10</span>Watches and webhooks</a></li>
+    <li><a href="reconciliation.html" class="current" aria-current="page"><span class="num">11</span>Reconciliation</a></li>
+    <li><a href="errors-and-retries.html"><span class="num">12</span>Errors and retries</a></li>
+    <li><a href="cheat-sheet.html"><span class="num">13</span>Cheat sheet</a></li>
+    
+  </ul>
+  
+</nav>
+<main>
+  <article>
+    <p class="eyebrow">Chapter 11 · Running it</p>
+    <h1 id="reconciliation"><a class="anchor" href="#reconciliation">Reconciliation</a></h1>
+<p><strong>Scenario:</strong> Paystack&#39;s daily settlement report lists three deposits. HumanBlnk recorded two of them. Reconciliation finds the one that&#39;s missing.</p>
+<h2 id="step-1-say-what-counts-as-a-match"><a class="anchor" href="#step-1-say-what-counts-as-a-match">Step 1: say what counts as a match</a></h2>
+<p>A <strong>rule</strong> is a list of criteria that must all hold. Make it once and reuse it. Matching on reference works because a deposit&#39;s reference was built from Paystack&#39;s own id (chapter 4), and Paystack&#39;s report carries that id.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/11-reconciliation/main.go" target="_blank" rel="noopener">11-reconciliation/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">rule, err := books.Reconciliation.AddRule(ctx, ledger.MatchRule{
+    Name: &#34;paystack: amount and reference &#34; + demo.Run,
+    Criteria: []ledger.Criterion{
+        {Field: ledger.MatchAmount, Op: ledger.MatchEquals},
+        {Field: ledger.MatchReference, Op: ledger.MatchEquals},
+    },
+})
+if err != nil {
+    log.Fatal(err)
+}</code></pre></figure>
+<div class="table"><table>
+<thead><tr><th><code>Criterion</code></th><th></th></tr></thead><tbody>
+<tr><td><code>Field</code></td><td><code>MatchAmount</code>, <code>MatchDate</code>, <code>MatchReference</code>, <code>MatchDescription</code>, <code>MatchCurrency</code></td></tr>
+<tr><td><code>Op</code></td><td><code>MatchEquals</code>, <code>MatchGreaterThan</code>, <code>MatchLessThan</code>, <code>MatchContains</code> (with <code>Pattern</code>)</td></tr>
+<tr><td><code>Drift</code></td><td>how far apart they may be: a fraction of the amount for <code>MatchAmount</code> (<code>0.01</code> is 1%), seconds for <code>MatchDate</code></td></tr>
+</tbody></table></div>
+<h2 id="step-2-run-it-on-the-report"><a class="anchor" href="#step-2-run-it-on-the-report">Step 2: run it on the report</a></h2>
+<p>Up to 10,000 lines can be sent directly with <code>RunLines</code>:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/11-reconciliation/main.go" target="_blank" rel="noopener">11-reconciliation/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">report := []ledger.StatementLine{
+    {ID: &#34;stl_1_&#34; + demo.Run, Amount: money.MustParse(&#34;10000&#34;, demo.NGN), Reference: refs[0], Date: time.Now(), Source: &#34;paystack&#34;},
+    {ID: &#34;stl_2_&#34; + demo.Run, Amount: money.MustParse(&#34;2500&#34;, demo.NGN), Reference: refs[1], Date: time.Now(), Source: &#34;paystack&#34;},
+    {ID: &#34;stl_3_&#34; + demo.Run, Amount: money.MustParse(&#34;7000&#34;, demo.NGN), Reference: &#34;deposit:paystack:ps_missing_&#34; + demo.Run, Date: time.Now(), Source: &#34;paystack&#34;},
+}
+run, err := books.Reconciliation.RunLines(ctx, report, ledger.Run{Rules: []ledger.RuleID{rule.ID}})
+if err != nil {
+    log.Fatal(err)
+}</code></pre></figure>
+<p>A line&#39;s <code>ID</code> is the provider&#39;s id, and it must be <strong>unique across every statement</strong>: Blnk refuses a line whose id it has stored before.</p>
+<p><code>Run</code> options: <code>Strategy</code> (<code>OneToOne</code> by default, <code>OneToMany</code> or <code>ManyToOne</code>, with <code>GroupBy</code> to group, such as <code>&#34;reference&#34;</code>) and <code>DryRun</code> (match without recording the results).</p>
+<h2 id="step-3-wait-for-the-result"><a class="anchor" href="#step-3-wait-for-the-result">Step 3: wait for the result</a></h2>
+<p>It runs in the background, so poll:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/11-reconciliation/main.go" target="_blank" rel="noopener">11-reconciliation/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">var res ledger.RunResult
+for range 50 {
+    if res, err = books.Reconciliation.Result(ctx, run); err == nil &amp;&amp; (res.Status == &#34;completed&#34; || res.Status == &#34;failed&#34;) {
+        break
+    }
+    time.Sleep(200 * time.Millisecond)
+}
+fmt.Printf(&#34;run %s: %s, %d matched, %d unmatched\n&#34;, res.ID, res.Status, res.Matched, res.Unmatched)</code></pre></figure>
+<h2 id="a-report-as-a-file"><a class="anchor" href="#a-report-as-a-file">A report as a file</a></h2>
+<p>Bigger reports are uploaded: CSV or JSON with the columns <code>id</code>, <code>amount</code>, <code>currency</code>, <code>reference</code>, <code>description</code> and <code>date</code> (RFC 3339), with amounts in major units (<code>10000</code>, not kobo). Then run it with <code>Reconciliation.Run(ctx, statement, ledger.Run{…})</code>.</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/11-reconciliation/main.go" target="_blank" rel="noopener">11-reconciliation/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">csv := &#34;id,amount,currency,reference,description,date\n&#34; +
+    &#34;stl_file_1_&#34; + demo.Run + &#34;,10000,NGN,&#34; + refs[0] + &#34;,Bank transfer,&#34; + time.Now().UTC().Format(time.RFC3339) + &#34;\n&#34;
+statement, lines, err := books.Reconciliation.Upload(ctx, &#34;paystack&#34;, &#34;settlement.csv&#34;, strings.NewReader(csv))
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(&#34;uploaded&#34;, statement, &#34;with&#34;, lines, &#34;line(s); run it with Reconciliation.Run&#34;)</code></pre></figure>
+<h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
+<div class="example">
+<div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/11-reconciliation</code></span></div>
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/11-reconciliation/main.go" target="_blank" rel="noopener">11-reconciliation/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 11: check a provider&#39;s settlement report against the ledger.
+package main
+
+import (
+    &#34;fmt&#34;
+    &#34;log&#34;
+    &#34;strings&#34;
+    &#34;time&#34;
+
+    &#34;github.com/otyang/humanblnk/docs/examples/demo&#34;
+    &#34;github.com/otyang/humanblnk/ledger&#34;
+    &#34;github.com/otyang/humanblnk/money&#34;
+)
+
+func main() {
+    ctx, books := demo.Setup()
+    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
+
+    // Two deposits HumanBlnk recorded from Paystack webhooks.
+    refs := []string{ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, &#34;ps_a_&#34;+demo.Run), ledger.Reference(&#34;deposit&#34;, &#34;paystack&#34;, &#34;ps_b_&#34;+demo.Run)}
+    for i, amount := range []string{&#34;10000&#34;, &#34;2500&#34;} {
+        m := money.MustParse(amount, demo.NGN)
+        if _, err := books.Transactions.Record(ctx, ledger.Transaction{
+            Ref: refs[i], From: ledger.Single(ledger.ClearingAccount(&#34;paystack&#34;), m), To: ledger.Single(ledger.AccountRef(ada.ID), m),
+            Description: &#34;Bank transfer&#34;,
+        }); err != nil {
+            log.Fatal(err)
+        }
+    }
+
+    // 1. What counts as a match. Make the rule once and reuse it.
+    rule, err := books.Reconciliation.AddRule(ctx, ledger.MatchRule{
+        Name: &#34;paystack: amount and reference &#34; + demo.Run,
+        Criteria: []ledger.Criterion{
+            {Field: ledger.MatchAmount, Op: ledger.MatchEquals},
+            {Field: ledger.MatchReference, Op: ledger.MatchEquals},
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // 2. Paystack&#39;s report: the two deposits, and one HumanBlnk never recorded.
+    // Line ids are the provider&#39;s, and must be unique across every statement.
+    report := []ledger.StatementLine{
+        {ID: &#34;stl_1_&#34; + demo.Run, Amount: money.MustParse(&#34;10000&#34;, demo.NGN), Reference: refs[0], Date: time.Now(), Source: &#34;paystack&#34;},
+        {ID: &#34;stl_2_&#34; + demo.Run, Amount: money.MustParse(&#34;2500&#34;, demo.NGN), Reference: refs[1], Date: time.Now(), Source: &#34;paystack&#34;},
+        {ID: &#34;stl_3_&#34; + demo.Run, Amount: money.MustParse(&#34;7000&#34;, demo.NGN), Reference: &#34;deposit:paystack:ps_missing_&#34; + demo.Run, Date: time.Now(), Source: &#34;paystack&#34;},
+    }
+    run, err := books.Reconciliation.RunLines(ctx, report, ledger.Run{Rules: []ledger.RuleID{rule.ID}})
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // 3. It runs in the background: poll for the result.
+    var res ledger.RunResult
+    for range 50 {
+        if res, err = books.Reconciliation.Result(ctx, run); err == nil &amp;&amp; (res.Status == &#34;completed&#34; || res.Status == &#34;failed&#34;) {
+            break
+        }
+        time.Sleep(200 * time.Millisecond)
+    }
+    fmt.Printf(&#34;run %s: %s, %d matched, %d unmatched\n&#34;, res.ID, res.Status, res.Matched, res.Unmatched)
+
+    // A bigger report comes as a file: CSV or JSON with the columns id,
+    // amount, currency, reference, description and date, in major units.
+    csv := &#34;id,amount,currency,reference,description,date\n&#34; +
+        &#34;stl_file_1_&#34; + demo.Run + &#34;,10000,NGN,&#34; + refs[0] + &#34;,Bank transfer,&#34; + time.Now().UTC().Format(time.RFC3339) + &#34;\n&#34;
+    statement, lines, err := books.Reconciliation.Upload(ctx, &#34;paystack&#34;, &#34;settlement.csv&#34;, strings.NewReader(csv))
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(&#34;uploaded&#34;, statement, &#34;with&#34;, lines, &#34;line(s); run it with Reconciliation.Run&#34;)
+
+    if err := books.Reconciliation.RemoveRule(ctx, rule.ID); err != nil {
+        log.Fatal(err)
+    }
+}</code></pre></figure>
+</div>
+<div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">run recon_2e85f238-4c98-4f25-aaf6-265171041e5e: completed, 2 matched, 1 unmatched
+uploaded upload_3ef38722-b295-4925-a289-f69b8b91c293 with 1 line(s); run it with Reconciliation.Run</code></pre></figure>
+</div>
+</div>
+<h2 id="what-it-doesn-t-do-yet"><a class="anchor" href="#what-it-doesn-t-do-yet">What it doesn&#39;t do (yet)</a></h2>
+<ul>
+<li><strong>It doesn&#39;t list which lines didn&#39;t match.</strong> Blnk 0.15.6 reports counts only. To find the missing ones, check each line yourself with <code>Transactions.GetByReference</code>.</li>
+<li><strong>It doesn&#39;t fetch reports.</strong> Something has to download them and call <code>Upload</code> or <code>RunLines</code>, on a schedule you choose.</li>
+<li><strong>It doesn&#39;t check balances.</strong> To confirm the clearing account matches what Paystack owes, read it with <code>Accounts.Get</code> and compare it with the provider&#39;s total. <code>Get</code> takes a balance id, not <code>@PaystackClearing</code>: take it from any deposit entry&#39;s <code>From</code> posting, which names the clearing account by its balance id.</li>
+</ul>
+
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    <a class="prev" href="watches-and-webhooks.html"><small>Previous</small>Watches and webhooks</a>
+    <a class="next" href="errors-and-retries.html"><small>Next</small>Errors and retries</a>
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

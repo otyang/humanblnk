@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{if .Number}}{{.Number}}. {{.Chapter.Title}} · {{end}}HumanBlnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="topbar">
+  <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+</header>
+<div class="shell">
+<nav class="sidebar" aria-label="Chapters">
+  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  {{range .Nav}}
+  {{if .Name}}<p class="section">{{.Name}}</p>{{end}}
+  <ul>
+    {{range .Items}}<li><a href="{{.Slug}}.html"{{if .Current}} class="current" aria-current="page"{{end}}>{{if .Number}}<span class="num">{{.Number}}</span>{{end}}{{.Title}}</a></li>
+    {{end}}
+  </ul>
+  {{end}}
+</nav>
+<main>
+  <article>
+    {{if .Number}}<p class="eyebrow">Chapter {{.Number}} · {{.Chapter.Section}}</p>{{end}}
+    {{.Body}}
+  </article>
+  <nav class="pager" aria-label="Previous and next">
+    {{with .Prev}}<a class="prev" href="{{.Slug}}.html"><small>Previous</small>{{.Title}}</a>{{else}}<span></span>{{end}}
+    {{with .Next}}<a class="next" href="{{.Slug}}.html"><small>Next</small>{{.Title}}</a>{{end}}
+  </nav>
+  <footer>Generated from <code>docs/site</code> and the Go examples in <code>docs/examples</code>. MIT licensed.</footer>
+</main>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

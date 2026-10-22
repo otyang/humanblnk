@@ -1,0 +1,8 @@
+Put these in your config:
+  WALLETS_LEDGER = ldg_734efdc3-6fd7-4f13-aeb9-13bdd4db3785
+  SAVINGS_LEDGER = ldg_1c6053d0-0f6c-402f-8f3f-f4950905ebe6
+  OPS_LEDGER     = ldg_6aca4cc7-296c-417b-8f64-1352e7e35c31
+Newest ledgers:
+  ldg_6aca4cc7-296c-417b-8f64-1352e7e35c31  Operations 030511
+  ldg_1c6053d0-0f6c-402f-8f3f-f4950905ebe6  Savings 030511
+  ldg_734efdc3-6fd7-4f13-aeb9-13bdd4db3785  Customer Wallets 030511

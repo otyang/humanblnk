@@ -1,0 +1,11 @@
+would apply: true
+  bln_c0f2245d-b8a2-4535-9c2e-99e592c6fdc6: 50000.00 -> 39850.00
+  bln_12f40edb-c3c1-4013-aa06-466454836f78: 0.00 -> 10000.00
+  bln_f308c9b3-5ad0-444a-a8e9-3a0ccc80c2fe: 300.00 -> 450.00
+recorded txn_b2806c40-671a-422a-9d0d-2cea4c5e77b5: 10150.00 from Ada, 2 postings to
+Ada: 39850.00 NGN | Bola: 10000.00 NGN
+too much, would apply: false | because: ledger: insufficient funds: failed to apply transaction to balances: insufficient funds in source balance
+recording it anyway: insufficient funds? true
+2 entries out of Ada's wallet:
+  transfer:tr_1792634714614537000-1  10000.00  APPLIED
+  transfer:tr_1792634714614537000-2  150.00  APPLIED

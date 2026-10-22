@@ -1,0 +1,103 @@
+// Chapter 2: onboard a customer, open their accounts and read balances.
+package main
+
+import (
+	"errors"
+	"fmt"
+	"log"
+
+	"github.com/otyang/humanblnk/docs/examples/demo"
+	"github.com/otyang/humanblnk/ledger"
+)
+
+func main() {
+	ctx, books := demo.Setup()
+	customerID := "cus_ada_" + demo.Run // your own customer id, from your database
+
+	// 1. The owner: find it, or create it the first time.
+	// snippet:owner
+	owner := ""
+	found, err := books.Identities.FindByCustomer(ctx, customerID)
+	switch {
+	case errors.Is(err, ledger.ErrNotFound):
+		owner, err = books.Identities.Create(ctx, ledger.Meta{"customer_id": customerID})
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println("created owner", owner)
+	case err != nil:
+		log.Fatal(err)
+	default:
+		owner = found.ID
+	}
+	// Save owner on your customer record now, before opening accounts.
+	// end-snippet
+
+	// 2. Her naira wallet. Opening it again returns the same account.
+	// snippet:open
+	ngn, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+	if err != nil {
+		log.Fatal(err)
+	}
+	again, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.NGN})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("NGN wallet", ngn.ID, "| opened again:", again.ID, "| same:", ngn.ID == again.ID)
+
+	// 3. A dollar wallet is a second account.
+	usd, err := books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Owner: owner, Currency: demo.USD})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("USD wallet", usd.ID)
+	// end-snippet
+
+	// 4. All her accounts, and one balance.
+	// snippet:balances
+	accounts, total, err := books.Accounts.List(ctx, ledger.AccountQuery{Owner: owner})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%d accounts:\n", total)
+	for _, a := range accounts {
+		fmt.Printf("  %s  %s  available %s\n", a.ID, a.Currency.Code(), a.Available)
+	}
+	acct, err := books.Accounts.Get(ctx, ngn.ID)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("Get %s: Total %s, Held %s, Available %s\n", acct.ID, acct.Total, acct.Held, acct.Available)
+	// end-snippet
+
+	// 5. Tag the owner later; keys you don't send keep their values.
+	// snippet:meta
+	meta, err := books.Identities.UpdateMeta(ctx, owner, ledger.Meta{"tier": "gold"})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("owner meta:", meta)
+	// end-snippet
+
+	// 6. An account for HumanBlnk itself, not a customer: CreateInternal, in a
+	// ledger that isn't a customer one.
+	// snippet:internal
+	ops, err := books.Books.Create(ctx, "Operations "+demo.Run, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	pool, err := books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: ops.ID, Currency: demo.NGN, Meta: ledger.Meta{"purpose": "escrow"}})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("escrow pool", pool.ID)
+	// end-snippet
+
+	// The rules hold both ways.
+	// snippet:rules
+	_, err = books.Accounts.OpenForCustomer(ctx, ledger.CustomerAccount{Currency: demo.NGN})
+	fmt.Println("customer account without an owner:", err)
+	_, err = books.Accounts.CreateInternal(ctx, ledger.NewAccount{Ledger: acct.Ledger, Currency: demo.NGN})
+	fmt.Println("internal account in the wallets ledger:", err)
+	// end-snippet
+}

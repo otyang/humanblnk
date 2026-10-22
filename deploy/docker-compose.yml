@@ -1,0 +1,51 @@
+# Local Blnk Core 0.15.6, for development and the integration tests:
+#
+#   docker compose -f deploy/docker-compose.yml up -d
+#   BLNK_URL=http://localhost:5001 go test -tags integration ./...
+name: humanblnk
+
+services:
+  blnk:
+    image: jerryenebeli/blnk:0.15.6
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["blnk migrate up && blnk start"]
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./blnk.json:/blnk.json:ro
+    depends_on:
+      blnk-postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: on-failure
+
+  blnk-worker:
+    image: jerryenebeli/blnk:0.15.6
+    entrypoint: ["blnk", "workers"]
+    volumes:
+      - ./blnk.json:/blnk.json:ro
+    depends_on:
+      blnk:
+        condition: service_started
+    restart: on-failure
+
+  blnk-postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: blnk
+      POSTGRES_PASSWORD: blnk
+      POSTGRES_DB: blnk
+    volumes:
+      - blnk_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "blnk"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.2.4
+
+volumes:
+  blnk_pg:

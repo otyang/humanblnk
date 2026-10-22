@@ -1,0 +1,69 @@
+# Errors and retries
+
+Every error the ledger returns is one of its own, wrapping Blnk's for your
+logs. Always compare with `errors.Is`, never on the message.
+
+## What each error means
+
+| Error | Means | What to do |
+| --- | --- | --- |
+| `ledger.ErrInsufficientFunds` | the source account can't cover it | tell the customer; nothing moved |
+| `ledger.ErrDuplicate` | this exact write already happened, applied | treat as **success**; the existing entry comes back with it |
+| `ledger.ErrReferenceUsed` | the reference holds something that didn't apply: a different transaction, or this one rolled back | nothing moved under it; record again under a **new** reference, or investigate if you didn't expect it |
+| `ledger.ErrNotFound` | no such account, entry or hold | check the id |
+| `ledger.ErrUnbalanced` | `From` and `To` don't add up to the same amount | fix the postings |
+| `ledger.ErrAlreadyReversed` | nothing (or not that much) is left to reverse | nothing to do; pass a `Ref` to get your own reversal back on a retry |
+| `ledger.ErrHoldSettled` | the hold was already captured, cancelled or expired | look at what happened before acting again |
+| `ledger.ErrInvalid` | refused before reaching Blnk: missing reference, negative amount, wrong ledger, … | a bug in the caller; don't retry |
+| `ledger.ErrReadBack` | `RecordAll` **applied**, but reading the entries back failed | don't record it again; look the entries up by reference |
+| `money.ErrCurrencyMismatch` | an amount's currency doesn't match the account's | a bug in the caller |
+| `money.ErrUnknownCurrency` | a `Money` that was never set, or an unknown code | a bug in the caller |
+
+Any other error, such as a network failure, means **the outcome is
+unknown**. Retry with the same arguments; the table below says which calls
+are safe to repeat.
+
+## What is safe to repeat
+
+| Call | Safe to repeat? | Because |
+| --- | --- | --- |
+| `Transactions.Record`, `RecordAll` | yes, with the same `Ref` | a used reference is checked: `ErrDuplicate` if it happened |
+| `Transactions.Reverse` | yes, with the same `Ref` | returns the reversal already made |
+| `Holds.Place` | yes, with the same transaction | returns the same hold |
+| `Holds.Capture` (full) | yes | finds the earlier capture |
+| `Holds.Capture` (partial) | **wait a few seconds first** | Blnk can't tell a repeated partial capture still being processed from a new one |
+| `Holds.Cancel` | yes | |
+| `Accounts.OpenForCustomer` | yes | one account per owner, ledger and currency |
+| `Identities.Create` | **no** | use `FindByCustomer` first |
+| `Accounts.CreateInternal`, `Books.Create` | **no** | look with `List` first |
+| `Watches.Create` | **no** | look with `List` first |
+| every read (`Get`, `List`, `GetByReference`, `Preview`) | yes | |
+
+## References, in one rule
+
+Build every reference from **your own ids**, with `ledger.Reference`:
+
+| Call | Reference |
+| --- | --- |
+| `ledger.Reference("deposit", "paystack", paystackRef)` | `deposit:paystack:ps_123` |
+| `ledger.Reference("transfer", transferID)` | `transfer:tr_42` |
+| `ledger.Reference("payout", payoutID)` | `payout:po_7` |
+
+Never use a random value or a timestamp: a retry must produce the same
+reference, so Blnk can refuse to apply it twice.
+
+## When a split or batch fails partway
+
+Blnk records a split (and a `RecordAll` batch) one part at a time. If a later
+part fails:
+
+1. You get the error (say `ErrInsufficientFunds`), but the earlier parts have
+   already moved.
+2. Blnk refunds them from its background worker a moment later (about
+   200 ms). Until then they show in the accounts.
+3. The references stay used. Recording again with the same `Ref` returns
+   `ErrReferenceUsed`; use a new one.
+
+`Get` and `GetByReference` show such an entry as `StatusRejected`, even
+before the refund lands. Keep Blnk's worker running and monitored: if it's
+down, the earlier parts stay moved until it restarts.
