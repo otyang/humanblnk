@@ -1,4 +1,4 @@
-// Package core is what every ledger service shares and no caller sees: the
+// Package core is what every service shares and no caller sees: the
 // Blnk client, the currency check, conversion to and from Blnk's units, and
 // error mapping. It is the one place amounts cross into Blnk.
 package core

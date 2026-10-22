@@ -27,7 +27,7 @@ func TestNewWiresTheServices(t *testing.T) {
 	}
 
 	// Transactions sees the currency Accounts cached: no lookup, and the
-	// mismatch surfaces as money's error through the ledger.
+	// mismatch surfaces as money's error through humanblnk.
 	_, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref: "r", From: humanblnk.Single(humanblnk.World, money.MustParse("1", blnkfake.NGN)),
 		To: humanblnk.Single("bln_new", money.MustParse("1", blnkfake.NGN)), Description: "d",

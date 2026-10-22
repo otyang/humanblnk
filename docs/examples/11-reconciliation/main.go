@@ -1,4 +1,4 @@
-// Chapter 11: check a provider's settlement report against the ledger.
+// Chapter 11: check a provider's settlement report against the books.
 package main
 
 import (

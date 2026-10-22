@@ -10,8 +10,8 @@ below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 | Service | Methods |
 | --- | --- |
 | `hb.Identities` | `Create(ctx, meta) (string, error)`, `Get(ctx, id)`, `UpdateMeta(ctx, id, meta)`, `FindByCustomer(ctx, customerID)` |
-| `hb.Accounts` | `OpenForCustomer(ctx, CustomerAccount)`, `CreateInternal(ctx, NewAccount)`, `Get(ctx, id)`, `List(ctx, AccountQuery)` |
-| `hb.Transactions` | `Record(ctx, Transaction)`, `RecordAll(ctx, []Transaction)`, `Preview(ctx, Transaction)`, `Reverse(ctx, Reversal)`, `Get(ctx, id)`, `GetByReference(ctx, ref)`, `List(ctx, EntryQuery)` |
+| `hb.Accounts` | `OpenForCustomer(ctx, CustomerAccount)`, `CreateInternal(ctx, NewAccount)`, `Get(ctx, id)`, `List(ctx, AccountQuery) ([]Account, total, error)` |
+| `hb.Transactions` | `Record(ctx, Transaction)`, `RecordAll(ctx, []Transaction)`, `Preview(ctx, Transaction)`, `Reverse(ctx, Reversal)`, `Get(ctx, id)`, `GetByReference(ctx, ref)`, `List(ctx, EntryQuery) ([]Entry, total, error)` |
 | `hb.Holds` | `Place(ctx, Transaction, expires) (HoldID, error)`, `Capture(ctx, HoldID, amount)`, `Cancel(ctx, HoldID)` |
 | `hb.Watches` | `Create(ctx, Watch)`, `Get(ctx, WatchID)`, `List(ctx, account)`, `Change(ctx, WatchID, Watch)`, `Delete(ctx, WatchID)` |
 | `hb.Reconciliation` | `AddRule`, `ChangeRule`, `RemoveRule`, `Upload(ctx, source, filename, r)`, `Run(ctx, StatementID, Run)`, `RunLines(ctx, []StatementLine, Run)`, `Result(ctx, RunID)` |
@@ -50,6 +50,10 @@ below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 | `Entry` | `ID`, `Ref`, `Status`, `Amount`, `From`, `To`, `Description`, `Meta`, `CreatedAt` |
 | `Preview` | `WouldApply`, `Rejection`, `Changes []AccountChange`, `Notes` |
 | `Identity` | `ID`, `Meta`, `CreatedAt` |
+| `Ledger` | `ID`, `Name`, `Meta`, `CreatedAt` |
+| `Watch` | what you sent, plus `ID`, `CreatedAt` |
+| `MatchRule` | what you sent, plus `ID`, `CreatedAt` |
+| `RunResult` | `ID`, `Statement`, `Status`, `Matched`, `Unmatched`, `StartedAt`, `CompletedAt` |
 | `Event` | `Kind`, `Entry`, `Watch`, `Account`, `Data` |
 
 Entry statuses: `StatusApplied` (money moved), `StatusHeld` (a hold),

@@ -24,7 +24,7 @@ of a prepaid float is used.
 
 ## Step 1: depend on interfaces
 
-The package names the small part of the ledger it uses, so tests can pass a
+The package names the small part of humanblnk it uses, so tests can pass a
 fake. `hb.Holds` satisfies `Holds`.
 
 {{code 07-airtime/airtime/airtime.go interfaces}}

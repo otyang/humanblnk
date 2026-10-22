@@ -16,7 +16,7 @@ import (
 func TestOpenForCustomerOpensOnceInTheDefaultLedger(t *testing.T) {
 	c, f := blnkfake.New(t)
 	k := core.New(c, "ldg_wallets")
-	s, tx := accounts.New(k), transactions.New(k) // sharing k, as ledger.New does
+	s, tx := accounts.New(k), transactions.New(k) // sharing k, as humanblnk.New does
 	f.On("POST /balances", 201, `{"balance_id":"bln_new","ledger_id":"ldg_wallets","identity_id":"idt_ada","currency":"USD"}`)
 	looks := 0
 	f.OnFunc("POST /balances/filter", func(blnkfake.Call) (int, string) {

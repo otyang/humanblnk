@@ -1,11 +1,11 @@
 # Money
 
 **Scenario:** a price of ₦1,500.50, a 1.5% fee, and the total that goes into
-the ledger and out as JSON.
+HumanBlnk and out as JSON.
 
 `money.Money` is an exact amount in one currency. It is never a float:
 amounts are parsed from the decimal someone wrote and kept exact. Every
-amount you give the ledger is a `money.Money`. This chapter needs no Blnk.
+amount you give HumanBlnk is a `money.Money`. This chapter needs no Blnk.
 
 ## Currencies
 

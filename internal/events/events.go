@@ -1,5 +1,5 @@
 // Package events verifies and decodes Blnk webhooks. Use it through
-// ledger.VerifyWebhook.
+// humanblnk.VerifyWebhook.
 package events
 
 import (

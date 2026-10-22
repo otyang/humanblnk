@@ -1,6 +1,6 @@
 // Package demo is the setup the tutorial's examples share, so each one
 // shows only the part it teaches. Nothing here is needed in a real service:
-// there you build the ledger once at start-up from your config (chapter 1).
+// there you build the Client once at start-up from your config (chapter 1).
 package demo
 
 import (

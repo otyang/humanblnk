@@ -8,7 +8,7 @@ every account and transaction lives in [Blnk Core](https://docs.blnkfinance.com)
 | --- | --- |
 | [`money`](money/README.md) | An exact amount in one currency: parse, add, round, convert to the smallest unit |
 | `humanblnk` (this directory) | HumanBlnk's books: customer accounts, transactions, holds, reversals, watches, reconciliation. Speaks `money.Money` and its own errors |
-| `blnk` | The Blnk Core HTTP client. Only `humanblnk` uses it |
+| `blnk` | The Blnk Core HTTP client. Callers use it only to build the client (`blnk.New`, `blnk.WithAPIKey`); only `humanblnk` calls Blnk through it |
 | `internal/...` | The services behind `humanblnk.Client`; not importable from outside this module |
 
 Business features (airtime, payouts, transfers) go in their own packages and
@@ -16,7 +16,7 @@ import `humanblnk`; `humanblnk` never imports them.
 
 ## Run it locally
 
-You need Go 1.27+ and Docker.
+You need Go 1.27.1+ and Docker.
 
 ```sh
 docker compose -f deploy/docker-compose.yml up -d   # Blnk 0.15.6, its worker, Postgres, Redis
@@ -74,7 +74,8 @@ fmt.Println(acct.Available) // "3000.00": what the customer can spend now
 
 ## Rules worth knowing
 
-- **Every write has a reference** built from your own ids (`humanblnk.Reference`).
+- **Every money movement has a reference** (`Record`, `RecordAll`, `Place`,
+  `Reverse`), built from your own ids (`humanblnk.Reference`).
   Retrying with it can't apply twice: `ErrDuplicate` means it already happened.
   `ErrReferenceUsed` means the reference holds something that didn't apply,
   so record it again under a new one.
@@ -107,9 +108,17 @@ Each service has a type of its own (`IdentityService`, `AccountService`,
 `TransactionService`, `HoldService`, `WatchService`, `ReconciliationService`,
 `LedgerService`), so code that needs only one can take just that.
 
-Plus `humanblnk.VerifyWebhook` for Blnk's webhooks, and the vocabulary:
-`Transaction`, `Posting`, `Single`, `Many`, `Reference`, `World`, `FeeIncome`,
-`Adjustments`, `SystemAccount`, `ClearingAccount`.
+Plus `humanblnk.VerifyWebhook` for Blnk's webhooks, the options `WithAccountLedger`
+and `WithCustomerLedgers`, and the vocabulary, all in [aliases.go](aliases.go):
+
+| Group | Names |
+| --- | --- |
+| Moving money | `Transaction`, `Posting`, `Single`, `Many`, `Reference`, `Entry`, `EntryQuery`, `Reversal`, `Preview`, `AccountChange`, `HoldID`, `Meta` |
+| Accounts | `AccountRef`, `Account`, `NewAccount`, `CustomerAccount`, `AccountQuery`, `Identity`, `Ledger`, `World`, `FeeIncome`, `Adjustments`, `SystemAccount`, `ClearingAccount` |
+| Entry statuses | `StatusApplied`, `StatusHeld`, `StatusVoid`, `StatusRejected`, `StatusQueued` |
+| Watches | `Watch`, `WatchID`, `WatchField`, `WatchOp`, `WatchBalance`, `WatchCredits`, `WatchDebits`, `WatchHeld`, `WatchIncomingHeld`, `WatchHeldNet`, `WatchAbove`, `WatchAtLeast`, `WatchBelow`, `WatchAtMost`, `WatchEquals`, `WatchNotEquals` |
+| Reconciliation | `StatementID`, `StatementLine`, `RuleID`, `MatchRule`, `Criterion`, `MatchField`, `MatchOp`, `Strategy`, `Run`, `RunID`, `RunResult`, `MatchAmount`, `MatchDate`, `MatchReference`, `MatchDescription`, `MatchCurrency`, `MatchEquals`, `MatchGreaterThan`, `MatchLessThan`, `MatchContains`, `OneToOne`, `OneToMany`, `ManyToOne` |
+| Webhooks | `Event` |
 
 ## All the rules
 
@@ -117,17 +126,19 @@ Plus `humanblnk.VerifyWebhook` for Blnk's webhooks, and the vocabulary:
 | --- | --- |
 | Amounts reach Blnk only in their currency's smallest unit, with the currency's own precision | Blnk balances are bare integers; one transaction at another precision would mix units silently |
 | A transaction's currency must match every account it touches | Blnk doesn't check: it would apply USD 10.00 to an NGN account as ₦10.00 |
-| Every write carries a reference, the same on every retry | Blnk refuses a reference twice, so a retry can't apply twice. A refused reference is looked up: `ErrDuplicate` means this write happened; `ErrReferenceUsed` means it holds something that didn't apply (Blnk keeps a rolled-back split's references), so only a new reference will do |
+| Every money movement (`Record`, `RecordAll`, `Place`, `Reverse`) carries a reference, the same on every retry | Blnk refuses a reference twice, so a retry can't apply twice. A refused reference is looked up: `ErrDuplicate` means this write happened; `ErrReferenceUsed` means it holds something that didn't apply (Blnk keeps a rolled-back split's references), so only a new reference will do |
 | Reversals, full or partial, are numbered per entry | They take turns, even concurrently, and never undo more than the entry moved. A reversal takes from where the entry put the money: a customer who spent it can't be pushed below zero |
 | Writes are synchronous (Blnk's `skip_queue`) | Otherwise insufficient funds would surface later as a `REJECTED` status, not as an error |
 | Only system accounts (`@World`, clearing accounts) may go below zero | They do by design; a customer account never may |
-| `Place`, `Capture` and `Cancel` are safe to repeat with the same arguments; wait a few seconds before repeating a timed-out partial `Capture` | Blnk's commit takes no reference, so `Capture` looks for an earlier capture first; a partial one still running in Blnk isn't visible yet |
+| `Place`, `Capture` and `Cancel` are safe to repeat with the same arguments; wait a few seconds before repeating a timed-out partial `Capture` | Blnk's commit takes no reference, so `Capture` checks for an earlier capture: first for a single posting, and after Blnk answers "already committed" or doesn't answer for a split. A partial one still running in Blnk isn't visible yet |
 | `Cancel` only releases holds; `Transactions.Reverse` is the only way to undo money that moved | Corrections stay in the books as entries of their own |
 | Partial reversals can't add up to more than the entry, even concurrently | Each claims a numbered reference; Blnk's unique index makes them take turns |
 
 Errors: `ErrInsufficientFunds`, `ErrDuplicate`, `ErrReferenceUsed`, `ErrNotFound`, `ErrUnbalanced`,
 `ErrAlreadyReversed`, `ErrHoldSettled`, `ErrInvalid`, `ErrReadBack`, and
-`money.ErrCurrencyMismatch`. Each wraps Blnk's error, for logs.
+`money.ErrCurrencyMismatch`, `money.ErrUnknownCurrency`. When Blnk refused the
+call, the error also wraps Blnk's, for logs. `VerifyWebhook` returns
+`blnk.ErrBadSignature` or `blnk.ErrStale`.
 
 ## Limits
 
@@ -143,7 +154,8 @@ Errors: `ErrInsufficientFunds`, `ErrDuplicate`, `ErrReferenceUsed`, `ErrNotFound
 | --- | --- |
 | `humanblnk` | `Client`, `New`, and every public name re-exported (`aliases.go`) |
 | `internal/types` | The public types, errors and helpers, defined once |
-| `internal/accounts`, `transactions`, `holds`, `watches`, `reconcile`, `ledger`, `identities`, `events` | One package per service |
+| `internal/accounts`, `transactions`, `holds`, `watches`, `reconcile`, `ledger`, `identities` | One package per service |
+| `internal/events` | Webhook verification and decoding, behind `VerifyWebhook` |
 | `internal/core` | Shared and private: the Blnk client, conversion, the currency check, error mapping |
 
 A new public type goes in `internal/types` and gets an alias in `aliases.go`;
@@ -154,7 +166,7 @@ a new service gets a field on `Client` and a `…Service` alias.
 ```sh
 go test ./...                                           # against a fake Blnk (blnk/blnkfake)
 
-docker compose -f deploy/docker-compose.yml up -d       # Blnk 0.15.6 + Postgres
+docker compose -f deploy/docker-compose.yml up -d       # Blnk 0.15.6, its worker, Postgres, Redis
 BLNK_URL=http://localhost:5001 go test -tags integration .
 ```
 

@@ -56,7 +56,7 @@
   <article>
     <p class="eyebrow">Chapter 12 · Running it</p>
     <h1 id="errors-and-retries"><a class="anchor" href="#errors-and-retries">Errors and retries</a></h1>
-<p>Every error the ledger returns is one of its own, wrapping Blnk&#39;s for your logs. Always compare with <code>errors.Is</code>, never on the message.</p>
+<p>Every error humanblnk returns is one of its own; when Blnk refused the call it also wraps Blnk&#39;s, for your logs. <code>VerifyWebhook</code> returns <code>blnk.ErrBadSignature</code> or <code>blnk.ErrStale</code>. Always compare with <code>errors.Is</code>, never on the message.</p>
 <h2 id="what-each-error-means"><a class="anchor" href="#what-each-error-means">What each error means</a></h2>
 <div class="table"><table>
 <thead><tr><th>Error</th><th>Means</th><th>What to do</th></tr></thead><tbody>
@@ -85,7 +85,9 @@
 <tr><td><code>Accounts.OpenForCustomer</code></td><td>yes</td><td>one account per owner, ledger and currency</td></tr>
 <tr><td><code>Identities.Create</code></td><td><strong>no</strong></td><td>use <code>FindByCustomer</code> first</td></tr>
 <tr><td><code>Accounts.CreateInternal</code>, <code>Ledgers.Create</code></td><td><strong>no</strong></td><td>look with <code>List</code> first</td></tr>
-<tr><td><code>Watches.Create</code></td><td><strong>no</strong></td><td>look with <code>List</code> first</td></tr>
+<tr><td><code>Watches.Create</code>, <code>Watches.Change</code></td><td><strong>no</strong></td><td>look with <code>List</code> first; <code>Change</code> makes a new watch each time</td></tr>
+<tr><td><code>Identities.UpdateMeta</code></td><td>yes</td><td>it merges the keys</td></tr>
+<tr><td><code>Reconciliation.Upload</code>, <code>AddRule</code>, <code>Run</code>, <code>RunLines</code></td><td><strong>no</strong></td><td>each call makes a new statement, rule or run</td></tr>
 <tr><td>every read (<code>Get</code>, <code>List</code>, <code>GetByReference</code>, <code>Preview</code>)</td><td>yes</td><td></td></tr>
 </tbody></table></div>
 <h2 id="references-in-one-rule"><a class="anchor" href="#references-in-one-rule">References, in one rule</a></h2>
@@ -102,9 +104,9 @@
 <ol>
 <li>You get the error (say <code>ErrInsufficientFunds</code>), but the earlier parts have already moved.</li>
 <li>Blnk refunds them from its background worker a moment later (about 200 ms). Until then they show in the accounts.</li>
-<li>The references stay used. Recording again with the same <code>Ref</code> returns <code>ErrReferenceUsed</code>; use a new one.</li>
+<li>The references stay used. Once Blnk&#39;s refund has landed, recording again with the same <code>Ref</code> returns <code>ErrReferenceUsed</code>; use a new one.</li>
 </ol>
-<p><code>Get</code> and <code>GetByReference</code> show such an entry as <code>StatusRejected</code>, even before the refund lands. Keep Blnk&#39;s worker running and monitored: if it&#39;s down, the earlier parts stay moved until it restarts.</p>
+<p><code>Get</code> and <code>GetByReference</code> show a split&#39;s entry as <code>StatusRejected</code>, even before the refund lands. An earlier part of a <code>RecordAll</code> batch shows as <code>StatusRejected</code> only once its refund lands: until then it reads <code>StatusApplied</code>, and retrying the batch returns a lookup error (&#34;looking it up failed&#34;) for the part Blnk never recorded. Wait and retry. Keep Blnk&#39;s worker running and monitored: if it&#39;s down, the earlier parts stay moved until it restarts.</p>
 
   </article>
   <nav class="pager" aria-label="Previous and next">

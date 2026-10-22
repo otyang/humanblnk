@@ -56,8 +56,8 @@
   <article>
     <p class="eyebrow">Chapter 3 · Foundations</p>
     <h1 id="money"><a class="anchor" href="#money">Money</a></h1>
-<p><strong>Scenario:</strong> a price of ₦1,500.50, a 1.5% fee, and the total that goes into the ledger and out as JSON.</p>
-<p><code>money.Money</code> is an exact amount in one currency. It is never a float: amounts are parsed from the decimal someone wrote and kept exact. Every amount you give the ledger is a <code>money.Money</code>. This chapter needs no Blnk.</p>
+<p><strong>Scenario:</strong> a price of ₦1,500.50, a 1.5% fee, and the total that goes into HumanBlnk and out as JSON.</p>
+<p><code>money.Money</code> is an exact amount in one currency. It is never a float: amounts are parsed from the decimal someone wrote and kept exact. Every amount you give HumanBlnk is a <code>money.Money</code>. This chapter needs no Blnk.</p>
 <h2 id="currencies"><a class="anchor" href="#currencies">Currencies</a></h2>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">ngn, ok := currency.Get(&#34;NGN&#34;)
 if !ok {

@@ -67,7 +67,7 @@
 </ol>
 <p>The money goes to the provider&#39;s clearing account, <code>humanblnk.ClearingAccount(&#34;vtpass&#34;)</code>: what HumanBlnk owes the provider, or how much of a prepaid float is used.</p>
 <h2 id="step-1-depend-on-interfaces"><a class="anchor" href="#step-1-depend-on-interfaces">Step 1: depend on interfaces</a></h2>
-<p>The package names the small part of the ledger it uses, so tests can pass a fake. <code>hb.Holds</code> satisfies <code>Holds</code>.</p>
+<p>The package names the small part of humanblnk it uses, so tests can pass a fake. <code>hb.Holds</code> satisfies <code>Holds</code>.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">type Holds interface {
     Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
     Capture(ctx context.Context, h humanblnk.HoldID, amount money.Money) (humanblnk.Entry, error)
@@ -163,7 +163,7 @@ import (
     &#34;github.com/otyang/humanblnk/money&#34;
 )
 
-// Holds is the part of the ledger airtime uses; hb.Holds satisfies it,
+// Holds is the part of humanblnk airtime uses; hb.Holds satisfies it,
 // and a test can pass a fake.
 type Holds interface {
     Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
@@ -240,7 +240,7 @@ func (s *Service) Settle(ctx context.Context, hold humanblnk.HoldID, delivered b
 <h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
 <div class="example">
 <div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/07-airtime</code></span></div>
-<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/main.go" target="_blank" rel="noopener">07-airtime/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 7: a business service on top of the ledger. airtime/ is the
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/main.go" target="_blank" rel="noopener">07-airtime/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 7: a business service on top of humanblnk. airtime/ is the
 // service; this program plays a provider that delivers, declines, or
 // doesn&#39;t answer.
 package main

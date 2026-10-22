@@ -44,7 +44,7 @@ const (
 	StatusQueued   = "QUEUED"
 )
 
-// Entry is what the ledger recorded.
+// Entry is what was recorded.
 type Entry struct {
 	ID          string
 	Ref         string

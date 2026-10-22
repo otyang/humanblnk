@@ -1,4 +1,4 @@
-// Package transactions records, reverses and reads ledger transactions. Use
+// Package transactions records, reverses and reads transactions. Use
 // it through humanblnk.Client.Transactions.
 package transactions
 

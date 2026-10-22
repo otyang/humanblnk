@@ -1,7 +1,8 @@
 # Errors and retries
 
-Every error the ledger returns is one of its own, wrapping Blnk's for your
-logs. Always compare with `errors.Is`, never on the message.
+Every error humanblnk returns is one of its own; when Blnk refused the call
+it also wraps Blnk's, for your logs. `VerifyWebhook` returns
+`blnk.ErrBadSignature` or `blnk.ErrStale`. Always compare with `errors.Is`, never on the message.
 
 ## What each error means
 
@@ -36,7 +37,9 @@ are safe to repeat.
 | `Accounts.OpenForCustomer` | yes | one account per owner, ledger and currency |
 | `Identities.Create` | **no** | use `FindByCustomer` first |
 | `Accounts.CreateInternal`, `Ledgers.Create` | **no** | look with `List` first |
-| `Watches.Create` | **no** | look with `List` first |
+| `Watches.Create`, `Watches.Change` | **no** | look with `List` first; `Change` makes a new watch each time |
+| `Identities.UpdateMeta` | yes | it merges the keys |
+| `Reconciliation.Upload`, `AddRule`, `Run`, `RunLines` | **no** | each call makes a new statement, rule or run |
 | every read (`Get`, `List`, `GetByReference`, `Preview`) | yes | |
 
 ## References, in one rule
@@ -61,9 +64,12 @@ part fails:
    already moved.
 2. Blnk refunds them from its background worker a moment later (about
    200 ms). Until then they show in the accounts.
-3. The references stay used. Recording again with the same `Ref` returns
-   `ErrReferenceUsed`; use a new one.
+3. The references stay used. Once Blnk's refund has landed, recording again
+   with the same `Ref` returns `ErrReferenceUsed`; use a new one.
 
-`Get` and `GetByReference` show such an entry as `StatusRejected`, even
-before the refund lands. Keep Blnk's worker running and monitored: if it's
+`Get` and `GetByReference` show a split's entry as `StatusRejected`, even
+before the refund lands. An earlier part of a `RecordAll` batch shows as
+`StatusRejected` only once its refund lands: until then it reads
+`StatusApplied`, and retrying the batch returns a lookup error ("looking it
+up failed") for the part Blnk never recorded. Wait and retry. Keep Blnk's worker running and monitored: if it's
 down, the earlier parts stay moved until it restarts.

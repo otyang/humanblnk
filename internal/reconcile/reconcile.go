@@ -1,5 +1,5 @@
 // Package reconcile matches outside statements (a provider's settlement
-// report, a bank statement) against ledger entries: Blnk reconciliation. Use
+// report, a bank statement) against recorded entries: Blnk reconciliation. Use
 // it through humanblnk.Client.Reconciliation.
 package reconcile
 

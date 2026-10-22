@@ -13,7 +13,7 @@ against a real Blnk; your ids will differ.
 
 ## What you need
 
-- Go 1.27 or later.
+- Go 1.27.1 or later.
 - A [Blnk Core](https://docs.blnkfinance.com) 0.15.6 you can reach. The
   examples use `$BLNK_URL`, or `http://localhost:5001` if it's unset.
 

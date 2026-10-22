@@ -26,11 +26,13 @@
 //   - A transaction's currency must match every account it touches. Blnk
 //     does not check this: it would apply USD 10.00 to an NGN account as
 //     ₦10.00.
-//   - Every write carries a reference, the same on every retry, so a retry
-//     cannot apply it twice. ErrDuplicate means it already happened;
+//   - Every money movement (Record, RecordAll, Place, Reverse) carries a
+//     reference, the same on every retry, so a retry cannot apply it twice. ErrDuplicate means it already happened;
 //     ErrReferenceUsed means the reference holds something that didn't
 //     apply, such as a split Blnk rolled back, and only a new one will do.
 //   - Writes are applied synchronously (Blnk's skip_queue), so a refusal such
 //     as ErrInsufficientFunds is returned, not discovered later.
-//   - Callers see this package's errors, which wrap Blnk's for logs.
+//   - Callers see this package's errors; when Blnk refused the call, they
+//     also wrap Blnk's, for logs. VerifyWebhook returns blnk.ErrBadSignature
+//     or blnk.ErrStale.
 package humanblnk

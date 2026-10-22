@@ -61,8 +61,8 @@
 <div class="table"><table>
 <thead><tr><th>Service</th><th>Methods</th></tr></thead><tbody>
 <tr><td><code>hb.Identities</code></td><td><code>Create(ctx, meta) (string, error)</code>, <code>Get(ctx, id)</code>, <code>UpdateMeta(ctx, id, meta)</code>, <code>FindByCustomer(ctx, customerID)</code></td></tr>
-<tr><td><code>hb.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, AccountQuery)</code></td></tr>
-<tr><td><code>hb.Transactions</code></td><td><code>Record(ctx, Transaction)</code>, <code>RecordAll(ctx, []Transaction)</code>, <code>Preview(ctx, Transaction)</code>, <code>Reverse(ctx, Reversal)</code>, <code>Get(ctx, id)</code>, <code>GetByReference(ctx, ref)</code>, <code>List(ctx, EntryQuery)</code></td></tr>
+<tr><td><code>hb.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, AccountQuery) ([]Account, total, error)</code></td></tr>
+<tr><td><code>hb.Transactions</code></td><td><code>Record(ctx, Transaction)</code>, <code>RecordAll(ctx, []Transaction)</code>, <code>Preview(ctx, Transaction)</code>, <code>Reverse(ctx, Reversal)</code>, <code>Get(ctx, id)</code>, <code>GetByReference(ctx, ref)</code>, <code>List(ctx, EntryQuery) ([]Entry, total, error)</code></td></tr>
 <tr><td><code>hb.Holds</code></td><td><code>Place(ctx, Transaction, expires) (HoldID, error)</code>, <code>Capture(ctx, HoldID, amount)</code>, <code>Cancel(ctx, HoldID)</code></td></tr>
 <tr><td><code>hb.Watches</code></td><td><code>Create(ctx, Watch)</code>, <code>Get(ctx, WatchID)</code>, <code>List(ctx, account)</code>, <code>Change(ctx, WatchID, Watch)</code>, <code>Delete(ctx, WatchID)</code></td></tr>
 <tr><td><code>hb.Reconciliation</code></td><td><code>AddRule</code>, <code>ChangeRule</code>, <code>RemoveRule</code>, <code>Upload(ctx, source, filename, r)</code>, <code>Run(ctx, StatementID, Run)</code>, <code>RunLines(ctx, []StatementLine, Run)</code>, <code>Result(ctx, RunID)</code></td></tr>
@@ -98,6 +98,10 @@
 <tr><td><code>Entry</code></td><td><code>ID</code>, <code>Ref</code>, <code>Status</code>, <code>Amount</code>, <code>From</code>, <code>To</code>, <code>Description</code>, <code>Meta</code>, <code>CreatedAt</code></td></tr>
 <tr><td><code>Preview</code></td><td><code>WouldApply</code>, <code>Rejection</code>, <code>Changes []AccountChange</code>, <code>Notes</code></td></tr>
 <tr><td><code>Identity</code></td><td><code>ID</code>, <code>Meta</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>Ledger</code></td><td><code>ID</code>, <code>Name</code>, <code>Meta</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>Watch</code></td><td>what you sent, plus <code>ID</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>MatchRule</code></td><td>what you sent, plus <code>ID</code>, <code>CreatedAt</code></td></tr>
+<tr><td><code>RunResult</code></td><td><code>ID</code>, <code>Statement</code>, <code>Status</code>, <code>Matched</code>, <code>Unmatched</code>, <code>StartedAt</code>, <code>CompletedAt</code></td></tr>
 <tr><td><code>Event</code></td><td><code>Kind</code>, <code>Entry</code>, <code>Watch</code>, <code>Account</code>, <code>Data</code></td></tr>
 </tbody></table></div>
 <p>Entry statuses: <code>StatusApplied</code> (money moved), <code>StatusHeld</code> (a hold), <code>StatusVoid</code> (a released hold), <code>StatusRejected</code> (refused or rolled back), <code>StatusQueued</code>.</p>

@@ -16,7 +16,7 @@ import (
 	"github.com/otyang/humanblnk/money"
 )
 
-// The ledger's vocabulary, defined in package types and re-exported here so
+// HumanBlnk's vocabulary, defined in package types and re-exported here so
 // callers only import humanblnk. See types for each one's documentation.
 
 type (

@@ -1,4 +1,4 @@
-// Chapter 7: a business service on top of the ledger. airtime/ is the
+// Chapter 7: a business service on top of humanblnk. airtime/ is the
 // service; this program plays a provider that delivers, declines, or
 // doesn't answer.
 package main

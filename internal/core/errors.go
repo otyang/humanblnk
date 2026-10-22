@@ -13,7 +13,7 @@ func Invalid(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", types.ErrInvalid, fmt.Sprintf(format, args...))
 }
 
-// MapErr turns Blnk errors into the ledger's, keeping Blnk's for logs.
+// MapErr turns Blnk errors into HumanBlnk's, keeping Blnk's for logs.
 func MapErr(err error) error {
 	if err == nil {
 		return nil
@@ -30,7 +30,7 @@ func MapErr(err error) error {
 	return err
 }
 
-// CodeErr is the ledger error for a Blnk error code, or nil.
+// CodeErr is the HumanBlnk error for a Blnk error code, or nil.
 func CodeErr(code string) error {
 	switch code {
 	case blnk.CodeInsufficientFunds:
