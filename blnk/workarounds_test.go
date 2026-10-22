@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 )
 
 func TestRetryAfterIsHonoured(t *testing.T) {

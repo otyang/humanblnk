@@ -8,7 +8,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/ledger/internal/core"
 	"github.com/otyang/humanblnk/ledger/types"
 )

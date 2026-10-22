@@ -3,7 +3,7 @@ package holds_test
 import (
 	"testing"
 
-	"github.com/otyang/humanblnk/clients/blnk/blnkfake"
+	"github.com/otyang/humanblnk/blnk/blnkfake"
 	"github.com/otyang/humanblnk/ledger/holds"
 	"github.com/otyang/humanblnk/ledger/internal/core"
 )

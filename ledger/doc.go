@@ -1,5 +1,5 @@
 // Package ledger is HumanBlnk's books, kept in Blnk. It speaks money.Money and
-// HumanBlnk's own errors; nothing else in HumanBlnk moves money through clients/blnk.
+// HumanBlnk's own errors; nothing else in HumanBlnk moves money through blnk.
 //
 // The vocabulary is bookkeeping:
 //

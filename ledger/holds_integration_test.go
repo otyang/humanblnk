@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 )

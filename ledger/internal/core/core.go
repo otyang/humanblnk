@@ -6,7 +6,7 @@ package core
 import (
 	"sync"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 )
 
 // Core is one Blnk instance and what the services know about it.

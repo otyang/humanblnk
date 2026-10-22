@@ -2,7 +2,7 @@
 
 HumanBlnk's books, kept in [Blnk Core](https://docs.blnkfinance.com) 0.15.6. It
 speaks [`money.Money`](../money/README.md) and its own errors; nothing else in
-HumanBlnk moves money through `clients/blnk`.
+HumanBlnk moves money through `blnk`.
 
 ```go
 books := ledger.New(blnk.New(blnkURL, blnk.WithAPIKey(key)), ledger.WithAccountLedger(walletsBookID))
@@ -89,7 +89,7 @@ A new public type goes in `types` and gets an alias in `aliases.go`.
 ## Tests
 
 ```sh
-go test ./ledger/...                                    # against a fake Blnk (clients/blnk/blnkfake)
+go test ./ledger/...                                    # against a fake Blnk (blnk/blnkfake)
 
 docker compose -f deploy/docker-compose.yml up -d       # Blnk 0.15.6 + Postgres
 BLNK_URL=http://localhost:5001 go test -tags integration ./ledger/

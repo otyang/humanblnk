@@ -1,7 +1,7 @@
 package ledger
 
 import (
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/ledger/accounts"
 	"github.com/otyang/humanblnk/ledger/books"
 	"github.com/otyang/humanblnk/ledger/holds"

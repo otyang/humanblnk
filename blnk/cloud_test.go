@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 )
 
 func TestCloudInstanceIDOnEveryRequest(t *testing.T) {

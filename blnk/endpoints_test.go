@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 )
 
 // TestEndpoints checks the method, path, query and body each call sends,

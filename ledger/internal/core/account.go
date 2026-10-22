@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/ledger/types"
 	"github.com/otyang/humanblnk/money"
 	"github.com/otyang/humanblnk/money/currency"

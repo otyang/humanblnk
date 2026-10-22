@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 )
 
 // Verify a webhook from Blnk: X-Blnk-Signature is HMAC-SHA256 of

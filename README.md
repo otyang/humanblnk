@@ -8,7 +8,7 @@ every account and transaction lives in [Blnk Core](https://docs.blnkfinance.com)
 | --- | --- |
 | [`money`](money/README.md) | An exact amount in one currency: parse, add, round, convert to the smallest unit |
 | [`ledger`](ledger/README.md) | HumanBlnk's books: customer accounts, transactions, holds, reversals, watches, reconciliation |
-| `clients/blnk` | The Blnk Core HTTP client. Only `ledger` uses it |
+| `blnk` | The Blnk Core HTTP client. Only `ledger` uses it |
 
 Business features (airtime, payouts, transfers) go in their own packages and
 import `ledger`; `ledger` never imports them.
@@ -27,7 +27,7 @@ BLNK_URL=http://localhost:5001 go test -tags integration ./ledger/   # against t
 
 ```go
 import (
-	"github.com/otyang/humanblnk/clients/blnk"
+	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/ledger"
 	"github.com/otyang/humanblnk/money"
 	"github.com/otyang/humanblnk/money/currency"
