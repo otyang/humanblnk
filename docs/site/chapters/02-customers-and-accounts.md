@@ -1,7 +1,7 @@
 # Customers and accounts
 
 **Scenario:** Ada signs up. She gets a naira wallet straight away, and later
-a dollar wallet. HumanBlnk also needs an escrow pool of its own.
+a dollar wallet. Your company also needs an escrow pool of its own.
 
 ## Step 1: the owner
 
@@ -50,9 +50,9 @@ never personal data.
 
 {{code 02-onboarding/main.go meta}}
 
-## HumanBlnk's own accounts
+## Your company's own accounts
 
-An account that belongs to HumanBlnk uses `CreateInternal`, in a ledger that isn't
+An account that belongs to your company uses `CreateInternal`, in a ledger that isn't
 a customer one. The owner is optional. Unlike `OpenForCustomer`, it makes a
 new account on every call: if it times out, look with `List` first.
 

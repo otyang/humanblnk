@@ -1,6 +1,6 @@
 # Reconciliation
 
-**Scenario:** Paystack's daily settlement report lists three deposits. HumanBlnk
+**Scenario:** Paystack's daily settlement report lists three deposits. You
 recorded two of them. Reconciliation finds the one that's missing.
 
 ## Step 1: say what counts as a match

@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>13. Cheat sheet · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>13. Cheat sheet · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -73,10 +73,10 @@
 <div class="table"><table>
 <thead><tr><th>Helper</th><th>Gives</th><th>For</th></tr></thead><tbody>
 <tr><td><code>humanblnk.AccountRef(&#34;bln_…&#34;)</code></td><td>that account</td><td>a customer or internal account, by id</td></tr>
-<tr><td><code>humanblnk.World</code></td><td><code>@World</code></td><td>outside HumanBlnk: deposits come from it, payouts go to it</td></tr>
-<tr><td><code>humanblnk.FeeIncome</code></td><td><code>@FeeIncome</code></td><td>fees HumanBlnk earned</td></tr>
+<tr><td><code>humanblnk.World</code></td><td><code>@World</code></td><td>money outside your books: deposits come from it, payouts go to it</td></tr>
+<tr><td><code>humanblnk.FeeIncome</code></td><td><code>@FeeIncome</code></td><td>fees you earned</td></tr>
 <tr><td><code>humanblnk.Adjustments</code></td><td><code>@Adjustments</code></td><td>staff corrections</td></tr>
-<tr><td><code>humanblnk.ClearingAccount(&#34;paystack&#34;)</code></td><td><code>@PaystackClearing</code></td><td>money a provider owes HumanBlnk, or HumanBlnk owes it</td></tr>
+<tr><td><code>humanblnk.ClearingAccount(&#34;paystack&#34;)</code></td><td><code>@PaystackClearing</code></td><td>money a provider owes you, or you owe it</td></tr>
 <tr><td><code>humanblnk.SystemAccount(&#34;FXDesk&#34;)</code></td><td><code>@FXDesk</code></td><td>any other system account; keep it in a variable</td></tr>
 </tbody></table></div>
 <h2 id="building-requests"><a class="anchor" href="#building-requests">Building requests</a></h2>

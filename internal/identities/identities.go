@@ -1,6 +1,6 @@
 // Package identities creates and reads owners for customer accounts: Blnk
 // identities that hold no personal data. Names, phone numbers and KYC stay in
-// HumanBlnk's own customer records, which keep the identity's id. Use it through
+// your own customer records, which keep the identity's id. Use it through
 // humanblnk.Client.Identities.
 package identities
 
@@ -24,7 +24,7 @@ func New(k *core.Core) *Service { return &Service{k} }
 
 // Create creates an identity and returns its id ("idt_…"), the Owner of the
 // customer's accounts. meta is for references, never personal data; put
-// HumanBlnk's customer id under "customer_id" so FindByCustomer can find it.
+// your customer id under "customer_id" so FindByCustomer can find it.
 //
 // It is not retried after a timeout (a repeat would create a second one):
 // try FindByCustomer before creating again. A stray identity owns nothing,
@@ -59,7 +59,7 @@ func (s *Service) UpdateMeta(ctx context.Context, id string, meta types.Meta) (t
 	return types.Meta(md), nil
 }
 
-// FindByCustomer returns the identity created for HumanBlnk's customer
+// FindByCustomer returns the identity created for your customer
 // customerID (its meta "customer_id"), or ErrNotFound. If a retried Create
 // made more than one, it returns the oldest.
 func (s *Service) FindByCustomer(ctx context.Context, customerID string) (types.Identity, error) {

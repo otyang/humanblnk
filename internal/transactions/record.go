@@ -41,7 +41,7 @@ func (s *Service) Record(ctx context.Context, t types.Transaction) (types.Entry,
 
 // RecordAll records every transaction or none: if one fails, Blnk rolls the
 // others back. They may be in different currencies, as an exchange is (USD
-// from the customer to HumanBlnk, NGN from HumanBlnk to the customer). Each must have
+// from the customer to your company, NGN from your company to the customer). Each must have
 // one posting on each side.
 //
 // The entries come back in the order of ts. Blnk answers a batch with its id

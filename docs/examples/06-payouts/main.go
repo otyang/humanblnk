@@ -24,7 +24,7 @@ func main() {
 	payout := humanblnk.Transaction{
 		Ref:         humanblnk.Reference("payout", "po_1_"+demo.Run),
 		From:        humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn("20000")),
-		To:          humanblnk.Single(humanblnk.World, ngn("20000")), // leaving HumanBlnk
+		To:          humanblnk.Single(humanblnk.World, ngn("20000")), // leaving your books
 		Description: "Withdrawal to GTBank ****1234",
 	}
 	hold, err := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))

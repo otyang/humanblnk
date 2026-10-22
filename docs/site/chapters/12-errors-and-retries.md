@@ -1,8 +1,9 @@
 # Errors and retries
 
-Every error humanblnk returns is one of its own; when Blnk refused the call
-it also wraps Blnk's, for your logs. `VerifyWebhook` returns
-`blnk.ErrBadSignature` or `blnk.ErrStale`. Always compare with `errors.Is`, never on the message.
+humanblnk's errors are its own; when Blnk refused the call they also wrap
+Blnk's, for your logs. A Blnk error humanblnk has no name for comes back as a
+`*blnk.APIError`, and `VerifyWebhook` returns `blnk.ErrBadSignature` or
+`blnk.ErrStale` when the check fails. Always compare with `errors.Is`, never on the message.
 
 ## What each error means
 
@@ -10,7 +11,7 @@ it also wraps Blnk's, for your logs. `VerifyWebhook` returns
 | --- | --- | --- |
 | `humanblnk.ErrInsufficientFunds` | the source account can't cover it | tell the customer; nothing moved |
 | `humanblnk.ErrDuplicate` | this exact write already happened, applied | treat as **success**; the existing entry comes back with it |
-| `humanblnk.ErrReferenceUsed` | the reference holds something that didn't apply: a different transaction, or this one rolled back | nothing moved under it; record again under a **new** reference, or investigate if you didn't expect it |
+| `humanblnk.ErrReferenceUsed` | this write didn't apply: the reference holds a different transaction, or this one rolled back | after a rollback, record again under a **new** reference; otherwise investigate how two writes got the same reference |
 | `humanblnk.ErrNotFound` | no such account, entry or hold | check the id |
 | `humanblnk.ErrUnbalanced` | `From` and `To` don't add up to the same amount | fix the postings |
 | `humanblnk.ErrAlreadyReversed` | nothing (or not that much) is left to reverse | nothing to do; pass a `Ref` to get your own reversal back on a retry |
@@ -20,9 +21,11 @@ it also wraps Blnk's, for your logs. `VerifyWebhook` returns
 | `money.ErrCurrencyMismatch` | an amount's currency doesn't match the account's | a bug in the caller |
 | `money.ErrUnknownCurrency` | a `Money` that was never set, or an unknown code | a bug in the caller |
 
-Any other error, such as a network failure, means **the outcome is
-unknown**. Retry with the same arguments; the table below says which calls
-are safe to repeat.
+The blnk client already retries transient failures (3 times by default),
+and only where a repeat is harmless. After that, a `*blnk.APIError` with a
+4xx status means Blnk refused the call. A network error or a gateway timeout
+means **the outcome is unknown**: retry with the same arguments if the table
+below says the call is safe to repeat.
 
 ## What is safe to repeat
 
@@ -39,6 +42,8 @@ are safe to repeat.
 | `Accounts.CreateInternal`, `Ledgers.Create` | **no** | look with `List` first |
 | `Watches.Create`, `Watches.Change` | **no** | look with `List` first; `Change` makes a new watch each time |
 | `Identities.UpdateMeta` | yes | it merges the keys |
+| `Ledgers.Rename`, `Reconciliation.ChangeRule` | yes | they replace, not add |
+| `Watches.Delete`, `Reconciliation.RemoveRule` | yes | a repeat may return `ErrNotFound` |
 | `Reconciliation.Upload`, `AddRule`, `Run`, `RunLines` | **no** | each call makes a new statement, rule or run |
 | every read (`Get`, `List`, `GetByReference`, `Preview`) | yes | |
 

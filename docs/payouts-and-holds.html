@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>6. Payouts and holds · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>6. Payouts and holds · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -67,7 +67,7 @@
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">payout := humanblnk.Transaction{
     Ref:         humanblnk.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
     From:        humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
-    To:          humanblnk.Single(humanblnk.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
+    To:          humanblnk.Single(humanblnk.World, ngn(&#34;20000&#34;)), // leaving your books
     Description: &#34;Withdrawal to GTBank ****1234&#34;,
 }
 hold, err := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
@@ -81,7 +81,7 @@ fmt.Printf(&#34;held %s: Total %s, Held %s, Available %s\n&#34;, hold, acct.Tota
 same, _ := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))
 fmt.Println(&#34;placed again, same hold:&#34;, same == hold)</code></pre></figure>
 <p>While it&#39;s held, <code>Accounts.Get</code> shows <code>Held</code> 20,000 and <code>Available</code> 20,000 less. Store the hold id with your payout, so the bank&#39;s callback can find it. Placing the same transaction again (a retry) returns the same hold.</p>
-<aside class="note"><p><strong>Expiry:</strong> <code>time.Time{}</code> means none. If a payout&#39;s hold expires while the bank actually sent the money, HumanBlnk has paid out without taking it. For payouts, prefer no expiry and a job that chases stuck ones.</p></aside>
+<aside class="note"><p><strong>Expiry:</strong> <code>time.Time{}</code> means none. If a payout&#39;s hold expires while the bank actually sent the money, you have paid out without taking it. For payouts, prefer no expiry and a job that chases stuck ones.</p></aside>
 <h2 id="step-2-the-bank-confirms"><a class="anchor" href="#step-2-the-bank-confirms">Step 2: the bank confirms</a></h2>
 <p>The zero <code>Money</code> captures all of it. Capturing again (a retried callback) returns the same capture and moves nothing more:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/06-payouts/main.go" target="_blank" rel="noopener">06-payouts/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">e, err := hb.Holds.Capture(ctx, hold, money.Money{})
@@ -161,7 +161,7 @@ func main() {
     payout := humanblnk.Transaction{
         Ref:         humanblnk.Reference(&#34;payout&#34;, &#34;po_1_&#34;+demo.Run),
         From:        humanblnk.Single(humanblnk.AccountRef(ada.ID), ngn(&#34;20000&#34;)),
-        To:          humanblnk.Single(humanblnk.World, ngn(&#34;20000&#34;)), // leaving HumanBlnk
+        To:          humanblnk.Single(humanblnk.World, ngn(&#34;20000&#34;)), // leaving your books
         Description: &#34;Withdrawal to GTBank ****1234&#34;,
     }
     hold, err := hb.Holds.Place(ctx, payout, time.Now().Add(72*time.Hour))

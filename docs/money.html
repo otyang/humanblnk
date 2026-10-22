@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3. Money · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>3. Money · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,8 +56,8 @@
   <article>
     <p class="eyebrow">Chapter 3 · Foundations</p>
     <h1 id="money"><a class="anchor" href="#money">Money</a></h1>
-<p><strong>Scenario:</strong> a price of ₦1,500.50, a 1.5% fee, and the total that goes into HumanBlnk and out as JSON.</p>
-<p><code>money.Money</code> is an exact amount in one currency. It is never a float: amounts are parsed from the decimal someone wrote and kept exact. Every amount you give HumanBlnk is a <code>money.Money</code>. This chapter needs no Blnk.</p>
+<p><strong>Scenario:</strong> a price of ₦1,500.50, a 1.5% fee, and the total that goes into your books and out as JSON.</p>
+<p><code>money.Money</code> is an exact amount in one currency. It is never a float: amounts are parsed from the decimal someone wrote and kept exact. Every amount you give humanblnk is a <code>money.Money</code>. This chapter needs no Blnk.</p>
 <h2 id="currencies"><a class="anchor" href="#currencies">Currencies</a></h2>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/03-money/main.go" target="_blank" rel="noopener">03-money/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">ngn, ok := currency.Get(&#34;NGN&#34;)
 if !ok {
@@ -107,7 +107,7 @@ fmt.Println(&#34;back from kobo:&#34;, back)</code></pre></figure>
 <p>Nothing rounds by itself. Where you need it, you choose the direction.</p>
 <div class="table"><table>
 <thead><tr><th>Mode</th><th>Use for</th></tr></thead><tbody>
-<tr><td><code>money.Up</code></td><td>a fee HumanBlnk charges: never undercharge by a fraction of a kobo</td></tr>
+<tr><td><code>money.Up</code></td><td>a fee you charge: never undercharge by a fraction of a cent (or kobo)</td></tr>
 <tr><td><code>money.Down</code></td><td>an amount paid out or credited: never pay out more than exists</td></tr>
 <tr><td><code>money.HalfEven</code></td><td>reports</td></tr>
 </tbody></table></div>
@@ -155,7 +155,7 @@ func main() {
         fmt.Printf(&#34;Parse(%q): %v\n&#34;, bad, err)
     }
 
-    // A 1.5% fee, rounded up: HumanBlnk never undercharges by a fraction of a kobo.
+    // A 1.5% fee, rounded up: you never undercharge by a fraction of a kobo.
     fee, _ := price.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
     total, _ := price.Add(fee)
     fmt.Println(&#34;fee:&#34;, fee, &#34;| total:&#34;, total)

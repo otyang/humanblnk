@@ -12,7 +12,7 @@ import (
 	"github.com/otyang/humanblnk/internal/watches"
 )
 
-// Client keeps HumanBlnk's books in one Blnk instance. Its operations are grouped
+// Client keeps your books in one Blnk instance. Its operations are grouped
 // by what they act on: hb.Accounts.OpenForCustomer,
 // hb.Transactions.Record, hb.Holds.Capture.
 type Client struct {

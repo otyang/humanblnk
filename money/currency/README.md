@@ -1,7 +1,7 @@
 # currency
 
-Every currency HumanBlnk can hold: the ISO 4217 currencies in circulation and
-the crypto assets HumanBlnk supports, each with how many decimal places its
+Every currency humanblnk can hold: the ISO 4217 currencies in circulation and
+the crypto assets it supports, each with how many decimal places its
 smallest unit has.
 
 ```go
@@ -37,8 +37,8 @@ currency.All(currency.Crypto)      // AVAX, BNB, BTC, …, USDC, USDT: ordered b
 
 ```go
 c, err := currency.Add(currency.Spec{
-	Code:     "HUMANBLNK",
-	Name:     "HumanBlnk Point",
+	Code:     "ACMEPTS",
+	Name:     "Acme Point",
 	Kind:     currency.Crypto,
 	Decimals: 2,
 })

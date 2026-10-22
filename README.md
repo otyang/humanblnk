@@ -1,30 +1,52 @@
-# HumanBlnk
+# humanblnk
 
-A Go Domain based Wrapper Implementation on the Blnk Ledger. Money is kept exactly (never a float), and
-every account and transaction lives in [Blnk Core](https://docs.blnkfinance.com)
-0.15.6, a double-entry ledger.
+**humanblnk is a Go library for keeping a wallet's or bank's books in
+[Blnk Core](https://docs.blnkfinance.com).** You work in bookkeeping terms
+(customers, accounts, transactions, holds, reversals) and exact money, and
+humanblnk makes Blnk follow the rules a money ledger needs, which Blnk alone
+leaves to you.
 
-| Package | What it does |
-| --- | --- |
-| [`money`](money/README.md) | An exact amount in one currency: parse, add, round, convert to the smallest unit |
-| `humanblnk` (this directory) | HumanBlnk's books: customer accounts, transactions, holds, reversals, watches, reconciliation. Speaks `money.Money` and its own errors |
-| `blnk` | The Blnk Core HTTP client. Callers use it only to build the client (`blnk.New`, `blnk.WithAPIKey`); only `humanblnk` calls Blnk through it |
-| `internal/...` | The services behind `humanblnk.Client`; not importable from outside this module |
-
-Business features (airtime, payouts, transfers) go in their own packages and
-import `humanblnk`; `humanblnk` never imports them.
-
-## Run it locally
-
-You need Go 1.27.1+ and Docker.
+It's for developers building fintech products (wallets, neobanks,
+marketplaces, payouts, remittance) who want Blnk's double-entry ledger without
+re-learning its sharp edges in production.
 
 ```sh
-docker compose -f deploy/docker-compose.yml up -d   # Blnk 0.15.6, its worker, Postgres, Redis
-go test ./...                                       # unit tests, against a fake Blnk
-BLNK_URL=http://localhost:5001 go test -tags integration .   # against the real one
+go get github.com/otyang/humanblnk   # Go 1.27.1+
 ```
 
-## Example
+## Why not call Blnk directly?
+
+Blnk is a solid double-entry engine, but it's deliberately low-level. These
+are the gaps humanblnk closes:
+
+| With Blnk alone | With humanblnk |
+| --- | --- |
+| Amounts are integers you scale yourself; one write at the wrong precision mixes units silently | Amounts are `money.Money`, exact decimals, sent in the currency's smallest unit at its own precision; entries read back are checked against it |
+| A USD 10.00 transaction applied to an NGN (Nigerian naira) account lands as NGN 10.00 | A currency mismatch is refused with `money.ErrCurrencyMismatch` |
+| A retried request hits a "reference already used" error that doesn't say whether your write applied | You build each reference from your own ids with `humanblnk.Reference`. A retried `Record` gets `ErrDuplicate` (it applied) or `ErrReferenceUsed` (something else holds that reference); a retried hold or reversal returns the one already made |
+| Writes are queued by default: insufficient funds turns up later as a `REJECTED` status | Writes are synchronous: you get `ErrInsufficientFunds` from the call itself |
+| A split (one transaction paying several accounts, such as an amount plus a fee) that fails partway reads as applied, though Blnk will refund its earlier parts | The entry reads as `StatusRejected` at once and its reference can't be reused. The balances still show the earlier parts until Blnk's worker refunds them (about 200 ms), so keep the worker running |
+| Overdraft is a flag on each write: any write that sets it can take its source below zero | Overdraft is allowed only when every source is a system account (such as `@World`, money outside your books, or a provider's clearing account) |
+| Customer money and your company's own can share a ledger | Customer accounts need an owner and live in the customer ledgers you name; your own accounts can't be opened there |
+| Blnk's refund undoes a transaction once, in full; partial refunds are yours to track | Reversals, full or partial, are numbered per entry and never undo more than it moved, even when they run concurrently |
+
+## What it isn't
+
+- **Not a payment provider integration.** You talk to Stripe, Paystack or your
+  bank yourself; humanblnk moves the money in your books to match.
+- **Not a server.** It's a library inside your Go service, with no HTTP API of
+  its own.
+- **Not a store for personal data.** Customers are Blnk identities holding only
+  your ids (such as `customer_id`). Names, documents and KYC stay in your own
+  systems.
+- **Not a replacement for Blnk.** You run Blnk Core 0.15.6 with its worker,
+  Postgres and Redis. To start all four locally:
+
+  ```sh
+  docker compose -f deploy/docker-compose.yml up -d   # Blnk on http://localhost:5001
+  ```
+
+## A first look
 
 ```go
 import (
@@ -34,145 +56,75 @@ import (
 	"github.com/otyang/humanblnk/money/currency"
 )
 
-ngn := currency.MustGet(currency.NGN)
-hb := humanblnk.New(blnk.New("http://localhost:5001"),
-	humanblnk.WithAccountLedger(walletsLedgerID), // made once at setup: hb.Ledgers.Create(ctx, "Customer Wallets", nil)
+usd := currency.MustGet(currency.USD)
+hb := humanblnk.New(blnk.New("http://localhost:5001"), // add blnk.WithAPIKey(key) if Blnk runs in secure mode
+	humanblnk.WithAccountLedger(walletsLedgerID), // made once by a setup script (tutorial chapter 1)
 )
 
-// A customer and their wallet. OpenForCustomer is safe to call again.
-owner, _ := hb.Identities.Create(ctx, humanblnk.Meta{"customer_id": "cus_123"})
-wallet, _ := hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: ngn})
+// A customer and their wallet. Identities.Create is not safe to repeat:
+// in a sign-up handler, try hb.Identities.FindByCustomer first.
+owner, err := hb.Identities.Create(ctx, humanblnk.Meta{"customer_id": "cus_123"})
+wallet, err := hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: usd}) // safe to repeat
 
-// A deposit arrives through Paystack.
-amount := money.MustParse("5000", ngn)
-_, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
-	Ref:         humanblnk.Reference("deposit", "ps_ref_9"), // from your own ids, the same on every retry
-	From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), amount),
+// A card top-up. Stripe owes you the money until it settles, so it comes
+// from Stripe's clearing account.
+amount := money.MustParse("50.00", usd)
+_, err = hb.Transactions.Record(ctx, humanblnk.Transaction{
+	Ref:         humanblnk.Reference("deposit", "stripe", paymentIntentID), // the same on every retry
+	From:        humanblnk.Single(humanblnk.ClearingAccount("stripe"), amount),
 	To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), amount),
-	Description: "Bank transfer",
+	Description: "Card top-up",
 })
 if errors.Is(err, humanblnk.ErrDuplicate) {
-	// already recorded: a retried webhook
+	err = nil // a retried webhook: already recorded
 }
 
-// A payout: reserve the money, then settle or give it back.
+// A payout: reserve the money now, then settle or release it when the bank answers.
 hold, err := hb.Holds.Place(ctx, humanblnk.Transaction{
-	Ref:         humanblnk.Reference("payout", "po_7"),
-	From:        humanblnk.Single(humanblnk.AccountRef(wallet.ID), money.MustParse("2000", ngn)),
-	To:          humanblnk.Single(humanblnk.World, money.MustParse("2000", ngn)),
+	Ref:         humanblnk.Reference("payout", payoutID),
+	From:        humanblnk.Single(humanblnk.AccountRef(wallet.ID), money.MustParse("20.00", usd)),
+	To:          humanblnk.Single(humanblnk.World, money.MustParse("20.00", usd)),
 	Description: "Payout to bank",
-}, time.Time{})
+}, time.Now().Add(72*time.Hour))
+
+acct, err := hb.Accounts.Get(ctx, wallet.ID)
+fmt.Println(acct.Available) // "30.00": what the customer can spend now
+
 if bankAccepted {
-	hb.Holds.Capture(ctx, hold, money.Money{}) // all of it
+	_, err = hb.Holds.Capture(ctx, hold, money.Money{}) // all of it
 } else {
-	hb.Holds.Cancel(ctx, hold)
+	err = hb.Holds.Cancel(ctx, hold)
 }
-
-acct, _ := hb.Accounts.Get(ctx, wallet.ID)
-fmt.Println(acct.Available) // "3000.00": what the customer can spend now
 ```
 
-## Rules worth knowing
+## Learn more
 
-- **Every money movement has a reference** (`Record`, `RecordAll`, `Place`,
-  `Reverse`), built from your own ids (`humanblnk.Reference`).
-  Retrying with it can't apply twice: `ErrDuplicate` means it already happened.
-  `ErrReferenceUsed` means the reference holds something that didn't apply,
-  so record it again under a new one.
-- **Check `Available`, not `Total`,** before letting a customer spend.
-- **Customer accounts** are opened with `Accounts.OpenForCustomer` (an owner is
-  required). HumanBlnk's own accounts use `Accounts.CreateInternal`.
-- **Undo money that moved** with `Transactions.Reverse`. `Holds.Cancel` only
-  releases a hold.
-- **Keep personal data out of Blnk.** Identities hold references such as your
-  customer id, nothing more.
+- **[Tutorial](https://otyang.github.io/humanblnk/docs/)**: thirteen chapters.
+  Eleven walk through a real task (sign-up, deposits, transfers with fees,
+  payouts, refunds, currency exchange, webhooks, reconciliation) with a
+  program you can run against your own Blnk; the last two cover errors and
+  retries, and a cheat sheet.
+- **[Reference](https://pkg.go.dev/github.com/otyang/humanblnk)**: every
+  service and method, the rules humanblnk enforces, what's safe to retry, its
+  errors and its limits. Also in [doc.go](doc.go).
+- **[money](money/README.md)**: exact amounts and currencies, usable on their
+  own.
 
-For a step-by-step guide with runnable real-life examples (deposits,
-transfers, payouts, refunds, exchange, reconciliation), read the
-[tutorial](https://otyang.github.io/humanblnk/docs/). Below: every
-service, all the rules, and known limits.
+## Packages
 
-## What it does
-
-| `hb.` | Methods | For |
-| --- | --- | --- |
-| `Identities` | `Create`, `Get`, `UpdateMeta`, `FindByCustomer` | Owners for customer accounts, holding no personal data (only references such as `customer_id`) |
-| `Accounts` | `OpenForCustomer`, `CreateInternal`, `Get`, `List` | Balances: money in one currency. Customer accounts always have an owner, one per ledger and currency; HumanBlnk's own accounts live outside the customer ledgers |
-| `Transactions` | `Record`, `RecordAll`, `Reverse`, `Preview`, `Get`, `GetByReference`, `List` | Moving money now; undoing it; reading what was recorded |
-| `Holds` | `Place`, `Capture`, `Cancel` | Reserving money now, settling it later |
-| `Watches` | `Create`, `Get`, `List`, `Change`, `Delete` | Thresholds that fire the `balance.monitor` webhook |
-| `Reconciliation` | `Upload`, `AddRule`, `ChangeRule`, `RemoveRule`, `Run`, `RunLines`, `Result` | Matching provider and bank statements against entries |
-| `Ledgers` | `Create`, `Get`, `List`, `Rename` | Blnk ledgers: named groups of accounts |
-
-Each service has a type of its own (`IdentityService`, `AccountService`,
-`TransactionService`, `HoldService`, `WatchService`, `ReconciliationService`,
-`LedgerService`), so code that needs only one can take just that.
-
-Plus `humanblnk.VerifyWebhook` for Blnk's webhooks, the options `WithAccountLedger`
-and `WithCustomerLedgers`, and the vocabulary, all in [aliases.go](aliases.go):
-
-| Group | Names |
+| Package | What it is |
 | --- | --- |
-| Moving money | `Transaction`, `Posting`, `Single`, `Many`, `Reference`, `Entry`, `EntryQuery`, `Reversal`, `Preview`, `AccountChange`, `HoldID`, `Meta` |
-| Accounts | `AccountRef`, `Account`, `NewAccount`, `CustomerAccount`, `AccountQuery`, `Identity`, `Ledger`, `World`, `FeeIncome`, `Adjustments`, `SystemAccount`, `ClearingAccount` |
-| Entry statuses | `StatusApplied`, `StatusHeld`, `StatusVoid`, `StatusRejected`, `StatusQueued` |
-| Watches | `Watch`, `WatchID`, `WatchField`, `WatchOp`, `WatchBalance`, `WatchCredits`, `WatchDebits`, `WatchHeld`, `WatchIncomingHeld`, `WatchHeldNet`, `WatchAbove`, `WatchAtLeast`, `WatchBelow`, `WatchAtMost`, `WatchEquals`, `WatchNotEquals` |
-| Reconciliation | `StatementID`, `StatementLine`, `RuleID`, `MatchRule`, `Criterion`, `MatchField`, `MatchOp`, `Strategy`, `Run`, `RunID`, `RunResult`, `MatchAmount`, `MatchDate`, `MatchReference`, `MatchDescription`, `MatchCurrency`, `MatchEquals`, `MatchGreaterThan`, `MatchLessThan`, `MatchContains`, `OneToOne`, `OneToMany`, `ManyToOne` |
-| Webhooks | `Event` |
+| `humanblnk` | Your books: `Client`, its services, and the vocabulary |
+| [`money`](money/README.md) | An exact amount in one currency: parse, add, round, convert to the smallest unit |
+| `blnk` | A Blnk Core HTTP client. You use it to build the client (`blnk.New`, `blnk.WithAPIKey`); only humanblnk calls Blnk through it |
 
-## All the rules
+Your own features (airtime top-ups, payouts, transfers) go in their own
+packages and import `humanblnk`; humanblnk never imports them.
 
-| Rule | Why |
-| --- | --- |
-| Amounts reach Blnk only in their currency's smallest unit, with the currency's own precision | Blnk balances are bare integers; one transaction at another precision would mix units silently |
-| A transaction's currency must match every account it touches | Blnk doesn't check: it would apply USD 10.00 to an NGN account as ₦10.00 |
-| Every money movement (`Record`, `RecordAll`, `Place`, `Reverse`) carries a reference, the same on every retry | Blnk refuses a reference twice, so a retry can't apply twice. A refused reference is looked up: `ErrDuplicate` means this write happened; `ErrReferenceUsed` means it holds something that didn't apply (Blnk keeps a rolled-back split's references), so only a new reference will do |
-| Reversals, full or partial, are numbered per entry | They take turns, even concurrently, and never undo more than the entry moved. A reversal takes from where the entry put the money: a customer who spent it can't be pushed below zero |
-| Writes are synchronous (Blnk's `skip_queue`) | Otherwise insufficient funds would surface later as a `REJECTED` status, not as an error |
-| Only system accounts (`@World`, clearing accounts) may go below zero | They do by design; a customer account never may |
-| `Place`, `Capture` and `Cancel` are safe to repeat with the same arguments; wait a few seconds before repeating a timed-out partial `Capture` | Blnk's commit takes no reference, so `Capture` checks for an earlier capture: first for a single posting, and after Blnk answers "already committed" or doesn't answer for a split. A partial one still running in Blnk isn't visible yet |
-| `Cancel` only releases holds; `Transactions.Reverse` is the only way to undo money that moved | Corrections stay in the books as entries of their own |
-| Partial reversals can't add up to more than the entry, even concurrently | Each claims a numbered reference; Blnk's unique index makes them take turns |
+## Contributing
 
-Errors: `ErrInsufficientFunds`, `ErrDuplicate`, `ErrReferenceUsed`, `ErrNotFound`, `ErrUnbalanced`,
-`ErrAlreadyReversed`, `ErrHoldSettled`, `ErrInvalid`, `ErrReadBack`, and
-`money.ErrCurrencyMismatch`, `money.ErrUnknownCurrency`. When Blnk refused the
-call, the error also wraps Blnk's, for logs. `VerifyWebhook` returns
-`blnk.ErrBadSignature` or `blnk.ErrStale`.
-
-## Limits
-
-- A split (several postings on one side) is reversed and captured only in full.
-- Blnk can't filter "from or to" together with other conditions, so an account's
-  full history is two `Transactions.List` calls, one with `From`, one with `To`.
-- `RecordAll` reads its entries back after the batch; if that fails the batch
-  still applied, and the error is `ErrReadBack`.
-
-## Layout
-
-| Package | Contents |
-| --- | --- |
-| `humanblnk` | `Client`, `New`, and every public name re-exported (`aliases.go`) |
-| `internal/types` | The public types, errors and helpers, defined once |
-| `internal/accounts`, `transactions`, `holds`, `watches`, `reconcile`, `ledger`, `identities` | One package per service |
-| `internal/events` | Webhook verification and decoding, behind `VerifyWebhook` |
-| `internal/core` | Shared and private: the Blnk client, conversion, the currency check, error mapping |
-
-A new public type goes in `internal/types` and gets an alias in `aliases.go`;
-a new service gets a field on `Client` and a `…Service` alias.
-
-## Tests
-
-```sh
-go test ./...                                           # against a fake Blnk (blnk/blnkfake)
-
-docker compose -f deploy/docker-compose.yml up -d       # Blnk 0.15.6, its worker, Postgres, Redis
-BLNK_URL=http://localhost:5001 go test -tags integration .
-```
-
-The integration tests check what the unit tests can only assume: how Blnk
-stores splits, that funds errors are immediate, that a partial capture releases
-the rest, and that concurrent reversals never exceed the entry.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the layout, the tests and how the
+tutorial is built.
 
 ## License
 

@@ -33,7 +33,7 @@ func main() {
 	}
 	// end-snippet
 
-	// A 1.5% fee, rounded up: HumanBlnk never undercharges by a fraction of a kobo.
+	// A 1.5% fee, rounded up: you never undercharge by a fraction of a kobo.
 	// snippet:arith
 	fee, _ := price.Percent(decimal.RequireFromString("1.5"), money.Up)
 	total, _ := price.Add(fee)

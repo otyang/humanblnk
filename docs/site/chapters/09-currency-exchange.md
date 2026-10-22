@@ -6,9 +6,9 @@ down by $100 and her NGN wallet up by ₦155,025, together or not at all.
 One transaction can't do this: a transaction is in one currency. So it's
 **two** transactions, recorded atomically with `RecordAll`.
 
-## HumanBlnk's FX desk
+## Your FX desk
 
-The other side of each half is HumanBlnk's own account for currency it buys and
+The other side of each half is your company's own account for currency it buys and
 sells. Make it a system account, kept in a variable so a typo can't create
 another one. As a system account it may go below zero, so it never blocks an
 exchange.

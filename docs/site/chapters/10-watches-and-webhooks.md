@@ -1,7 +1,7 @@
 # Watches and webhooks
 
-**Scenario:** HumanBlnk texts Ada when her balance drops below ₦2,000. Blnk tells
-HumanBlnk through a webhook, and HumanBlnk must be sure each webhook really came from
+**Scenario:** Your app texts Ada when her balance drops below ₦2,000. Blnk tells
+your service through a webhook, and your service must be sure each webhook really came from
 Blnk.
 
 ## Step 1: watch the balance

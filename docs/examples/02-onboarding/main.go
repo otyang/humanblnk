@@ -79,7 +79,7 @@ func main() {
 	fmt.Println("owner meta:", meta)
 	// end-snippet
 
-	// 6. An account for HumanBlnk itself, not a customer: CreateInternal, in a
+	// 6. An account for your company itself, not a customer: CreateInternal, in a
 	// ledger that isn't a customer one.
 	// snippet:internal
 	ops, err := hb.Ledgers.Create(ctx, "Operations "+demo.Run, nil)

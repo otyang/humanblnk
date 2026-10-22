@@ -16,7 +16,7 @@ import (
 	"github.com/otyang/humanblnk/money"
 )
 
-// HumanBlnk's vocabulary, defined in package types and re-exported here so
+// humanblnk's vocabulary, defined in package types and re-exported here so
 // callers only import humanblnk. See types for each one's documentation.
 
 type (
@@ -131,10 +131,10 @@ var (
 	Adjustments = types.Adjustments
 )
 
-// SystemAccount is one of HumanBlnk's own accounts, by name.
+// SystemAccount is one of your company's own accounts, by name.
 func SystemAccount(name string) AccountRef { return types.SystemAccount(name) }
 
-// ClearingAccount is money a payment provider owes HumanBlnk, or HumanBlnk owes it.
+// ClearingAccount is money a payment provider owes you, or you owe it.
 func ClearingAccount(provider string) AccountRef { return types.ClearingAccount(provider) }
 
 // Reference builds a transaction reference: Reference("payout", "po_123").

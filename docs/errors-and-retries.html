@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>12. Errors and retries · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>12. Errors and retries · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,13 +56,13 @@
   <article>
     <p class="eyebrow">Chapter 12 · Running it</p>
     <h1 id="errors-and-retries"><a class="anchor" href="#errors-and-retries">Errors and retries</a></h1>
-<p>Every error humanblnk returns is one of its own; when Blnk refused the call it also wraps Blnk&#39;s, for your logs. <code>VerifyWebhook</code> returns <code>blnk.ErrBadSignature</code> or <code>blnk.ErrStale</code>. Always compare with <code>errors.Is</code>, never on the message.</p>
+<p>humanblnk&#39;s errors are its own; when Blnk refused the call they also wrap Blnk&#39;s, for your logs. A Blnk error humanblnk has no name for comes back as a <code>*blnk.APIError</code>, and <code>VerifyWebhook</code> returns <code>blnk.ErrBadSignature</code> or <code>blnk.ErrStale</code> when the check fails. Always compare with <code>errors.Is</code>, never on the message.</p>
 <h2 id="what-each-error-means"><a class="anchor" href="#what-each-error-means">What each error means</a></h2>
 <div class="table"><table>
 <thead><tr><th>Error</th><th>Means</th><th>What to do</th></tr></thead><tbody>
 <tr><td><code>humanblnk.ErrInsufficientFunds</code></td><td>the source account can&#39;t cover it</td><td>tell the customer; nothing moved</td></tr>
 <tr><td><code>humanblnk.ErrDuplicate</code></td><td>this exact write already happened, applied</td><td>treat as <strong>success</strong>; the existing entry comes back with it</td></tr>
-<tr><td><code>humanblnk.ErrReferenceUsed</code></td><td>the reference holds something that didn&#39;t apply: a different transaction, or this one rolled back</td><td>nothing moved under it; record again under a <strong>new</strong> reference, or investigate if you didn&#39;t expect it</td></tr>
+<tr><td><code>humanblnk.ErrReferenceUsed</code></td><td>this write didn&#39;t apply: the reference holds a different transaction, or this one rolled back</td><td>after a rollback, record again under a <strong>new</strong> reference; otherwise investigate how two writes got the same reference</td></tr>
 <tr><td><code>humanblnk.ErrNotFound</code></td><td>no such account, entry or hold</td><td>check the id</td></tr>
 <tr><td><code>humanblnk.ErrUnbalanced</code></td><td><code>From</code> and <code>To</code> don&#39;t add up to the same amount</td><td>fix the postings</td></tr>
 <tr><td><code>humanblnk.ErrAlreadyReversed</code></td><td>nothing (or not that much) is left to reverse</td><td>nothing to do; pass a <code>Ref</code> to get your own reversal back on a retry</td></tr>
@@ -72,7 +72,7 @@
 <tr><td><code>money.ErrCurrencyMismatch</code></td><td>an amount&#39;s currency doesn&#39;t match the account&#39;s</td><td>a bug in the caller</td></tr>
 <tr><td><code>money.ErrUnknownCurrency</code></td><td>a <code>Money</code> that was never set, or an unknown code</td><td>a bug in the caller</td></tr>
 </tbody></table></div>
-<p>Any other error, such as a network failure, means <strong>the outcome is unknown</strong>. Retry with the same arguments; the table below says which calls are safe to repeat.</p>
+<p>The blnk client already retries transient failures (3 times by default), and only where a repeat is harmless. After that, a <code>*blnk.APIError</code> with a 4xx status means Blnk refused the call. A network error or a gateway timeout means <strong>the outcome is unknown</strong>: retry with the same arguments if the table below says the call is safe to repeat.</p>
 <h2 id="what-is-safe-to-repeat"><a class="anchor" href="#what-is-safe-to-repeat">What is safe to repeat</a></h2>
 <div class="table"><table>
 <thead><tr><th>Call</th><th>Safe to repeat?</th><th>Because</th></tr></thead><tbody>
@@ -87,6 +87,8 @@
 <tr><td><code>Accounts.CreateInternal</code>, <code>Ledgers.Create</code></td><td><strong>no</strong></td><td>look with <code>List</code> first</td></tr>
 <tr><td><code>Watches.Create</code>, <code>Watches.Change</code></td><td><strong>no</strong></td><td>look with <code>List</code> first; <code>Change</code> makes a new watch each time</td></tr>
 <tr><td><code>Identities.UpdateMeta</code></td><td>yes</td><td>it merges the keys</td></tr>
+<tr><td><code>Ledgers.Rename</code>, <code>Reconciliation.ChangeRule</code></td><td>yes</td><td>they replace, not add</td></tr>
+<tr><td><code>Watches.Delete</code>, <code>Reconciliation.RemoveRule</code></td><td>yes</td><td>a repeat may return <code>ErrNotFound</code></td></tr>
 <tr><td><code>Reconciliation.Upload</code>, <code>AddRule</code>, <code>Run</code>, <code>RunLines</code></td><td><strong>no</strong></td><td>each call makes a new statement, rule or run</td></tr>
 <tr><td>every read (<code>Get</code>, <code>List</code>, <code>GetByReference</code>, <code>Preview</code>)</td><td>yes</td><td></td></tr>
 </tbody></table></div>

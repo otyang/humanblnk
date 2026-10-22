@@ -1,5 +1,5 @@
-// Package currency is every currency HumanBlnk can hold: the ISO 4217
-// currencies in circulation and the crypto assets HumanBlnk supports, each with
+// Package currency is every currency humanblnk can hold: the ISO 4217
+// currencies in circulation and the crypto assets it supports, each with
 // the number of decimal places its smallest unit has.
 //
 // The list is generated (list.go, from currencies.csv): a code that is not

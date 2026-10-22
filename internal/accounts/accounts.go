@@ -96,7 +96,7 @@ func (s *Service) oldest(ctx context.Context, a types.CustomerAccount) (types.Ac
 	return acct, err == nil, err
 }
 
-// CreateInternal creates one of HumanBlnk's own accounts, such as an escrow pool,
+// CreateInternal creates one of your company's own accounts, such as an escrow pool,
 // in a ledger that isn't a customer ledger; customer accounts are opened
 // with OpenForCustomer. The owner is optional.
 //

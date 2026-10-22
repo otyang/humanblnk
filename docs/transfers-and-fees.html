@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>5. Transfers and fees · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>5. Transfers and fees · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,9 +56,9 @@
   <article>
     <p class="eyebrow">Chapter 5 · Moving money</p>
     <h1 id="transfers-and-fees"><a class="anchor" href="#transfers-and-fees">Transfers and fees</a></h1>
-<p><strong>Scenario:</strong> Ada sends Bola ₦10,000. HumanBlnk charges a 1.5% fee on top. The app shows Ada what will happen before she confirms, and refuses if she can&#39;t afford it.</p>
+<p><strong>Scenario:</strong> Ada sends Bola ₦10,000. You charge a 1.5% fee on top. The app shows Ada what will happen before she confirms, and refuses if she can&#39;t afford it.</p>
 <h2 id="step-1-build-the-transfer-as-one-split"><a class="anchor" href="#step-1-build-the-transfer-as-one-split">Step 1: build the transfer as one split</a></h2>
-<p>The payment to Bola and HumanBlnk&#39;s fee are <strong>one</strong> transaction with two postings on the <code>To</code> side. It applies in full or not at all: Bola is never paid without the fee being recorded, or the other way round.</p>
+<p>The payment to Bola and your fee are <strong>one</strong> transaction with two postings on the <code>To</code> side. It applies in full or not at all: Bola is never paid without the fee being recorded, or the other way round.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func transfer(id string, from, to humanblnk.Account, amount money.Money) humanblnk.Transaction {
     fee, _ := amount.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)
     total, _ := amount.Add(fee)
@@ -127,7 +127,7 @@ import (
     &#34;github.com/shopspring/decimal&#34;
 )
 
-// transfer builds Ada-pays-Bola with HumanBlnk&#39;s 1.5% fee on top, as one split:
+// transfer builds Ada-pays-Bola with your 1.5% fee on top, as one split:
 // Bola is never paid without the fee being recorded, or the other way round.
 func transfer(id string, from, to humanblnk.Account, amount money.Money) humanblnk.Transaction {
     fee, _ := amount.Percent(decimal.RequireFromString(&#34;1.5&#34;), money.Up)

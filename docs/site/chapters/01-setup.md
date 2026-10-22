@@ -1,12 +1,12 @@
 # Setting up
 
-Blnk groups accounts into **ledgers**. HumanBlnk needs only a few, made **once**:
+Blnk groups accounts into **ledgers**. You need only a few, made **once**:
 
 | Ledger | Holds |
 | --- | --- |
 | Customer Wallets | every customer's spending accounts, in every currency |
 | Savings (optional) | customers' savings accounts |
-| Operations (optional) | HumanBlnk's own accounts that aren't system accounts, such as an escrow pool |
+| Operations (optional) | your company's own accounts that aren't system accounts, such as an escrow pool |
 
 Add a ledger only for a different kind of money. Never make one per customer
 or per currency. You never create the General Ledger or the system accounts

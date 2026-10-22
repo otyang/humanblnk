@@ -16,7 +16,7 @@ func main() {
 	ctx, hb := demo.Setup()
 	ada := demo.Customer(ctx, hb, "ada", demo.NGN)
 
-	// Two deposits HumanBlnk recorded from Paystack webhooks.
+	// Two deposits you recorded from Paystack webhooks.
 	refs := []string{humanblnk.Reference("deposit", "paystack", "ps_a_"+demo.Run), humanblnk.Reference("deposit", "paystack", "ps_b_"+demo.Run)}
 	for i, amount := range []string{"10000", "2500"} {
 		m := money.MustParse(amount, demo.NGN)
@@ -42,7 +42,7 @@ func main() {
 	}
 	// end-snippet
 
-	// 2. Paystack's report: the two deposits, and one HumanBlnk never recorded.
+	// 2. Paystack's report: the two deposits, and one you never recorded.
 	// Line ids are the provider's, and must be unique across every statement.
 	// snippet:lines
 	report := []humanblnk.StatementLine{

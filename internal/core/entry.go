@@ -57,7 +57,7 @@ func BaseRef(ref string) string { return splitSuffix.ReplaceAllString(ref, "") }
 
 // MarkRolledBack makes e StatusRejected if Blnk rolled back any of the
 // transactions ids. A rollback leaves the applied transaction in place and
-// refunds it under "<id>_refund". HumanBlnk never uses Blnk's refund
+// refunds it under "<id>_refund". humanblnk never uses Blnk's refund
 // itself (a reversal is a transaction of its own), so any such refund is a
 // rollback. It copies the original's metadata, so that can't tell them apart.
 func (k *Core) MarkRolledBack(ctx context.Context, e types.Entry, ids ...string) (types.Entry, error) {

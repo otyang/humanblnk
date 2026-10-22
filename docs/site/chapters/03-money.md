@@ -1,11 +1,11 @@
 # Money
 
 **Scenario:** a price of ₦1,500.50, a 1.5% fee, and the total that goes into
-HumanBlnk and out as JSON.
+your books and out as JSON.
 
 `money.Money` is an exact amount in one currency. It is never a float:
 amounts are parsed from the decimal someone wrote and kept exact. Every
-amount you give HumanBlnk is a `money.Money`. This chapter needs no Blnk.
+amount you give humanblnk is a `money.Money`. This chapter needs no Blnk.
 
 ## Currencies
 
@@ -50,7 +50,7 @@ Nothing rounds by itself. Where you need it, you choose the direction.
 
 | Mode | Use for |
 | --- | --- |
-| `money.Up` | a fee HumanBlnk charges: never undercharge by a fraction of a kobo |
+| `money.Up` | a fee you charge: never undercharge by a fraction of a cent (or kobo) |
 | `money.Down` | an amount paid out or credited: never pay out more than exists |
 | `money.HalfEven` | reports |
 

@@ -1,14 +1,14 @@
 # Deposits
 
 **Scenario:** Ada pays ₦25,000 into her wallet by bank transfer through
-Paystack. Paystack's webhook tells HumanBlnk, then sends it again. Days later
-Paystack settles the money into HumanBlnk's bank account.
+Paystack. Paystack's webhook tells you, then sends it again. Days later
+Paystack settles the money into your bank account.
 
 ## Where the money comes from
 
-When the webhook arrives, Paystack has the money, not HumanBlnk. So the deposit
+When the webhook arrives, Paystack has the money, not you. So the deposit
 comes **from Paystack's clearing account**, `humanblnk.ClearingAccount("paystack")`
-(`@PaystackClearing`). It goes below zero: Paystack owes HumanBlnk that much. When
+(`@PaystackClearing`). It goes below zero: Paystack owes you that much. When
 Paystack settles, it returns to zero, so a balance left in a clearing account
 is money still in transit.
 
@@ -55,8 +55,8 @@ a support tool. `Get(ctx, id)` fetches by entry id.
 
 ## Step 4: Paystack settles
 
-When the money reaches HumanBlnk's bank, Paystack no longer owes it. It moves from
-outside HumanBlnk (`@World`) into the clearing account, bringing it back to zero:
+When the money reaches your bank, Paystack no longer owes it. It moves from
+outside your books (`@World`) into the clearing account, bringing it back to zero:
 
 {{code 04-deposits/main.go settle}}
 

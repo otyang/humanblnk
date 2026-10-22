@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>4. Deposits · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>4. Deposits · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,9 +56,9 @@
   <article>
     <p class="eyebrow">Chapter 4 · Moving money</p>
     <h1 id="deposits"><a class="anchor" href="#deposits">Deposits</a></h1>
-<p><strong>Scenario:</strong> Ada pays ₦25,000 into her wallet by bank transfer through Paystack. Paystack&#39;s webhook tells HumanBlnk, then sends it again. Days later Paystack settles the money into HumanBlnk&#39;s bank account.</p>
+<p><strong>Scenario:</strong> Ada pays ₦25,000 into her wallet by bank transfer through Paystack. Paystack&#39;s webhook tells you, then sends it again. Days later Paystack settles the money into your bank account.</p>
 <h2 id="where-the-money-comes-from"><a class="anchor" href="#where-the-money-comes-from">Where the money comes from</a></h2>
-<p>When the webhook arrives, Paystack has the money, not HumanBlnk. So the deposit comes <strong>from Paystack&#39;s clearing account</strong>, <code>humanblnk.ClearingAccount(&#34;paystack&#34;)</code> (<code>@PaystackClearing</code>). It goes below zero: Paystack owes HumanBlnk that much. When Paystack settles, it returns to zero, so a balance left in a clearing account is money still in transit.</p>
+<p>When the webhook arrives, Paystack has the money, not you. So the deposit comes <strong>from Paystack&#39;s clearing account</strong>, <code>humanblnk.ClearingAccount(&#34;paystack&#34;)</code> (<code>@PaystackClearing</code>). It goes below zero: Paystack owes you that much. When Paystack settles, it returns to zero, so a balance left in a clearing account is money still in transit.</p>
 <h2 id="step-1-record-the-deposit"><a class="anchor" href="#step-1-record-the-deposit">Step 1: record the deposit</a></h2>
 <p>This is what your Paystack webhook handler does with a successful charge:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
@@ -68,7 +68,7 @@
     }
     return hb.Transactions.Record(ctx, humanblnk.Transaction{
         Ref:         humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef),
-        From:        humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes HumanBlnk this
+        From:        humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes you this
         To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
         Description: &#34;Bank transfer&#34;,
         Meta:        humanblnk.Meta{&#34;provider&#34;: &#34;paystack&#34;, &#34;provider_ref&#34;: paystackRef},
@@ -108,7 +108,7 @@ if err != nil {
 }
 fmt.Println(&#34;found by reference:&#34;, found.ID, found.Amount, found.Meta[&#34;provider_ref&#34;])</code></pre></figure>
 <h2 id="step-4-paystack-settles"><a class="anchor" href="#step-4-paystack-settles">Step 4: Paystack settles</a></h2>
-<p>When the money reaches HumanBlnk&#39;s bank, Paystack no longer owes it. It moves from outside HumanBlnk (<code>@World</code>) into the clearing account, bringing it back to zero:</p>
+<p>When the money reaches your bank, Paystack no longer owes it. It moves from outside your books (<code>@World</code>) into the clearing account, bringing it back to zero:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">settled := money.MustParse(&#34;25000&#34;, demo.NGN)
 if _, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
     Ref:         humanblnk.Reference(&#34;settlement&#34;, &#34;paystack&#34;, &#34;stl_&#34;+demo.Run),
@@ -148,7 +148,7 @@ func deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account
     }
     return hb.Transactions.Record(ctx, humanblnk.Transaction{
         Ref:         humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef),
-        From:        humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes HumanBlnk this
+        From:        humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes you this
         To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
         Description: &#34;Bank transfer&#34;,
         Meta:        humanblnk.Meta{&#34;provider&#34;: &#34;paystack&#34;, &#34;provider_ref&#34;: paystackRef},
@@ -189,7 +189,7 @@ func main() {
     }
     fmt.Println(&#34;found by reference:&#34;, found.ID, found.Amount, found.Meta[&#34;provider_ref&#34;])
 
-    // Days later Paystack settles: the money reaches HumanBlnk&#39;s bank account,
+    // Days later Paystack settles: the money reaches your bank account,
     // and Paystack no longer owes it. The clearing account returns to zero.
     settled := money.MustParse(&#34;25000&#34;, demo.NGN)
     if _, err := hb.Transactions.Record(ctx, humanblnk.Transaction{

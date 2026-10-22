@@ -21,7 +21,7 @@ While it's held, `Accounts.Get` shows `Held` 20,000 and `Available` 20,000
 less. Store the hold id with your payout, so the bank's callback can find
 it. Placing the same transaction again (a retry) returns the same hold.
 
-> **Expiry:** `time.Time{}` means none. If a payout's hold expires while the bank actually sent the money, HumanBlnk has paid out without taking it. For payouts, prefer no expiry and a job that chases stuck ones.
+> **Expiry:** `time.Time{}` means none. If a payout's hold expires while the bank actually sent the money, you have paid out without taking it. For payouts, prefer no expiry and a job that chases stuck ones.
 
 ## Step 2: the bank confirms
 

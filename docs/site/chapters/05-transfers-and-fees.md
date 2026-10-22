@@ -1,12 +1,12 @@
 # Transfers and fees
 
-**Scenario:** Ada sends Bola ₦10,000. HumanBlnk charges a 1.5% fee on top. The app
+**Scenario:** Ada sends Bola ₦10,000. You charge a 1.5% fee on top. The app
 shows Ada what will happen before she confirms, and refuses if she can't
 afford it.
 
 ## Step 1: build the transfer as one split
 
-The payment to Bola and HumanBlnk's fee are **one** transaction with two postings
+The payment to Bola and your fee are **one** transaction with two postings
 on the `To` side. It applies in full or not at all: Bola is never paid
 without the fee being recorded, or the other way round.
 

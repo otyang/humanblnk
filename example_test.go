@@ -15,7 +15,7 @@ import (
 
 var ctx = context.Background()
 
-// A bank transfer arrives through Paystack: the provider owes HumanBlnk until it
+// A bank transfer arrives through Paystack: the provider owes you until it
 // settles, so the money comes from its clearing account.
 func Example_deposit() {
 	hb := humanblnk.New(blnk.New("https://blnk.internal"), humanblnk.WithAccountLedger("ldg_wallets"))
@@ -35,7 +35,7 @@ func Example_deposit() {
 }
 
 // A transfer with a fee is one atomic split: Bola is never paid without
-// HumanBlnk's fee being recorded, or the other way round.
+// your fee being recorded, or the other way round.
 func Example_transferWithFee() {
 	hb := humanblnk.New(blnk.New("https://blnk.internal"))
 	usd := currency.MustGet(currency.USD)

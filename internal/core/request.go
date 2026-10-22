@@ -119,7 +119,7 @@ func (k *Core) Request(ctx context.Context, t types.Transaction) (blnk.CreateTra
 }
 
 // fromSystemOnly reports whether every account t takes money from is a
-// system account. Those go below zero by design (@World is what HumanBlnk has
+// system account. Those go below zero by design (@World is what your books have
 // taken in from outside, a clearing account what a provider owes), and Blnk
 // refuses to let any balance do so unless the transaction allows it. A
 // customer account never may: if one is a source, so is the funds check.

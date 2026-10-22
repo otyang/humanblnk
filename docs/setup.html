@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>1. Setting up · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>1. Setting up · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,12 +56,12 @@
   <article>
     <p class="eyebrow">Chapter 1 · Foundations</p>
     <h1 id="setting-up"><a class="anchor" href="#setting-up">Setting up</a></h1>
-<p>Blnk groups accounts into <strong>ledgers</strong>. HumanBlnk needs only a few, made <strong>once</strong>:</p>
+<p>Blnk groups accounts into <strong>ledgers</strong>. You need only a few, made <strong>once</strong>:</p>
 <div class="table"><table>
 <thead><tr><th>Ledger</th><th>Holds</th></tr></thead><tbody>
 <tr><td>Customer Wallets</td><td>every customer&#39;s spending accounts, in every currency</td></tr>
 <tr><td>Savings (optional)</td><td>customers&#39; savings accounts</td></tr>
-<tr><td>Operations (optional)</td><td>HumanBlnk&#39;s own accounts that aren&#39;t system accounts, such as an escrow pool</td></tr>
+<tr><td>Operations (optional)</td><td>your company&#39;s own accounts that aren&#39;t system accounts, such as an escrow pool</td></tr>
 </tbody></table></div>
 <p>Add a ledger only for a different kind of money. Never make one per customer or per currency. You never create the General Ledger or the system accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts): Blnk makes them the first time a transaction uses them.</p>
 <h2 id="step-1-create-the-ledgers-once"><a class="anchor" href="#step-1-create-the-ledgers-once">Step 1: create the ledgers, once</a></h2>

@@ -23,10 +23,10 @@ below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 | Helper | Gives | For |
 | --- | --- | --- |
 | `humanblnk.AccountRef("bln_…")` | that account | a customer or internal account, by id |
-| `humanblnk.World` | `@World` | outside HumanBlnk: deposits come from it, payouts go to it |
-| `humanblnk.FeeIncome` | `@FeeIncome` | fees HumanBlnk earned |
+| `humanblnk.World` | `@World` | money outside your books: deposits come from it, payouts go to it |
+| `humanblnk.FeeIncome` | `@FeeIncome` | fees you earned |
 | `humanblnk.Adjustments` | `@Adjustments` | staff corrections |
-| `humanblnk.ClearingAccount("paystack")` | `@PaystackClearing` | money a provider owes HumanBlnk, or HumanBlnk owes it |
+| `humanblnk.ClearingAccount("paystack")` | `@PaystackClearing` | money a provider owes you, or you owe it |
 | `humanblnk.SystemAccount("FXDesk")` | `@FXDesk` | any other system account; keep it in a variable |
 
 ## Building requests

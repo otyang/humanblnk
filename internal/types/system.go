@@ -15,22 +15,22 @@ func (a AccountRef) IsSystem() bool { return strings.HasPrefix(string(a), "@") }
 // System accounts. Blnk keeps them in its General Ledger and creates one per
 // currency the first time a transaction uses it.
 var (
-	// World is outside HumanBlnk: where deposits come from and payouts go.
+	// World is money outside your books: where deposits come from and payouts go.
 	World = SystemAccount("World")
-	// FeeIncome is the fees HumanBlnk has earned.
+	// FeeIncome is the fees you have earned.
 	FeeIncome = SystemAccount("FeeIncome")
 	// Adjustments is where staff corrections are posted from and to.
 	Adjustments = SystemAccount("Adjustments")
 )
 
-// SystemAccount is one of HumanBlnk's own accounts, by name ("Rewards" is
+// SystemAccount is one of your company's own accounts, by name ("Rewards" is
 // "@Rewards"). Prefer the variables above, so a misspelt name doesn't
 // silently create a new, empty account.
 func SystemAccount(name string) AccountRef {
 	return AccountRef("@" + name)
 }
 
-// ClearingAccount is money a payment provider owes HumanBlnk, or HumanBlnk owes it:
+// ClearingAccount is money a payment provider owes you, or you owe it:
 // ClearingAccount("paystack") is "@PaystackClearing". It returns to zero once
 // the provider settles, so a balance left in it is money still in transit.
 func ClearingAccount(provider string) AccountRef {

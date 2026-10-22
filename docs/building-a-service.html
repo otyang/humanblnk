@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>7. Building a service: airtime · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>7. Building a service: airtime · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,16 +56,16 @@
   <article>
     <p class="eyebrow">Chapter 7 · Moving money</p>
     <h1 id="building-a-service-airtime"><a class="anchor" href="#building-a-service-airtime">Building a service: airtime</a></h1>
-<p><strong>Scenario:</strong> Ada buys ₦1,000 of airtime from her wallet. The airtime provider (VTpass, say) can deliver, decline, or not answer in time.</p>
+<p><strong>Scenario:</strong> Ada buys ₦1,000 of airtime (prepaid mobile phone credit) from her wallet. The airtime provider (VTpass, say) can deliver, decline, or not answer in time.</p>
 <p>This chapter shows the shape every business feature takes: its own package that <strong>imports <code>humanblnk</code></strong>, never the other way round. <code>humanblnk</code> knows nothing about airtime; the airtime package decides what to take and when.</p>
 <h2 id="the-design-a-hold-around-the-provider-call"><a class="anchor" href="#the-design-a-hold-around-the-provider-call">The design: a hold around the provider call</a></h2>
-<p>The provider is outside HumanBlnk and can fail or time out, so the money is held first, not taken outright:</p>
+<p>The provider is outside your books and can fail or time out, so the money is held first, not taken outright:</p>
 <ol>
 <li><strong>Hold</strong> the amount. If Ada can&#39;t afford it, stop before calling the provider.</li>
 <li><strong>Call the provider.</strong></li>
 <li>Delivered: <strong>capture</strong>. Declined: <strong>cancel</strong>. No clear answer: leave it held, and settle it when the provider&#39;s webhook or a status check answers.</li>
 </ol>
-<p>The money goes to the provider&#39;s clearing account, <code>humanblnk.ClearingAccount(&#34;vtpass&#34;)</code>: what HumanBlnk owes the provider, or how much of a prepaid float is used.</p>
+<p>The money goes to the provider&#39;s clearing account, <code>humanblnk.ClearingAccount(&#34;vtpass&#34;)</code>: what you owe the provider, or how much of a prepaid float is used.</p>
 <h2 id="step-1-depend-on-interfaces"><a class="anchor" href="#step-1-depend-on-interfaces">Step 1: depend on interfaces</a></h2>
 <p>The package names the small part of humanblnk it uses, so tests can pass a fake. <code>hb.Holds</code> satisfies <code>Holds</code>.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">type Holds interface {

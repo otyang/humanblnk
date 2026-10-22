@@ -20,7 +20,7 @@ type Account struct {
 	CreatedAt time.Time
 }
 
-// NewAccount is what Accounts.CreateInternal needs: one of HumanBlnk's own
+// NewAccount is what Accounts.CreateInternal needs: one of your company's own
 // accounts, outside the customer ledgers.
 type NewAccount struct {
 	Ledger   string // Blnk ledger; required, and not a customer ledger

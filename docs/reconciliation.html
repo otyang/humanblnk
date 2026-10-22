@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>11. Reconciliation · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>11. Reconciliation · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,7 +56,7 @@
   <article>
     <p class="eyebrow">Chapter 11 · Running it</p>
     <h1 id="reconciliation"><a class="anchor" href="#reconciliation">Reconciliation</a></h1>
-<p><strong>Scenario:</strong> Paystack&#39;s daily settlement report lists three deposits. HumanBlnk recorded two of them. Reconciliation finds the one that&#39;s missing.</p>
+<p><strong>Scenario:</strong> Paystack&#39;s daily settlement report lists three deposits. You recorded two of them. Reconciliation finds the one that&#39;s missing.</p>
 <h2 id="step-1-say-what-counts-as-a-match"><a class="anchor" href="#step-1-say-what-counts-as-a-match">Step 1: say what counts as a match</a></h2>
 <p>A <strong>rule</strong> is a list of criteria that must all hold. Make it once and reuse it. Matching on reference works because a deposit&#39;s reference was built from Paystack&#39;s own id (chapter 4), and Paystack&#39;s report carries that id.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/11-reconciliation/main.go" target="_blank" rel="noopener">11-reconciliation/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">rule, err := hb.Reconciliation.AddRule(ctx, humanblnk.MatchRule{
@@ -128,7 +128,7 @@ func main() {
     ctx, hb := demo.Setup()
     ada := demo.Customer(ctx, hb, &#34;ada&#34;, demo.NGN)
 
-    // Two deposits HumanBlnk recorded from Paystack webhooks.
+    // Two deposits you recorded from Paystack webhooks.
     refs := []string{humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, &#34;ps_a_&#34;+demo.Run), humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, &#34;ps_b_&#34;+demo.Run)}
     for i, amount := range []string{&#34;10000&#34;, &#34;2500&#34;} {
         m := money.MustParse(amount, demo.NGN)
@@ -152,7 +152,7 @@ func main() {
         log.Fatal(err)
     }
 
-    // 2. Paystack&#39;s report: the two deposits, and one HumanBlnk never recorded.
+    // 2. Paystack&#39;s report: the two deposits, and one you never recorded.
     // Line ids are the provider&#39;s, and must be unique across every statement.
     report := []humanblnk.StatementLine{
         {ID: &#34;stl_1_&#34; + demo.Run, Amount: money.MustParse(&#34;10000&#34;, demo.NGN), Reference: refs[0], Date: time.Now(), Source: &#34;paystack&#34;},

@@ -24,7 +24,7 @@ func deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account
 	}
 	return hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref:         humanblnk.Reference("deposit", "paystack", paystackRef),
-		From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), m), // Paystack owes HumanBlnk this
+		From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), m), // Paystack owes you this
 		To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
 		Description: "Bank transfer",
 		Meta:        humanblnk.Meta{"provider": "paystack", "provider_ref": paystackRef},
@@ -73,7 +73,7 @@ func main() {
 	fmt.Println("found by reference:", found.ID, found.Amount, found.Meta["provider_ref"])
 	// end-snippet
 
-	// Days later Paystack settles: the money reaches HumanBlnk's bank account,
+	// Days later Paystack settles: the money reaches your bank account,
 	// and Paystack no longer owes it. The clearing account returns to zero.
 	// snippet:settle
 	settled := money.MustParse("25000", demo.NGN)

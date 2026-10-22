@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>9. Currency exchange · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>9. Currency exchange · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -58,8 +58,8 @@
     <h1 id="currency-exchange"><a class="anchor" href="#currency-exchange">Currency exchange</a></h1>
 <p><strong>Scenario:</strong> Ada sells $100 at ₦1,550.25 to the dollar. Her USD wallet goes down by $100 and her NGN wallet up by ₦155,025, together or not at all.</p>
 <p>One transaction can&#39;t do this: a transaction is in one currency. So it&#39;s <strong>two</strong> transactions, recorded atomically with <code>RecordAll</code>.</p>
-<h2 id="humanblnk-s-fx-desk"><a class="anchor" href="#humanblnk-s-fx-desk">HumanBlnk&#39;s FX desk</a></h2>
-<p>The other side of each half is HumanBlnk&#39;s own account for currency it buys and sells. Make it a system account, kept in a variable so a typo can&#39;t create another one. As a system account it may go below zero, so it never blocks an exchange.</p>
+<h2 id="your-fx-desk"><a class="anchor" href="#your-fx-desk">Your FX desk</a></h2>
+<p>The other side of each half is your company&#39;s own account for currency it buys and sells. Make it a system account, kept in a variable so a typo can&#39;t create another one. As a system account it may go below zero, so it never blocks an exchange.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">var fxDesk = humanblnk.SystemAccount(&#34;FXDesk&#34;)</code></pre></figure>
 <h2 id="the-exchange"><a class="anchor" href="#the-exchange">The exchange</a></h2>
 <p>The naira amount is a credit to Ada, so it rounds down. The rate goes in <code>Meta</code> on both halves, for statements and audits.</p>
@@ -126,7 +126,7 @@ import (
     &#34;github.com/shopspring/decimal&#34;
 )
 
-// fxDesk is HumanBlnk&#39;s own account for currency it buys and sells: a system
+// fxDesk is your company&#39;s own account for currency it buys and sells: a system
 // account, kept in a variable so a typo can&#39;t create another.
 var fxDesk = humanblnk.SystemAccount(&#34;FXDesk&#34;)
 

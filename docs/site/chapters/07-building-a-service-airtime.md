@@ -1,7 +1,8 @@
 # Building a service: airtime
 
-**Scenario:** Ada buys ₦1,000 of airtime from her wallet. The airtime provider
-(VTpass, say) can deliver, decline, or not answer in time.
+**Scenario:** Ada buys ₦1,000 of airtime (prepaid mobile phone credit) from
+her wallet. The airtime provider (VTpass, say) can deliver, decline, or not
+answer in time.
 
 This chapter shows the shape every business feature takes: its own package
 that **imports `humanblnk`**, never the other way round. `humanblnk` knows nothing
@@ -9,7 +10,7 @@ about airtime; the airtime package decides what to take and when.
 
 ## The design: a hold around the provider call
 
-The provider is outside HumanBlnk and can fail or time out, so the money is held
+The provider is outside your books and can fail or time out, so the money is held
 first, not taken outright:
 
 1. **Hold** the amount. If Ada can't afford it, stop before calling the
@@ -19,7 +20,7 @@ first, not taken outright:
    held, and settle it when the provider's webhook or a status check answers.
 
 The money goes to the provider's clearing account,
-`humanblnk.ClearingAccount("vtpass")`: what HumanBlnk owes the provider, or how much
+`humanblnk.ClearingAccount("vtpass")`: what you owe the provider, or how much
 of a prepaid float is used.
 
 ## Step 1: depend on interfaces

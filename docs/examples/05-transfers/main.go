@@ -13,7 +13,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// transfer builds Ada-pays-Bola with HumanBlnk's 1.5% fee on top, as one split:
+// transfer builds Ada-pays-Bola with your 1.5% fee on top, as one split:
 // Bola is never paid without the fee being recorded, or the other way round.
 // snippet:transfer
 func transfer(id string, from, to humanblnk.Account, amount money.Money) humanblnk.Transaction {

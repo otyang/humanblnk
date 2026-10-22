@@ -13,7 +13,7 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// fxDesk is HumanBlnk's own account for currency it buys and sells: a system
+// fxDesk is your company's own account for currency it buys and sells: a system
 // account, kept in a variable so a typo can't create another.
 // snippet:desk
 var fxDesk = humanblnk.SystemAccount("FXDesk")

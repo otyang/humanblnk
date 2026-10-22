@@ -16,7 +16,7 @@ var ErrUnknownRoundingMode = errors.New("unknown rounding mode")
 // RoundingMode says how an amount more precise than its currency becomes
 // one that is not. Pick it for whom the rounding favours:
 //
-//   - a fee HumanBlnk charges rounds Up, so HumanBlnk never charges less than its
+//   - a fee you charge rounds Up, so you never charge less than its
 //     price;
 //   - an amount paid out or credited rounds Down, so nobody is paid more
 //     than what was held for them.

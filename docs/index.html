@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -55,14 +55,25 @@
 <main>
   <article>
     
-    <h1 id="build-money-features-with-humanblnk"><a class="anchor" href="#build-money-features-with-humanblnk">Build money features with HumanBlnk</a></h1>
-<p>A hands-on guide to HumanBlnk, a Go backend for a bank or wallet. Each chapter takes one real task (a customer signing up, a deposit arriving, a refund) and walks through it with a Go program.</p>
+    <h1 id="build-money-features-with-humanblnk"><a class="anchor" href="#build-money-features-with-humanblnk">Build money features with humanblnk</a></h1>
+<p><strong>humanblnk is a Go library for keeping a wallet&#39;s or bank&#39;s books in <a href="https://docs.blnkfinance.com" target="_blank" rel="noopener">Blnk Core</a>.</strong> You work in bookkeeping terms (customers, accounts, transactions, holds, reversals) and exact money, and humanblnk makes Blnk follow the rules a money ledger needs, which Blnk alone leaves to you:</p>
+<ul>
+<li>amounts are exact and always sent at the currency&#39;s own precision;</li>
+<li>a currency mismatch is refused, not applied as the wrong money;</li>
+<li>a retried money movement can never apply twice;</li>
+<li>insufficient funds is an error from the call, not a status found later;</li>
+<li>only system accounts go below zero, never a customer&#39;s;</li>
+<li>reversals, full or partial, never undo more than the entry moved.</li>
+</ul>
+<p>It&#39;s a library inside your Go service, not a server, and it moves money only in Blnk: you talk to Stripe, Paystack or your bank yourself, and humanblnk moves the money in your books to match. Customer data stays in your systems; Blnk holds only your ids.</p>
+<p>This guide takes one real task per chapter (a customer signing up, a deposit arriving, a refund) and walks through it with a Go program you can run.</p>
 <p>Every line of Go on this site is taken from the example programs in <a href="https://github.com/otyang/humanblnk/tree/main/docs/examples" target="_blank" rel="noopener"><code>docs/examples</code></a>, which are compiled with the rest of the project. If the API changes, an example that no longer fits stops compiling, so what you read here always matches the source. The <strong>Output</strong> tabs show what each example printed against a real Blnk; your ids will differ.</p>
 <h2 id="what-you-need"><a class="anchor" href="#what-you-need">What you need</a></h2>
 <ul>
 <li>Go 1.27.1 or later.</li>
-<li>A <a href="https://docs.blnkfinance.com" target="_blank" rel="noopener">Blnk Core</a> 0.15.6 you can reach. The examples use <code>$BLNK_URL</code>, or <code>http://localhost:5001</code> if it&#39;s unset.</li>
+<li>A <a href="https://docs.blnkfinance.com" target="_blank" rel="noopener">Blnk Core</a> 0.15.6 you can reach. The examples use <code>$BLNK_URL</code>, or <code>http://localhost:5001</code> if it&#39;s unset. To run one locally, with its worker, Postgres and Redis:</li>
 </ul>
+<figure class="code"><figcaption><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-sh">  docker compose -f deploy/docker-compose.yml up -d</code></pre></figure>
 <p>Every example creates its own ledger and customers, so you can run them in any order, as often as you like:</p>
 <figure class="code"><figcaption><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-sh">BLNK_URL=https://blnk.example.com go run ./docs/examples/05-transfers</code></pre></figure>
 <h2 id="the-ideas-in-one-minute"><a class="anchor" href="#the-ideas-in-one-minute">The ideas in one minute</a></h2>
@@ -70,7 +81,7 @@
 <li><strong><code>money.Money</code></strong> is an exact amount in one currency. Never a float.</li>
 <li><strong>An account</strong> holds money in one currency. A customer&#39;s account always has an <strong>owner</strong>: a Blnk identity that holds no personal data.</li>
 <li><strong>A transaction</strong> moves money <code>From</code> some postings <code>To</code> others, in one atomic write. Every transaction carries a <strong>reference</strong> built from your own ids, so a retry can never apply it twice.</li>
-<li><strong>System accounts</strong> are HumanBlnk&#39;s own: <code>@World</code> (outside HumanBlnk), <code>@FeeIncome</code>, and a clearing account per payment provider. They may go below zero; customer accounts never do.</li>
+<li><strong>System accounts</strong> are your company&#39;s own: <code>@World</code> (money outside your books), <code>@FeeIncome</code>, and a clearing account per payment provider. They may go below zero; customer accounts never do.</li>
 <li><strong>A hold</strong> reserves money now and settles it later.</li>
 <li><strong>A reversal</strong> moves money back the way an entry moved it.</li>
 </ul>

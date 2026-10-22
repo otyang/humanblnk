@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>2. Customers and accounts · HumanBlnk tutorial</title>
-<meta name="description" content="A hands-on guide to building money features with HumanBlnk, with real Go examples.">
+<title>2. Customers and accounts · humanblnk tutorial</title>
+<meta name="description" content="A hands-on guide to building money features with humanblnk, with real Go examples.">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
 <link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 <header class="topbar">
   <button class="menu" type="button" aria-label="Chapters" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
 </header>
 <div class="shell">
 <nav class="sidebar" aria-label="Chapters">
-  <a class="brand" href="index.html">HumanBlnk <span>tutorial</span></a>
+  <a class="brand" href="index.html">humanblnk <span>tutorial</span></a>
   
   
   <ul>
@@ -56,7 +56,7 @@
   <article>
     <p class="eyebrow">Chapter 2 · Foundations</p>
     <h1 id="customers-and-accounts"><a class="anchor" href="#customers-and-accounts">Customers and accounts</a></h1>
-<p><strong>Scenario:</strong> Ada signs up. She gets a naira wallet straight away, and later a dollar wallet. HumanBlnk also needs an escrow pool of its own.</p>
+<p><strong>Scenario:</strong> Ada signs up. She gets a naira wallet straight away, and later a dollar wallet. Your company also needs an escrow pool of its own.</p>
 <h2 id="step-1-the-owner"><a class="anchor" href="#step-1-the-owner">Step 1: the owner</a></h2>
 <p>Every customer account has an <strong>owner</strong>: a Blnk identity that holds <strong>no personal data</strong>. Ada&#39;s name, phone number and KYC stay in your own customer database; the identity holds only references such as your customer id.</p>
 <p>Find it, or make it the first time, so a retried sign-up doesn&#39;t make a second one. <code>Identities.Create</code> on its own isn&#39;t safe to repeat.</p>
@@ -128,8 +128,8 @@ if err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;owner meta:&#34;, meta)</code></pre></figure>
-<h2 id="humanblnk-s-own-accounts"><a class="anchor" href="#humanblnk-s-own-accounts">HumanBlnk&#39;s own accounts</a></h2>
-<p>An account that belongs to HumanBlnk uses <code>CreateInternal</code>, in a ledger that isn&#39;t a customer one. The owner is optional. Unlike <code>OpenForCustomer</code>, it makes a new account on every call: if it times out, look with <code>List</code> first.</p>
+<h2 id="your-company-s-own-accounts"><a class="anchor" href="#your-company-s-own-accounts">Your company&#39;s own accounts</a></h2>
+<p>An account that belongs to your company uses <code>CreateInternal</code>, in a ledger that isn&#39;t a customer one. The owner is optional. Unlike <code>OpenForCustomer</code>, it makes a new account on every call: if it times out, look with <code>List</code> first.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/02-onboarding/main.go" target="_blank" rel="noopener">02-onboarding/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">ops, err := hb.Ledgers.Create(ctx, &#34;Operations &#34;+demo.Run, nil)
 if err != nil {
     log.Fatal(err)
@@ -227,7 +227,7 @@ func main() {
     }
     fmt.Println(&#34;owner meta:&#34;, meta)
 
-    // 6. An account for HumanBlnk itself, not a customer: CreateInternal, in a
+    // 6. An account for your company itself, not a customer: CreateInternal, in a
     // ledger that isn&#39;t a customer one.
     ops, err := hb.Ledgers.Create(ctx, &#34;Operations &#34;+demo.Run, nil)
     if err != nil {
