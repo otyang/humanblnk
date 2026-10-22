@@ -1,5 +1,5 @@
 // Package holds places, captures and cancels holds: money reserved now and
-// settled later. Use it through humanblnk.Ledger.Holds.
+// settled later. Use it through humanblnk.Client.Holds.
 //
 // Blnk never changes a hold's own transaction: capturing or cancelling one
 // records a new transaction (APPLIED or VOID) that names the hold as its

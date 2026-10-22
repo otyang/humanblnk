@@ -17,12 +17,12 @@ import (
 // charge. paystackRef is Paystack's own id for it, so a retried webhook
 // carries the same one.
 // snippet:deposit
-func deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
+func deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
 	m, err := money.Parse(amount, wallet.Currency) // the amount the webhook carried
 	if err != nil {
 		return humanblnk.Entry{}, err
 	}
-	return books.Transactions.Record(ctx, humanblnk.Transaction{
+	return hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref:         humanblnk.Reference("deposit", "paystack", paystackRef),
 		From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), m), // Paystack owes HumanBlnk this
 		To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
@@ -34,39 +34,39 @@ func deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Acco
 // end-snippet
 
 func main() {
-	ctx, books := demo.Setup()
-	ada := demo.Customer(ctx, books, "ada", demo.NGN)
+	ctx, hb := demo.Setup()
+	ada := demo.Customer(ctx, hb, "ada", demo.NGN)
 	psRef := "ps_" + demo.Run
 
 	// The webhook arrives.
-	e, err := deposit(ctx, books, ada, psRef, "25000")
+	e, err := deposit(ctx, hb, ada, psRef, "25000")
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("recorded", e.ID, e.Amount, e.Status)
-	fmt.Println("Ada can spend:", demo.Available(ctx, books, ada.ID))
+	fmt.Println("Ada can spend:", demo.Available(ctx, hb, ada.ID))
 
 	// Paystack sends the same webhook again (it does, on timeouts).
 	// snippet:retry
-	again, err := deposit(ctx, books, ada, psRef, "25000")
+	again, err := deposit(ctx, hb, ada, psRef, "25000")
 	switch {
 	case errors.Is(err, humanblnk.ErrDuplicate):
 		fmt.Println("retried webhook: already recorded as", again.ID, "- answer 200 OK and move on")
 	case err != nil:
 		log.Fatal(err)
 	}
-	fmt.Println("Ada can still spend:", demo.Available(ctx, books, ada.ID))
+	fmt.Println("Ada can still spend:", demo.Available(ctx, hb, ada.ID))
 	// end-snippet
 
 	// A forged or buggy webhook reusing the reference for another amount.
 	// snippet:forged
-	_, err = deposit(ctx, books, ada, psRef, "99999")
+	_, err = deposit(ctx, hb, ada, psRef, "99999")
 	fmt.Println("same reference, different amount:", errors.Is(err, humanblnk.ErrReferenceUsed))
 	// end-snippet
 
 	// Look a deposit up by your reference, e.g. from a support tool.
 	// snippet:lookup
-	found, err := books.Transactions.GetByReference(ctx, humanblnk.Reference("deposit", "paystack", psRef))
+	found, err := hb.Transactions.GetByReference(ctx, humanblnk.Reference("deposit", "paystack", psRef))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func main() {
 	// and Paystack no longer owes it. The clearing account returns to zero.
 	// snippet:settle
 	settled := money.MustParse("25000", demo.NGN)
-	if _, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+	if _, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref:         humanblnk.Reference("settlement", "paystack", "stl_"+demo.Run),
 		From:        humanblnk.Single(humanblnk.World, settled),
 		To:          humanblnk.Single(humanblnk.ClearingAccount("paystack"), settled),

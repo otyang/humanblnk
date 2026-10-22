@@ -28,7 +28,7 @@ func TestIntegrationRetryAfterRolledBackSplit(t *testing.T) {
 		),
 		To: humanblnk.Single(humanblnk.AccountRef(shop.ID), usdT("105")), Description: "group payment",
 	}
-	_, err := w.books.Transactions.Record(ctx, payment)
+	_, err := w.hb.Transactions.Record(ctx, payment)
 	if !errors.Is(err, humanblnk.ErrInsufficientFunds) {
 		t.Fatalf("first attempt: %v", err)
 	}
@@ -42,15 +42,15 @@ func TestIntegrationRetryAfterRolledBackSplit(t *testing.T) {
 	}
 	t.Logf("rollback refund landed after %v", time.Since(start).Round(time.Millisecond))
 	w.fund(t, ctx, bola, "10")
-	if _, err := w.books.Transactions.Record(ctx, payment); !errors.Is(err, humanblnk.ErrReferenceUsed) {
+	if _, err := w.hb.Transactions.Record(ctx, payment); !errors.Is(err, humanblnk.ErrReferenceUsed) {
 		t.Fatalf("retry: %v, want ErrReferenceUsed", err)
 	}
-	if e, err := w.books.Transactions.GetByReference(ctx, payment.Ref); err == nil && e.Status == humanblnk.StatusApplied {
+	if e, err := w.hb.Transactions.GetByReference(ctx, payment.Ref); err == nil && e.Status == humanblnk.StatusApplied {
 		t.Fatalf("GetByReference calls the rolled-back split %s", e.Status)
 	}
 	// A new reference records it.
 	payment.Ref = w.ref("split-rollback-2")
-	if _, err := w.books.Transactions.Record(ctx, payment); err != nil {
+	if _, err := w.hb.Transactions.Record(ctx, payment); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -60,17 +60,17 @@ func TestIntegrationPartialReversalOfAPayout(t *testing.T) {
 	ctx, w := setup(t)
 	ada := w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100") // @World goes below zero here
-	payout, err := w.books.Transactions.Record(ctx, humanblnk.Transaction{
+	payout, err := w.hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref: w.ref("payout"), From: humanblnk.Single(humanblnk.AccountRef(ada.ID), usdT("100")),
 		To: humanblnk.Single(humanblnk.World, usdT("100")), Description: "payout",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: w.ref("bounce-part"), Entry: payout.ID, Amount: usdT("40"), Reason: "partly bounced"}); err != nil {
+	if _, err := w.hb.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: w.ref("bounce-part"), Entry: payout.ID, Amount: usdT("40"), Reason: "partly bounced"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := w.books.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: w.ref("bounce-rest"), Entry: payout.ID, Reason: "rest bounced"}); err != nil {
+	if _, err := w.hb.Transactions.Reverse(ctx, humanblnk.Reversal{Ref: w.ref("bounce-rest"), Entry: payout.ID, Reason: "rest bounced"}); err != nil {
 		t.Fatal(err)
 	}
 	if got := w.available(t, ctx, ada); got != "100.00" {
@@ -83,7 +83,7 @@ func TestIntegrationFullAndPartialReversalsRace(t *testing.T) {
 	ctx, w := setup(t)
 	ada, shop := w.account(t, ctx, iusd), w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100")
-	e, err := w.books.Transactions.Record(ctx, humanblnk.Transaction{
+	e, err := w.hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref: w.ref("buy-mixed"), From: humanblnk.Single(humanblnk.AccountRef(ada.ID), usdT("100")),
 		To: humanblnk.Single(humanblnk.AccountRef(shop.ID), usdT("100")), Description: "purchase",
 	})
@@ -97,7 +97,7 @@ func TestIntegrationFullAndPartialReversalsRace(t *testing.T) {
 			if i%2 == 1 {
 				r.Amount = usdT("40")
 			}
-			_, err := w.books.Transactions.Reverse(ctx, r)
+			_, err := w.hb.Transactions.Reverse(ctx, r)
 			done <- err
 		}()
 	}
@@ -121,7 +121,7 @@ func TestIntegrationRolledBackSplitReversal(t *testing.T) {
 	ctx, w := setup(t)
 	ada, bola, cara := w.account(t, ctx, iusd), w.account(t, ctx, iusd), w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100")
-	e, err := w.books.Transactions.Record(ctx, humanblnk.Transaction{
+	e, err := w.hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref: w.ref("pay-two"), From: humanblnk.Single(humanblnk.AccountRef(ada.ID), usdT("100")),
 		To: humanblnk.Many(
 			humanblnk.Posting{Account: humanblnk.AccountRef(bola.ID), Amount: usdT("50")},
@@ -132,18 +132,18 @@ func TestIntegrationRolledBackSplitReversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := w.books.Transactions.Get(ctx, e.ID); err != nil || got.Status != humanblnk.StatusApplied || got.Amount.String() != "100.00" {
+	if got, err := w.hb.Transactions.Get(ctx, e.ID); err != nil || got.Status != humanblnk.StatusApplied || got.Amount.String() != "100.00" {
 		t.Fatalf("the split, read back: %+v %v", got, err)
 	}
 	// Cara spends hers, so the reversal can't take it back.
-	if _, err := w.books.Transactions.Record(ctx, humanblnk.Transaction{
+	if _, err := w.hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref: w.ref("cara-spends"), From: humanblnk.Single(humanblnk.AccountRef(cara.ID), usdT("50")),
 		To: humanblnk.Single(humanblnk.World, usdT("50")), Description: "spent",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	refund := humanblnk.Reversal{Ref: w.ref("refund-split"), Entry: e.ID, Reason: "order cancelled"}
-	if _, err := w.books.Transactions.Reverse(ctx, refund); !errors.Is(err, humanblnk.ErrInsufficientFunds) {
+	if _, err := w.hb.Transactions.Reverse(ctx, refund); !errors.Is(err, humanblnk.ErrInsufficientFunds) {
 		t.Fatalf("first attempt: %v", err)
 	}
 	// Whatever part applied is rolled back a moment later.
@@ -157,7 +157,7 @@ func TestIntegrationRolledBackSplitReversal(t *testing.T) {
 	}
 
 	w.fund(t, ctx, cara, "50")
-	if _, err := w.books.Transactions.Reverse(ctx, refund); err != nil {
+	if _, err := w.hb.Transactions.Reverse(ctx, refund); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
 	if got := w.available(t, ctx, ada); got != "100.00" {
@@ -167,7 +167,7 @@ func TestIntegrationRolledBackSplitReversal(t *testing.T) {
 		t.Fatalf("bola %s, cara %s after the refund; want 0.00 each", b, c)
 	}
 	// Once more with the same Ref: the same reversal, nothing moves.
-	if _, err := w.books.Transactions.Reverse(ctx, refund); err != nil || w.available(t, ctx, ada) != "100.00" {
+	if _, err := w.hb.Transactions.Reverse(ctx, refund); err != nil || w.available(t, ctx, ada) != "100.00" {
 		t.Fatalf("repeat: %v, ada %s", err, w.available(t, ctx, ada))
 	}
 }

@@ -61,12 +61,12 @@
 <p>When the webhook arrives, Paystack has the money, not HumanBlnk. So the deposit comes <strong>from Paystack&#39;s clearing account</strong>, <code>humanblnk.ClearingAccount(&#34;paystack&#34;)</code> (<code>@PaystackClearing</code>). It goes below zero: Paystack owes HumanBlnk that much. When Paystack settles, it returns to zero, so a balance left in a clearing account is money still in transit.</p>
 <h2 id="step-1-record-the-deposit"><a class="anchor" href="#step-1-record-the-deposit">Step 1: record the deposit</a></h2>
 <p>This is what your Paystack webhook handler does with a successful charge:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">func deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
     m, err := money.Parse(amount, wallet.Currency) // the amount the webhook carried
     if err != nil {
         return humanblnk.Entry{}, err
     }
-    return books.Transactions.Record(ctx, humanblnk.Transaction{
+    return hb.Transactions.Record(ctx, humanblnk.Transaction{
         Ref:         humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef),
         From:        humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes HumanBlnk this
         To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
@@ -84,16 +84,16 @@
 <p><code>humanblnk.AccountRef(wallet.ID)</code> names a customer&#39;s account; <code>humanblnk.ClearingAccount(...)</code>, <code>humanblnk.World</code> and <code>humanblnk.FeeIncome</code> name system accounts.</p>
 <h2 id="step-2-the-retried-webhook"><a class="anchor" href="#step-2-the-retried-webhook">Step 2: the retried webhook</a></h2>
 <p>Paystack resends webhooks on timeouts. Recording again with the same <code>Ref</code> can&#39;t apply twice:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">again, err := deposit(ctx, books, ada, psRef, &#34;25000&#34;)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">again, err := deposit(ctx, hb, ada, psRef, &#34;25000&#34;)
 switch {
 case errors.Is(err, humanblnk.ErrDuplicate):
     fmt.Println(&#34;retried webhook: already recorded as&#34;, again.ID, &#34;- answer 200 OK and move on&#34;)
 case err != nil:
     log.Fatal(err)
 }
-fmt.Println(&#34;Ada can still spend:&#34;, demo.Available(ctx, books, ada.ID))</code></pre></figure>
+fmt.Println(&#34;Ada can still spend:&#34;, demo.Available(ctx, hb, ada.ID))</code></pre></figure>
 <p>A forged or buggy webhook that reuses the reference for another amount is caught too:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = deposit(ctx, books, ada, psRef, &#34;99999&#34;)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = deposit(ctx, hb, ada, psRef, &#34;99999&#34;)
 fmt.Println(&#34;same reference, different amount:&#34;, errors.Is(err, humanblnk.ErrReferenceUsed))</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Error</th><th>Means</th><th>Do</th></tr></thead><tbody>
@@ -102,7 +102,7 @@ fmt.Println(&#34;same reference, different amount:&#34;, errors.Is(err, humanbln
 </tbody></table></div>
 <h2 id="step-3-look-it-up"><a class="anchor" href="#step-3-look-it-up">Step 3: look it up</a></h2>
 <p><code>GetByReference</code> is how you ask &#34;did this already happen?&#34;, for example from a support tool. <code>Get(ctx, id)</code> fetches by entry id.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">found, err := books.Transactions.GetByReference(ctx, humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, psRef))
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">found, err := hb.Transactions.GetByReference(ctx, humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, psRef))
 if err != nil {
     log.Fatal(err)
 }
@@ -110,7 +110,7 @@ fmt.Println(&#34;found by reference:&#34;, found.ID, found.Amount, found.Meta[&#
 <h2 id="step-4-paystack-settles"><a class="anchor" href="#step-4-paystack-settles">Step 4: Paystack settles</a></h2>
 <p>When the money reaches HumanBlnk&#39;s bank, Paystack no longer owes it. It moves from outside HumanBlnk (<code>@World</code>) into the clearing account, bringing it back to zero:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/04-deposits/main.go" target="_blank" rel="noopener">04-deposits/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">settled := money.MustParse(&#34;25000&#34;, demo.NGN)
-if _, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+if _, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
     Ref:         humanblnk.Reference(&#34;settlement&#34;, &#34;paystack&#34;, &#34;stl_&#34;+demo.Run),
     From:        humanblnk.Single(humanblnk.World, settled),
     To:          humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), settled),
@@ -141,12 +141,12 @@ import (
 // deposit is what your Paystack webhook handler does with a successful
 // charge. paystackRef is Paystack&#39;s own id for it, so a retried webhook
 // carries the same one.
-func deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
+func deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account, paystackRef, amount string) (humanblnk.Entry, error) {
     m, err := money.Parse(amount, wallet.Currency) // the amount the webhook carried
     if err != nil {
         return humanblnk.Entry{}, err
     }
-    return books.Transactions.Record(ctx, humanblnk.Transaction{
+    return hb.Transactions.Record(ctx, humanblnk.Transaction{
         Ref:         humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, paystackRef),
         From:        humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), m), // Paystack owes HumanBlnk this
         To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
@@ -156,34 +156,34 @@ func deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Acco
 }
 
 func main() {
-    ctx, books := demo.Setup()
-    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
+    ctx, hb := demo.Setup()
+    ada := demo.Customer(ctx, hb, &#34;ada&#34;, demo.NGN)
     psRef := &#34;ps_&#34; + demo.Run
 
     // The webhook arrives.
-    e, err := deposit(ctx, books, ada, psRef, &#34;25000&#34;)
+    e, err := deposit(ctx, hb, ada, psRef, &#34;25000&#34;)
     if err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;recorded&#34;, e.ID, e.Amount, e.Status)
-    fmt.Println(&#34;Ada can spend:&#34;, demo.Available(ctx, books, ada.ID))
+    fmt.Println(&#34;Ada can spend:&#34;, demo.Available(ctx, hb, ada.ID))
 
     // Paystack sends the same webhook again (it does, on timeouts).
-    again, err := deposit(ctx, books, ada, psRef, &#34;25000&#34;)
+    again, err := deposit(ctx, hb, ada, psRef, &#34;25000&#34;)
     switch {
     case errors.Is(err, humanblnk.ErrDuplicate):
         fmt.Println(&#34;retried webhook: already recorded as&#34;, again.ID, &#34;- answer 200 OK and move on&#34;)
     case err != nil:
         log.Fatal(err)
     }
-    fmt.Println(&#34;Ada can still spend:&#34;, demo.Available(ctx, books, ada.ID))
+    fmt.Println(&#34;Ada can still spend:&#34;, demo.Available(ctx, hb, ada.ID))
 
     // A forged or buggy webhook reusing the reference for another amount.
-    _, err = deposit(ctx, books, ada, psRef, &#34;99999&#34;)
+    _, err = deposit(ctx, hb, ada, psRef, &#34;99999&#34;)
     fmt.Println(&#34;same reference, different amount:&#34;, errors.Is(err, humanblnk.ErrReferenceUsed))
 
     // Look a deposit up by your reference, e.g. from a support tool.
-    found, err := books.Transactions.GetByReference(ctx, humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, psRef))
+    found, err := hb.Transactions.GetByReference(ctx, humanblnk.Reference(&#34;deposit&#34;, &#34;paystack&#34;, psRef))
     if err != nil {
         log.Fatal(err)
     }
@@ -192,7 +192,7 @@ func main() {
     // Days later Paystack settles: the money reaches HumanBlnk&#39;s bank account,
     // and Paystack no longer owes it. The clearing account returns to zero.
     settled := money.MustParse(&#34;25000&#34;, demo.NGN)
-    if _, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+    if _, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
         Ref:         humanblnk.Reference(&#34;settlement&#34;, &#34;paystack&#34;, &#34;stl_&#34;+demo.Run),
         From:        humanblnk.Single(humanblnk.World, settled),
         To:          humanblnk.Single(humanblnk.ClearingAccount(&#34;paystack&#34;), settled),

@@ -1,4 +1,4 @@
-// Chapter 1: create the ledgers once, then build the Ledger your service
+// Chapter 1: create the ledgers once, then build the Client your service
 // uses from their ids.
 package main
 
@@ -25,15 +25,15 @@ func main() {
 	// snippet:once
 	setup := humanblnk.New(client)
 	suffix := time.Now().Format("150405") // only so this example can run twice
-	wallets, err := setup.Books.Create(ctx, "Customer Wallets "+suffix, nil)
+	wallets, err := setup.Ledgers.Create(ctx, "Customer Wallets "+suffix, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	savings, err := setup.Books.Create(ctx, "Savings "+suffix, nil)
+	savings, err := setup.Ledgers.Create(ctx, "Savings "+suffix, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	ops, err := setup.Books.Create(ctx, "Operations "+suffix, nil)
+	ops, err := setup.Ledgers.Create(ctx, "Operations "+suffix, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,24 +43,24 @@ func main() {
 	fmt.Println("  OPS_LEDGER     =", ops.ID)
 	// end-snippet
 
-	// --- At start-up, every time: one Ledger for the whole service ---
+	// --- At start-up, every time: one Client for the whole service ---
 	// snippet:startup
-	books := humanblnk.New(client,
+	hb := humanblnk.New(client,
 		humanblnk.WithAccountLedger(wallets.ID),   // where customer wallets open
 		humanblnk.WithCustomerLedgers(savings.ID), // other customer-only ledgers
 	)
 
 	// The services hang off it.
-	_ = books.Identities     // owners of customer accounts
-	_ = books.Accounts       // open, create and read accounts
-	_ = books.Transactions   // record, preview, reverse and read money movements
-	_ = books.Holds          // reserve money, then capture or cancel
-	_ = books.Watches        // balance thresholds that fire a webhook
-	_ = books.Reconciliation // match provider statements against entries
-	_ = books.Books          // the ledgers themselves
+	_ = hb.Identities     // owners of customer accounts
+	_ = hb.Accounts       // open, create and read accounts
+	_ = hb.Transactions   // record, preview, reverse and read money movements
+	_ = hb.Holds          // reserve money, then capture or cancel
+	_ = hb.Watches        // balance thresholds that fire a webhook
+	_ = hb.Reconciliation // match provider statements against entries
+	_ = hb.Ledgers        // the ledgers themselves
 	// end-snippet
 
-	all, err := books.Books.List(ctx, 3, 0)
+	all, err := hb.Ledgers.List(ctx, 3, 0)
 	if err != nil {
 		log.Fatal(err)
 	}

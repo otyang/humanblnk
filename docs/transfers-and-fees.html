@@ -75,7 +75,7 @@
 <p>Both sides must add up to the same amount, or it&#39;s <code>ErrUnbalanced</code>. One side may have several postings, but not both: Blnk moves one account to many, or many to one.</p>
 <h2 id="step-2-the-dry-run"><a class="anchor" href="#step-2-the-dry-run">Step 2: the dry run</a></h2>
 <p><code>Preview</code> checks the transaction exactly as <code>Record</code> would, funds included, but moves nothing and leaves the reference unused:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">p, err := books.Transactions.Preview(ctx, t)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">p, err := hb.Transactions.Preview(ctx, t)
 if err != nil {
     log.Fatal(err) // the request itself is wrong: bad account, currency, …
 }
@@ -87,20 +87,20 @@ for _, c := range p.Changes {
 <aside class="note"><p><strong>A preview is not a reservation.</strong> Another payment can spend the money between <code>Preview</code> and <code>Record</code>, and <code>Record</code> checks funds again. To reserve money, use a hold (chapter 6).</p></aside>
 <h2 id="step-3-record-it"><a class="anchor" href="#step-3-record-it">Step 3: record it</a></h2>
 <p>The same transaction, for real:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">e, err := books.Transactions.Record(ctx, t)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">e, err := hb.Transactions.Record(ctx, t)
 if err != nil {
     log.Fatal(err)
 }
 fmt.Printf(&#34;recorded %s: %s from Ada, %d postings to\n&#34;, e.ID, e.Amount, len(e.To))
-fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, books, bola.ID))</code></pre></figure>
+fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, hb, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, hb, bola.ID))</code></pre></figure>
 <p>If Ada can&#39;t afford it, the dry run says why, and <code>Record</code> refuses with <code>humanblnk.ErrInsufficientFunds</code>. Nothing moves:</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">big := transfer(&#34;tr_big_&#34;+demo.Run, ada, bola, money.MustParse(&#34;100000&#34;, demo.NGN))
-p, _ = books.Transactions.Preview(ctx, big)
+p, _ = hb.Transactions.Preview(ctx, big)
 fmt.Println(&#34;too much, would apply:&#34;, p.WouldApply, &#34;| because:&#34;, p.Rejection)
-_, err = books.Transactions.Record(ctx, big)
+_, err = hb.Transactions.Record(ctx, big)
 fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))</code></pre></figure>
 <h2 id="step-4-her-history"><a class="anchor" href="#step-4-her-history">Step 4: her history</a></h2>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">out, n, err := books.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/05-transfers/main.go" target="_blank" rel="noopener">05-transfers/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">out, n, err := hb.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
 if err != nil {
     log.Fatal(err)
 }
@@ -144,15 +144,15 @@ func transfer(id string, from, to humanblnk.Account, amount money.Money) humanbl
 }
 
 func main() {
-    ctx, books := demo.Setup()
-    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
-    bola := demo.Customer(ctx, books, &#34;bola&#34;, demo.NGN)
-    demo.Deposit(ctx, books, ada, &#34;50000&#34;)
+    ctx, hb := demo.Setup()
+    ada := demo.Customer(ctx, hb, &#34;ada&#34;, demo.NGN)
+    bola := demo.Customer(ctx, hb, &#34;bola&#34;, demo.NGN)
+    demo.Deposit(ctx, hb, ada, &#34;50000&#34;)
 
     t := transfer(&#34;tr_&#34;+demo.Run, ada, bola, money.MustParse(&#34;10000&#34;, demo.NGN))
 
     // 1. Dry run: what would happen? Nothing moves, and the reference stays free.
-    p, err := books.Transactions.Preview(ctx, t)
+    p, err := hb.Transactions.Preview(ctx, t)
     if err != nil {
         log.Fatal(err) // the request itself is wrong: bad account, currency, …
     }
@@ -162,23 +162,23 @@ func main() {
     }
 
     // 2. Do it, with the same transaction.
-    e, err := books.Transactions.Record(ctx, t)
+    e, err := hb.Transactions.Record(ctx, t)
     if err != nil {
         log.Fatal(err)
     }
     fmt.Printf(&#34;recorded %s: %s from Ada, %d postings to\n&#34;, e.ID, e.Amount, len(e.To))
-    fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, books, bola.ID))
+    fmt.Println(&#34;Ada:&#34;, demo.Available(ctx, hb, ada.ID), &#34;| Bola:&#34;, demo.Available(ctx, hb, bola.ID))
 
     // 3. Too much: the dry run says why, and Record refuses.
     big := transfer(&#34;tr_big_&#34;+demo.Run, ada, bola, money.MustParse(&#34;100000&#34;, demo.NGN))
-    p, _ = books.Transactions.Preview(ctx, big)
+    p, _ = hb.Transactions.Preview(ctx, big)
     fmt.Println(&#34;too much, would apply:&#34;, p.WouldApply, &#34;| because:&#34;, p.Rejection)
-    _, err = books.Transactions.Record(ctx, big)
+    _, err = hb.Transactions.Record(ctx, big)
     fmt.Println(&#34;recording it anyway: insufficient funds?&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))
 
     // 4. Ada&#39;s history: money out of her wallet, newest first. (Money into
     // it is a second query with To set.)
-    out, n, err := books.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
+    out, n, err := hb.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
     if err != nil {
         log.Fatal(err)
     }

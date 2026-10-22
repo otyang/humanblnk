@@ -1,7 +1,7 @@
 # Cheat sheet
 
 Everything on one page. Import `github.com/otyang/humanblnk`; every type
-below is `humanblnk.X`. Build one `*humanblnk.Ledger` at start-up with
+below is `humanblnk.X`. Build one `*humanblnk.Client` at start-up with
 `humanblnk.New(client, humanblnk.WithAccountLedger(id), humanblnk.WithCustomerLedgers(ids...))`
 (chapter 1).
 
@@ -9,13 +9,13 @@ below is `humanblnk.X`. Build one `*humanblnk.Ledger` at start-up with
 
 | Service | Methods |
 | --- | --- |
-| `books.Identities` | `Create(ctx, meta) (string, error)`, `Get(ctx, id)`, `UpdateMeta(ctx, id, meta)`, `FindByCustomer(ctx, customerID)` |
-| `books.Accounts` | `OpenForCustomer(ctx, CustomerAccount)`, `CreateInternal(ctx, NewAccount)`, `Get(ctx, id)`, `List(ctx, AccountQuery)` |
-| `books.Transactions` | `Record(ctx, Transaction)`, `RecordAll(ctx, []Transaction)`, `Preview(ctx, Transaction)`, `Reverse(ctx, Reversal)`, `Get(ctx, id)`, `GetByReference(ctx, ref)`, `List(ctx, EntryQuery)` |
-| `books.Holds` | `Place(ctx, Transaction, expires) (HoldID, error)`, `Capture(ctx, HoldID, amount)`, `Cancel(ctx, HoldID)` |
-| `books.Watches` | `Create(ctx, Watch)`, `Get(ctx, WatchID)`, `List(ctx, account)`, `Change(ctx, WatchID, Watch)`, `Delete(ctx, WatchID)` |
-| `books.Reconciliation` | `AddRule`, `ChangeRule`, `RemoveRule`, `Upload(ctx, source, filename, r)`, `Run(ctx, StatementID, Run)`, `RunLines(ctx, []StatementLine, Run)`, `Result(ctx, RunID)` |
-| `books.Books` | `Create(ctx, name, meta)`, `Get(ctx, id)`, `List(ctx, limit, offset)`, `Rename(ctx, id, name)` |
+| `hb.Identities` | `Create(ctx, meta) (string, error)`, `Get(ctx, id)`, `UpdateMeta(ctx, id, meta)`, `FindByCustomer(ctx, customerID)` |
+| `hb.Accounts` | `OpenForCustomer(ctx, CustomerAccount)`, `CreateInternal(ctx, NewAccount)`, `Get(ctx, id)`, `List(ctx, AccountQuery)` |
+| `hb.Transactions` | `Record(ctx, Transaction)`, `RecordAll(ctx, []Transaction)`, `Preview(ctx, Transaction)`, `Reverse(ctx, Reversal)`, `Get(ctx, id)`, `GetByReference(ctx, ref)`, `List(ctx, EntryQuery)` |
+| `hb.Holds` | `Place(ctx, Transaction, expires) (HoldID, error)`, `Capture(ctx, HoldID, amount)`, `Cancel(ctx, HoldID)` |
+| `hb.Watches` | `Create(ctx, Watch)`, `Get(ctx, WatchID)`, `List(ctx, account)`, `Change(ctx, WatchID, Watch)`, `Delete(ctx, WatchID)` |
+| `hb.Reconciliation` | `AddRule`, `ChangeRule`, `RemoveRule`, `Upload(ctx, source, filename, r)`, `Run(ctx, StatementID, Run)`, `RunLines(ctx, []StatementLine, Run)`, `Result(ctx, RunID)` |
+| `hb.Ledgers` | `Create(ctx, name, meta)`, `Get(ctx, id)`, `List(ctx, limit, offset)`, `Rename(ctx, id, name)` |
 | package function | `humanblnk.VerifyWebhook(secret, r, tolerance) (Event, error)` |
 
 ## Naming accounts

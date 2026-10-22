@@ -1,7 +1,6 @@
 # Setting up
 
-Blnk groups accounts into **ledgers** (humanblnk calls them books, keeping the
-word ledger for the whole system). HumanBlnk needs only a few, made **once**:
+Blnk groups accounts into **ledgers**. HumanBlnk needs only a few, made **once**:
 
 | Ledger | Holds |
 | --- | --- |
@@ -17,15 +16,15 @@ transaction uses them.
 ## Step 1: create the ledgers, once
 
 Run this from a setup script or migration, **not** when your service starts.
-`Books.Create` isn't safe to repeat: each call makes another ledger. If
+`Ledgers.Create` isn't safe to repeat: each call makes another ledger. If
 you're not sure the setup already ran, look first with
-`Books.List(ctx, 10, 0)`.
+`Ledgers.List(ctx, 10, 0)`.
 
 {{code 01-setup/main.go once}}
 
-## Step 2: build the Ledger at start-up
+## Step 2: build the Client at start-up
 
-Every time your service starts, build one `*humanblnk.Ledger` from the ids in
+Every time your service starts, build one `*humanblnk.Client` from the ids in
 your config, and share it. Everything hangs off it:
 
 {{code 01-setup/main.go startup}}

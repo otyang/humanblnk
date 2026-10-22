@@ -59,7 +59,7 @@
 <p><strong>Scenario:</strong> HumanBlnk texts Ada when her balance drops below ₦2,000. Blnk tells HumanBlnk through a webhook, and HumanBlnk must be sure each webhook really came from Blnk.</p>
 <h2 id="step-1-watch-the-balance"><a class="anchor" href="#step-1-watch-the-balance">Step 1: watch the balance</a></h2>
 <p>A <strong>watch</strong> is a threshold on one account. While it holds, Blnk sends the webhook event <code>balance.monitor</code> after every update of the account.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">low, err := books.Watches.Create(ctx, humanblnk.Watch{
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">low, err := hb.Watches.Create(ctx, humanblnk.Watch{
     Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
     Threshold: money.MustParse(&#34;1000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
 })
@@ -75,14 +75,14 @@ fmt.Println(&#34;watch&#34;, low.ID, &#34;on&#34;, low.Account, low.Field, low.O
 </tbody></table></div>
 <h2 id="step-2-move-the-line"><a class="anchor" href="#step-2-move-the-line">Step 2: move the line</a></h2>
 <p><code>Change</code> returns a watch with a <strong>new id</strong>: Blnk can&#39;t change a threshold in place, so the new watch is made before the old one is deleted. The account is never unwatched in between, but both may fire once. <code>List</code> with <code>&#34;&#34;</code> lists every watch.</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">low, err = books.Watches.Change(ctx, low.ID, humanblnk.Watch{
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">low, err = hb.Watches.Change(ctx, low.ID, humanblnk.Watch{
     Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
     Threshold: money.MustParse(&#34;2000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
 })
 if err != nil {
     log.Fatal(err)
 }
-watches, _ := books.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
+watches, _ := hb.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
 fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, watches[0].Threshold)</code></pre></figure>
 <h2 id="step-3-receive-webhooks-safely"><a class="anchor" href="#step-3-receive-webhooks-safely">Step 3: receive webhooks safely</a></h2>
 <p>Blnk signs each webhook with its <code>server.secret_key</code>. <code>humanblnk.VerifyWebhook</code> checks the signature and the age, then decodes it. Never act on a body that fails the check. This is the handler you mount at the URL Blnk sends webhooks to:</p>
@@ -110,7 +110,7 @@ fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, 
 </tbody></table></div>
 <p>The tolerance rejects old deliveries replayed by an attacker; five minutes is sensible. The example signs requests the way Blnk does and sends a genuine one and a forged one to a test server.</p>
 <h2 id="step-4-stop-watching"><a class="anchor" href="#step-4-stop-watching">Step 4: stop watching</a></h2>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">if err := books.Watches.Delete(ctx, low.ID); err != nil {
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/10-watches-and-webhooks/main.go" target="_blank" rel="noopener">10-watches-and-webhooks/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">if err := hb.Watches.Delete(ctx, low.ID); err != nil {
     log.Fatal(err)
 }
 fmt.Println(&#34;watch deleted&#34;)</code></pre></figure>
@@ -157,12 +157,12 @@ func webhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-    ctx, books := demo.Setup()
-    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
-    demo.Deposit(ctx, books, ada, &#34;5000&#34;)
+    ctx, hb := demo.Setup()
+    ada := demo.Customer(ctx, hb, &#34;ada&#34;, demo.NGN)
+    demo.Deposit(ctx, hb, ada, &#34;5000&#34;)
 
     // 1. Tell Blnk to fire &#34;balance.monitor&#34; while Ada&#39;s balance is under ₦1,000.
-    low, err := books.Watches.Create(ctx, humanblnk.Watch{
+    low, err := hb.Watches.Create(ctx, humanblnk.Watch{
         Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
         Threshold: money.MustParse(&#34;1000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
     })
@@ -172,14 +172,14 @@ func main() {
     fmt.Println(&#34;watch&#34;, low.ID, &#34;on&#34;, low.Account, low.Field, low.Op, low.Threshold)
 
     // Move the line: Change makes the new watch before deleting the old one.
-    low, err = books.Watches.Change(ctx, low.ID, humanblnk.Watch{
+    low, err = hb.Watches.Change(ctx, low.ID, humanblnk.Watch{
         Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
         Threshold: money.MustParse(&#34;2000&#34;, demo.NGN), Description: &#34;low balance alert&#34;,
     })
     if err != nil {
         log.Fatal(err)
     }
-    watches, _ := books.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
+    watches, _ := hb.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
     fmt.Println(&#34;watches on Ada:&#34;, len(watches), &#34;| threshold now&#34;, watches[0].Threshold)
 
     // 2. Receive webhooks. Here a test server stands in for your service,
@@ -205,7 +205,7 @@ func main() {
     send(&#34;not-the-secret&#34;, body)
 
     // 3. Stop watching.
-    if err := books.Watches.Delete(ctx, low.ID); err != nil {
+    if err := hb.Watches.Delete(ctx, low.ID); err != nil {
         log.Fatal(err)
     }
     fmt.Println(&#34;watch deleted&#34;)

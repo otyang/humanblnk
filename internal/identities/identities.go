@@ -1,7 +1,7 @@
 // Package identities creates and reads owners for customer accounts: Blnk
 // identities that hold no personal data. Names, phone numbers and KYC stay in
 // HumanBlnk's own customer records, which keep the identity's id. Use it through
-// humanblnk.Ledger.Identities.
+// humanblnk.Client.Identities.
 package identities
 
 import (

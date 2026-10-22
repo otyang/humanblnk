@@ -13,7 +13,7 @@ import (
 	"github.com/otyang/humanblnk/money"
 )
 
-// Holds is the part of the ledger airtime uses; books.Holds satisfies it,
+// Holds is the part of the ledger airtime uses; hb.Holds satisfies it,
 // and a test can pass a fake.
 // snippet:interfaces
 type Holds interface {

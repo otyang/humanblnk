@@ -1,5 +1,5 @@
 // Package transactions records, reverses and reads ledger transactions. Use
-// it through humanblnk.Ledger.Transactions.
+// it through humanblnk.Client.Transactions.
 package transactions
 
 import "github.com/otyang/humanblnk/internal/core"

@@ -21,14 +21,14 @@ var fxDesk = humanblnk.SystemAccount("FXDesk")
 // end-snippet
 
 func main() {
-	ctx, books := demo.Setup()
-	usdWallet := demo.Customer(ctx, books, "ada", demo.USD)
+	ctx, hb := demo.Setup()
+	usdWallet := demo.Customer(ctx, hb, "ada", demo.USD)
 	owner := usdWallet.Owner
-	ngnWallet, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
+	ngnWallet, err := hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
 	if err != nil {
 		log.Fatal(err)
 	}
-	demo.Deposit(ctx, books, usdWallet, "200")
+	demo.Deposit(ctx, hb, usdWallet, "200")
 
 	// Ada sells $100 at ₦1,550.25 to the dollar.
 	// snippet:exchange
@@ -51,28 +51,28 @@ func main() {
 			Description: "Buy NGN", Meta: humanblnk.Meta{"rate": rate.String()},
 		},
 	}
-	entries, err := books.Transactions.RecordAll(ctx, exchange)
+	entries, err := hb.Transactions.RecordAll(ctx, exchange)
 	if err != nil {
 		log.Fatal(err) // ErrReadBack: it applied, but reading it back failed; look it up, don't redo it
 	}
 	for _, e := range entries {
 		fmt.Printf("%s  %s %s\n", e.Ref, e.Amount, e.Amount.Code())
 	}
-	fmt.Println("USD:", demo.Available(ctx, books, usdWallet.ID), "| NGN:", demo.Available(ctx, books, ngnWallet.ID))
+	fmt.Println("USD:", demo.Available(ctx, hb, usdWallet.ID), "| NGN:", demo.Available(ctx, hb, ngnWallet.ID))
 	// end-snippet
 
 	// The app retries after a timeout: nothing moves twice.
 	// snippet:retry
-	_, err = books.Transactions.RecordAll(ctx, exchange)
+	_, err = hb.Transactions.RecordAll(ctx, exchange)
 	fmt.Println("retried:", errors.Is(err, humanblnk.ErrDuplicate))
 	// end-snippet
 
 	// Selling more than she has: neither half applies.
 	tooMuch := money.MustParse("500", demo.USD)
-	_, err = books.Transactions.RecordAll(ctx, []humanblnk.Transaction{
+	_, err = hb.Transactions.RecordAll(ctx, []humanblnk.Transaction{
 		{Ref: humanblnk.Reference("fx", id+"_big", "sell"), From: humanblnk.Single(humanblnk.AccountRef(usdWallet.ID), tooMuch), To: humanblnk.Single(fxDesk, tooMuch), Description: "Sell USD"},
 		{Ref: humanblnk.Reference("fx", id+"_big", "buy"), From: humanblnk.Single(fxDesk, money.MustParse("775125", demo.NGN)), To: humanblnk.Single(humanblnk.AccountRef(ngnWallet.ID), money.MustParse("775125", demo.NGN)), Description: "Buy NGN"},
 	})
 	fmt.Println("too much:", errors.Is(err, humanblnk.ErrInsufficientFunds))
-	fmt.Println("USD:", demo.Available(ctx, books, usdWallet.ID), "| NGN:", demo.Available(ctx, books, ngnWallet.ID))
+	fmt.Println("USD:", demo.Available(ctx, hb, usdWallet.ID), "| NGN:", demo.Available(ctx, hb, ngnWallet.ID))
 }

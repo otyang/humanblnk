@@ -82,14 +82,14 @@ exchange := []humanblnk.Transaction{
         Description: &#34;Buy NGN&#34;, Meta: humanblnk.Meta{&#34;rate&#34;: rate.String()},
     },
 }
-entries, err := books.Transactions.RecordAll(ctx, exchange)
+entries, err := hb.Transactions.RecordAll(ctx, exchange)
 if err != nil {
     log.Fatal(err) // ErrReadBack: it applied, but reading it back failed; look it up, don&#39;t redo it
 }
 for _, e := range entries {
     fmt.Printf(&#34;%s  %s %s\n&#34;, e.Ref, e.Amount, e.Amount.Code())
 }
-fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))</code></pre></figure>
+fmt.Println(&#34;USD:&#34;, demo.Available(ctx, hb, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, hb, ngnWallet.ID))</code></pre></figure>
 <p><code>RecordAll</code> rules:</p>
 <ul>
 <li>Every transaction applies, or none does.</li>
@@ -99,7 +99,7 @@ fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN
 </ul>
 <h2 id="retries-and-failures"><a class="anchor" href="#retries-and-failures">Retries and failures</a></h2>
 <p>A retry after a timeout moves nothing twice:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = books.Transactions.RecordAll(ctx, exchange)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/09-exchange/main.go" target="_blank" rel="noopener">09-exchange/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">_, err = hb.Transactions.RecordAll(ctx, exchange)
 fmt.Println(&#34;retried:&#34;, errors.Is(err, humanblnk.ErrDuplicate))</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Result</th><th>Means</th></tr></thead><tbody>
@@ -131,14 +131,14 @@ import (
 var fxDesk = humanblnk.SystemAccount(&#34;FXDesk&#34;)
 
 func main() {
-    ctx, books := demo.Setup()
-    usdWallet := demo.Customer(ctx, books, &#34;ada&#34;, demo.USD)
+    ctx, hb := demo.Setup()
+    usdWallet := demo.Customer(ctx, hb, &#34;ada&#34;, demo.USD)
     owner := usdWallet.Owner
-    ngnWallet, err := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
+    ngnWallet, err := hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: demo.NGN})
     if err != nil {
         log.Fatal(err)
     }
-    demo.Deposit(ctx, books, usdWallet, &#34;200&#34;)
+    demo.Deposit(ctx, hb, usdWallet, &#34;200&#34;)
 
     // Ada sells $100 at ₦1,550.25 to the dollar.
     sell := money.MustParse(&#34;100&#34;, demo.USD)
@@ -160,27 +160,27 @@ func main() {
             Description: &#34;Buy NGN&#34;, Meta: humanblnk.Meta{&#34;rate&#34;: rate.String()},
         },
     }
-    entries, err := books.Transactions.RecordAll(ctx, exchange)
+    entries, err := hb.Transactions.RecordAll(ctx, exchange)
     if err != nil {
         log.Fatal(err) // ErrReadBack: it applied, but reading it back failed; look it up, don&#39;t redo it
     }
     for _, e := range entries {
         fmt.Printf(&#34;%s  %s %s\n&#34;, e.Ref, e.Amount, e.Amount.Code())
     }
-    fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))
+    fmt.Println(&#34;USD:&#34;, demo.Available(ctx, hb, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, hb, ngnWallet.ID))
 
     // The app retries after a timeout: nothing moves twice.
-    _, err = books.Transactions.RecordAll(ctx, exchange)
+    _, err = hb.Transactions.RecordAll(ctx, exchange)
     fmt.Println(&#34;retried:&#34;, errors.Is(err, humanblnk.ErrDuplicate))
 
     // Selling more than she has: neither half applies.
     tooMuch := money.MustParse(&#34;500&#34;, demo.USD)
-    _, err = books.Transactions.RecordAll(ctx, []humanblnk.Transaction{
+    _, err = hb.Transactions.RecordAll(ctx, []humanblnk.Transaction{
         {Ref: humanblnk.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;sell&#34;), From: humanblnk.Single(humanblnk.AccountRef(usdWallet.ID), tooMuch), To: humanblnk.Single(fxDesk, tooMuch), Description: &#34;Sell USD&#34;},
         {Ref: humanblnk.Reference(&#34;fx&#34;, id+&#34;_big&#34;, &#34;buy&#34;), From: humanblnk.Single(fxDesk, money.MustParse(&#34;775125&#34;, demo.NGN)), To: humanblnk.Single(humanblnk.AccountRef(ngnWallet.ID), money.MustParse(&#34;775125&#34;, demo.NGN)), Description: &#34;Buy NGN&#34;},
     })
     fmt.Println(&#34;too much:&#34;, errors.Is(err, humanblnk.ErrInsufficientFunds))
-    fmt.Println(&#34;USD:&#34;, demo.Available(ctx, books, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, books, ngnWallet.ID))
+    fmt.Println(&#34;USD:&#34;, demo.Available(ctx, hb, usdWallet.ID), &#34;| NGN:&#34;, demo.Available(ctx, hb, ngnWallet.ID))
 }</code></pre></figure>
 </div>
 <div class="panel" data-panel="output" hidden><figure class="code"><figcaption><span class="file">output</span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-text">fx:fx_1792634717768817000:sell  100.00 USD

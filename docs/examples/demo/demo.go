@@ -28,28 +28,28 @@ var Run = fmt.Sprint(time.Now().UnixNano())
 
 // Setup connects to the Blnk at $BLNK_URL (default http://localhost:5001)
 // and creates a fresh "Customer Wallets" ledger for this run.
-func Setup() (context.Context, *humanblnk.Ledger) {
+func Setup() (context.Context, *humanblnk.Client) {
 	ctx := context.Background()
 	url := os.Getenv("BLNK_URL")
 	if url == "" {
 		url = "http://localhost:5001"
 	}
 	client := blnk.New(url)
-	wallets := Must(humanblnk.New(client).Books.Create(ctx, "Customer Wallets "+Run, nil))
+	wallets := Must(humanblnk.New(client).Ledgers.Create(ctx, "Customer Wallets "+Run, nil))
 	return ctx, humanblnk.New(client, humanblnk.WithAccountLedger(wallets.ID))
 }
 
 // Customer onboards a customer (chapter 2) and returns their wallet.
-func Customer(ctx context.Context, books *humanblnk.Ledger, name string, c currency.Currency) humanblnk.Account {
-	owner := Must(books.Identities.Create(ctx, humanblnk.Meta{"customer_id": name + "_" + Run}))
-	return Must(books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: c}))
+func Customer(ctx context.Context, hb *humanblnk.Client, name string, c currency.Currency) humanblnk.Account {
+	owner := Must(hb.Identities.Create(ctx, humanblnk.Meta{"customer_id": name + "_" + Run}))
+	return Must(hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: c}))
 }
 
 // Deposit credits a wallet as a bank transfer through Paystack would
 // (chapter 4).
-func Deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Account, amount string) {
+func Deposit(ctx context.Context, hb *humanblnk.Client, wallet humanblnk.Account, amount string) {
 	m := money.MustParse(amount, wallet.Currency)
-	Must(books.Transactions.Record(ctx, humanblnk.Transaction{
+	Must(hb.Transactions.Record(ctx, humanblnk.Transaction{
 		Ref:         humanblnk.Reference("deposit", "paystack", wallet.ID, amount, Run),
 		From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), m),
 		To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), m),
@@ -58,8 +58,8 @@ func Deposit(ctx context.Context, books *humanblnk.Ledger, wallet humanblnk.Acco
 }
 
 // Available is what the account can spend now, as text.
-func Available(ctx context.Context, books *humanblnk.Ledger, id string) string {
-	a := Must(books.Accounts.Get(ctx, id))
+func Available(ctx context.Context, hb *humanblnk.Client, id string) string {
+	a := Must(hb.Accounts.Get(ctx, id))
 	return a.Available.String() + " " + a.Available.Code()
 }
 

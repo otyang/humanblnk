@@ -35,7 +35,7 @@ are safe to repeat.
 | `Holds.Cancel` | yes | |
 | `Accounts.OpenForCustomer` | yes | one account per owner, ledger and currency |
 | `Identities.Create` | **no** | use `FindByCustomer` first |
-| `Accounts.CreateInternal`, `Books.Create` | **no** | look with `List` first |
+| `Accounts.CreateInternal`, `Ledgers.Create` | **no** | look with `List` first |
 | `Watches.Create` | **no** | look with `List` first |
 | every read (`Get`, `List`, `GetByReference`, `Preview`) | yes | |
 

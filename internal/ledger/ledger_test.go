@@ -1,4 +1,4 @@
-package books_test
+package ledger_test
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"github.com/otyang/humanblnk/internal/types"
 )
 
-func TestBooks(t *testing.T) {
+func TestLedgers(t *testing.T) {
 	s, f := newService(t)
 	ctx := context.Background()
 	f.On("POST /ledgers", 201, `{"ledger_id":"ldg_1","name":"Customer Wallets"}`)

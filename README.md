@@ -9,7 +9,7 @@ every account and transaction lives in [Blnk Core](https://docs.blnkfinance.com)
 | [`money`](money/README.md) | An exact amount in one currency: parse, add, round, convert to the smallest unit |
 | `humanblnk` (this directory) | HumanBlnk's books: customer accounts, transactions, holds, reversals, watches, reconciliation. Speaks `money.Money` and its own errors |
 | `blnk` | The Blnk Core HTTP client. Only `humanblnk` uses it |
-| `internal/...` | The services behind `humanblnk.Ledger`; not importable from outside this module |
+| `internal/...` | The services behind `humanblnk.Client`; not importable from outside this module |
 
 Business features (airtime, payouts, transfers) go in their own packages and
 import `humanblnk`; `humanblnk` never imports them.
@@ -35,17 +35,17 @@ import (
 )
 
 ngn := currency.MustGet(currency.NGN)
-books := humanblnk.New(blnk.New("http://localhost:5001"),
-	humanblnk.WithAccountLedger(walletsLedgerID), // made once at setup: books.Books.Create(ctx, "Customer Wallets", nil)
+hb := humanblnk.New(blnk.New("http://localhost:5001"),
+	humanblnk.WithAccountLedger(walletsLedgerID), // made once at setup: hb.Ledgers.Create(ctx, "Customer Wallets", nil)
 )
 
 // A customer and their wallet. OpenForCustomer is safe to call again.
-owner, _ := books.Identities.Create(ctx, humanblnk.Meta{"customer_id": "cus_123"})
-wallet, _ := books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: ngn})
+owner, _ := hb.Identities.Create(ctx, humanblnk.Meta{"customer_id": "cus_123"})
+wallet, _ := hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: ngn})
 
 // A deposit arrives through Paystack.
 amount := money.MustParse("5000", ngn)
-_, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+_, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
 	Ref:         humanblnk.Reference("deposit", "ps_ref_9"), // from your own ids, the same on every retry
 	From:        humanblnk.Single(humanblnk.ClearingAccount("paystack"), amount),
 	To:          humanblnk.Single(humanblnk.AccountRef(wallet.ID), amount),
@@ -56,19 +56,19 @@ if errors.Is(err, humanblnk.ErrDuplicate) {
 }
 
 // A payout: reserve the money, then settle or give it back.
-hold, err := books.Holds.Place(ctx, humanblnk.Transaction{
+hold, err := hb.Holds.Place(ctx, humanblnk.Transaction{
 	Ref:         humanblnk.Reference("payout", "po_7"),
 	From:        humanblnk.Single(humanblnk.AccountRef(wallet.ID), money.MustParse("2000", ngn)),
 	To:          humanblnk.Single(humanblnk.World, money.MustParse("2000", ngn)),
 	Description: "Payout to bank",
 }, time.Time{})
 if bankAccepted {
-	books.Holds.Capture(ctx, hold, money.Money{}) // all of it
+	hb.Holds.Capture(ctx, hold, money.Money{}) // all of it
 } else {
-	books.Holds.Cancel(ctx, hold)
+	hb.Holds.Cancel(ctx, hold)
 }
 
-acct, _ := books.Accounts.Get(ctx, wallet.ID)
+acct, _ := hb.Accounts.Get(ctx, wallet.ID)
 fmt.Println(acct.Available) // "3000.00": what the customer can spend now
 ```
 
@@ -93,7 +93,7 @@ service, all the rules, and known limits.
 
 ## What it does
 
-| `books.` | Methods | For |
+| `hb.` | Methods | For |
 | --- | --- | --- |
 | `Identities` | `Create`, `Get`, `UpdateMeta`, `FindByCustomer` | Owners for customer accounts, holding no personal data (only references such as `customer_id`) |
 | `Accounts` | `OpenForCustomer`, `CreateInternal`, `Get`, `List` | Balances: money in one currency. Customer accounts always have an owner, one per ledger and currency; HumanBlnk's own accounts live outside the customer ledgers |
@@ -101,11 +101,11 @@ service, all the rules, and known limits.
 | `Holds` | `Place`, `Capture`, `Cancel` | Reserving money now, settling it later |
 | `Watches` | `Create`, `Get`, `List`, `Change`, `Delete` | Thresholds that fire the `balance.monitor` webhook |
 | `Reconciliation` | `Upload`, `AddRule`, `ChangeRule`, `RemoveRule`, `Run`, `RunLines`, `Result` | Matching provider and bank statements against entries |
-| `Books` | `Create`, `Get`, `List`, `Rename` | Blnk ledgers: named groups of accounts |
+| `Ledgers` | `Create`, `Get`, `List`, `Rename` | Blnk ledgers: named groups of accounts |
 
 Each service has a type of its own (`IdentityService`, `AccountService`,
 `TransactionService`, `HoldService`, `WatchService`, `ReconciliationService`,
-`BookService`), so code that needs only one can take just that.
+`LedgerService`), so code that needs only one can take just that.
 
 Plus `humanblnk.VerifyWebhook` for Blnk's webhooks, and the vocabulary:
 `Transaction`, `Posting`, `Single`, `Many`, `Reference`, `World`, `FeeIncome`,
@@ -141,13 +141,13 @@ Errors: `ErrInsufficientFunds`, `ErrDuplicate`, `ErrReferenceUsed`, `ErrNotFound
 
 | Package | Contents |
 | --- | --- |
-| `humanblnk` | `Ledger`, `New`, and every public name re-exported (`aliases.go`) |
+| `humanblnk` | `Client`, `New`, and every public name re-exported (`aliases.go`) |
 | `internal/types` | The public types, errors and helpers, defined once |
-| `internal/accounts`, `transactions`, `holds`, `watches`, `reconcile`, `books`, `identities`, `events` | One package per service |
+| `internal/accounts`, `transactions`, `holds`, `watches`, `reconcile`, `ledger`, `identities`, `events` | One package per service |
 | `internal/core` | Shared and private: the Blnk client, conversion, the currency check, error mapping |
 
 A new public type goes in `internal/types` and gets an alias in `aliases.go`;
-a new service gets a field on `Ledger` and a `…Service` alias.
+a new service gets a field on `Client` and a `…Service` alias.
 
 ## Tests
 

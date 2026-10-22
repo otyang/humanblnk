@@ -5,10 +5,10 @@ import (
 	"time"
 
 	"github.com/otyang/humanblnk/internal/accounts"
-	"github.com/otyang/humanblnk/internal/books"
 	"github.com/otyang/humanblnk/internal/events"
 	"github.com/otyang/humanblnk/internal/holds"
 	"github.com/otyang/humanblnk/internal/identities"
+	"github.com/otyang/humanblnk/internal/ledger"
 	"github.com/otyang/humanblnk/internal/reconcile"
 	"github.com/otyang/humanblnk/internal/transactions"
 	"github.com/otyang/humanblnk/internal/types"
@@ -35,7 +35,7 @@ type (
 	CustomerAccount = types.CustomerAccount
 	AccountQuery    = types.AccountQuery
 	Event           = types.Event
-	Book            = types.Book
+	Ledger          = types.Ledger
 	Identity        = types.Identity
 	WatchID         = types.WatchID
 	Watch           = types.Watch
@@ -54,7 +54,7 @@ type (
 	RunResult       = types.RunResult
 )
 
-// The services a Ledger holds, named so callers can keep or pass just one:
+// The services a Client holds, named so callers can keep or pass just one:
 // a handler that only places holds can take a *HoldService.
 type (
 	IdentityService       = identities.Service
@@ -63,7 +63,7 @@ type (
 	HoldService           = holds.Service
 	WatchService          = watches.Service
 	ReconciliationService = reconcile.Service
-	BookService           = books.Service
+	LedgerService         = ledger.Service
 )
 
 // Watch fields and operators.

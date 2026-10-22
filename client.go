@@ -3,29 +3,29 @@ package humanblnk
 import (
 	"github.com/otyang/humanblnk/blnk"
 	"github.com/otyang/humanblnk/internal/accounts"
-	"github.com/otyang/humanblnk/internal/books"
 	"github.com/otyang/humanblnk/internal/core"
 	"github.com/otyang/humanblnk/internal/holds"
 	"github.com/otyang/humanblnk/internal/identities"
+	"github.com/otyang/humanblnk/internal/ledger"
 	"github.com/otyang/humanblnk/internal/reconcile"
 	"github.com/otyang/humanblnk/internal/transactions"
 	"github.com/otyang/humanblnk/internal/watches"
 )
 
-// Ledger keeps HumanBlnk's books in one Blnk instance. Its operations are grouped
-// by what they act on: books.Accounts.OpenForCustomer,
-// books.Transactions.Record, books.Holds.Capture.
-type Ledger struct {
+// Client keeps HumanBlnk's books in one Blnk instance. Its operations are grouped
+// by what they act on: hb.Accounts.OpenForCustomer,
+// hb.Transactions.Record, hb.Holds.Capture.
+type Client struct {
 	Identities     *identities.Service
 	Accounts       *accounts.Service
 	Transactions   *transactions.Service
 	Holds          *holds.Service
 	Watches        *watches.Service
 	Reconciliation *reconcile.Service
-	Books          *books.Service
+	Ledgers        *ledger.Service
 }
 
-// Option configures a Ledger.
+// Option configures a Client.
 type Option func(*config)
 
 type config struct {
@@ -54,21 +54,21 @@ func WithCustomerLedgers(ids ...string) Option {
 	}
 }
 
-// New returns a Ledger on c.
-func New(c *blnk.Client, opts ...Option) *Ledger {
+// New returns a Client on c.
+func New(c *blnk.Client, opts ...Option) *Client {
 	var cfg config
 	for _, o := range opts {
 		o(&cfg)
 	}
 	k := core.New(c, cfg.accountLedger)
 	k.CustomerLedgers = cfg.customerLedgers
-	return &Ledger{
+	return &Client{
 		Identities:     identities.New(k),
 		Accounts:       accounts.New(k),
 		Transactions:   transactions.New(k),
 		Holds:          holds.New(k),
 		Watches:        watches.New(k),
 		Reconciliation: reconcile.New(k),
-		Books:          books.New(k),
+		Ledgers:        ledger.New(k),
 	}
 }

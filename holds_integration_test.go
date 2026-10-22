@@ -20,7 +20,7 @@ func TestIntegrationBlnkRepeatsPartialCommit(t *testing.T) {
 	ctx, w := setup(t)
 	ada := w.account(t, ctx, iusd)
 	w.fund(t, ctx, ada, "100")
-	h, err := w.books.Holds.Place(ctx, humanblnk.Transaction{
+	h, err := w.hb.Holds.Place(ctx, humanblnk.Transaction{
 		Ref: w.ref("hold-repeat"), From: humanblnk.Single(humanblnk.AccountRef(ada.ID), usdT("100")),
 		To: humanblnk.Single(humanblnk.World, usdT("100")), Description: "payout",
 	}, time.Time{})
@@ -37,14 +37,14 @@ func TestIntegrationBlnkRepeatsPartialCommit(t *testing.T) {
 		}
 		t.Logf("commit %d: %s %s %s", i+1, res.Transaction.GetID(), res.Transaction.Status, res.Transaction.PreciseAmount.String())
 	}
-	got, err := w.books.Accounts.Get(ctx, ada.ID)
+	got, err := w.hb.Accounts.Get(ctx, ada.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Total.String() != "40.00" {
 		t.Fatalf("total after committing 30 twice: %s, want 40.00 (both applied)", got.Total)
 	}
-	held, err := w.books.Transactions.Get(ctx, string(h))
+	held, err := w.hb.Transactions.Get(ctx, string(h))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,23 +62,23 @@ func TestIntegrationHoldRepeats(t *testing.T) {
 		Ref: w.ref("hold-retry"), From: humanblnk.Single(humanblnk.AccountRef(ada.ID), usdT("100")),
 		To: humanblnk.Single(humanblnk.World, usdT("100")), Description: "payout",
 	}
-	h, err := w.books.Holds.Place(ctx, payout, time.Time{})
+	h, err := w.hb.Holds.Place(ctx, payout, time.Time{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again, err := w.books.Holds.Place(ctx, payout, time.Time{}); err != nil || again != h {
+	if again, err := w.hb.Holds.Place(ctx, payout, time.Time{}); err != nil || again != h {
 		t.Fatalf("second Place: %q %v, want %q", again, err, h)
 	}
 
-	first, err := w.books.Holds.Capture(ctx, h, usdT("30"))
+	first, err := w.hb.Holds.Capture(ctx, h, usdT("30"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := w.books.Holds.Capture(ctx, h, usdT("30"))
+	second, err := w.hb.Holds.Capture(ctx, h, usdT("30"))
 	if err != nil || second.ID != first.ID {
 		t.Fatalf("second Capture: %+v %v, want %s", second, err, first.ID)
 	}
-	if _, err := w.books.Holds.Capture(ctx, h, money.Money{}); err == nil {
+	if _, err := w.hb.Holds.Capture(ctx, h, money.Money{}); err == nil {
 		t.Fatal("capturing the rest after a partial capture succeeded")
 	}
 	if got := w.available(t, ctx, ada); got != "70.00" {

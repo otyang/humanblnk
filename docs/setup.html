@@ -56,7 +56,7 @@
   <article>
     <p class="eyebrow">Chapter 1 · Foundations</p>
     <h1 id="setting-up"><a class="anchor" href="#setting-up">Setting up</a></h1>
-<p>Blnk groups accounts into <strong>ledgers</strong> (humanblnk calls them books, keeping the word ledger for the whole system). HumanBlnk needs only a few, made <strong>once</strong>:</p>
+<p>Blnk groups accounts into <strong>ledgers</strong>. HumanBlnk needs only a few, made <strong>once</strong>:</p>
 <div class="table"><table>
 <thead><tr><th>Ledger</th><th>Holds</th></tr></thead><tbody>
 <tr><td>Customer Wallets</td><td>every customer&#39;s spending accounts, in every currency</td></tr>
@@ -65,18 +65,18 @@
 </tbody></table></div>
 <p>Add a ledger only for a different kind of money. Never make one per customer or per currency. You never create the General Ledger or the system accounts (<code>@World</code>, <code>@FeeIncome</code>, clearing accounts): Blnk makes them the first time a transaction uses them.</p>
 <h2 id="step-1-create-the-ledgers-once"><a class="anchor" href="#step-1-create-the-ledgers-once">Step 1: create the ledgers, once</a></h2>
-<p>Run this from a setup script or migration, <strong>not</strong> when your service starts. <code>Books.Create</code> isn&#39;t safe to repeat: each call makes another ledger. If you&#39;re not sure the setup already ran, look first with <code>Books.List(ctx, 10, 0)</code>.</p>
+<p>Run this from a setup script or migration, <strong>not</strong> when your service starts. <code>Ledgers.Create</code> isn&#39;t safe to repeat: each call makes another ledger. If you&#39;re not sure the setup already ran, look first with <code>Ledgers.List(ctx, 10, 0)</code>.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">setup := humanblnk.New(client)
 suffix := time.Now().Format(&#34;150405&#34;) // only so this example can run twice
-wallets, err := setup.Books.Create(ctx, &#34;Customer Wallets &#34;+suffix, nil)
+wallets, err := setup.Ledgers.Create(ctx, &#34;Customer Wallets &#34;+suffix, nil)
 if err != nil {
     log.Fatal(err)
 }
-savings, err := setup.Books.Create(ctx, &#34;Savings &#34;+suffix, nil)
+savings, err := setup.Ledgers.Create(ctx, &#34;Savings &#34;+suffix, nil)
 if err != nil {
     log.Fatal(err)
 }
-ops, err := setup.Books.Create(ctx, &#34;Operations &#34;+suffix, nil)
+ops, err := setup.Ledgers.Create(ctx, &#34;Operations &#34;+suffix, nil)
 if err != nil {
     log.Fatal(err)
 }
@@ -84,21 +84,21 @@ fmt.Println(&#34;Put these in your config:&#34;)
 fmt.Println(&#34;  WALLETS_LEDGER =&#34;, wallets.ID)
 fmt.Println(&#34;  SAVINGS_LEDGER =&#34;, savings.ID)
 fmt.Println(&#34;  OPS_LEDGER     =&#34;, ops.ID)</code></pre></figure>
-<h2 id="step-2-build-the-ledger-at-start-up"><a class="anchor" href="#step-2-build-the-ledger-at-start-up">Step 2: build the Ledger at start-up</a></h2>
-<p>Every time your service starts, build one <code>*humanblnk.Ledger</code> from the ids in your config, and share it. Everything hangs off it:</p>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">books := humanblnk.New(client,
+<h2 id="step-2-build-the-client-at-start-up"><a class="anchor" href="#step-2-build-the-client-at-start-up">Step 2: build the Client at start-up</a></h2>
+<p>Every time your service starts, build one <code>*humanblnk.Client</code> from the ids in your config, and share it. Everything hangs off it:</p>
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">hb := humanblnk.New(client,
     humanblnk.WithAccountLedger(wallets.ID),   // where customer wallets open
     humanblnk.WithCustomerLedgers(savings.ID), // other customer-only ledgers
 )
 
 // The services hang off it.
-_ = books.Identities     // owners of customer accounts
-_ = books.Accounts       // open, create and read accounts
-_ = books.Transactions   // record, preview, reverse and read money movements
-_ = books.Holds          // reserve money, then capture or cancel
-_ = books.Watches        // balance thresholds that fire a webhook
-_ = books.Reconciliation // match provider statements against entries
-_ = books.Books          // the ledgers themselves</code></pre></figure>
+_ = hb.Identities     // owners of customer accounts
+_ = hb.Accounts       // open, create and read accounts
+_ = hb.Transactions   // record, preview, reverse and read money movements
+_ = hb.Holds          // reserve money, then capture or cancel
+_ = hb.Watches        // balance thresholds that fire a webhook
+_ = hb.Reconciliation // match provider statements against entries
+_ = hb.Ledgers        // the ledgers themselves</code></pre></figure>
 <div class="table"><table>
 <thead><tr><th>Option</th><th>Why</th></tr></thead><tbody>
 <tr><td><code>WithAccountLedger(id)</code></td><td>The ledger <code>Accounts.OpenForCustomer</code> uses when you don&#39;t name one. Don&#39;t change it once customers have accounts: their wallets live in the old one.</td></tr>
@@ -108,7 +108,7 @@ _ = books.Books          // the ledgers themselves</code></pre></figure>
 <h2 id="the-whole-example"><a class="anchor" href="#the-whole-example">The whole example</a></h2>
 <div class="example">
 <div class="tabs" role="tablist"><button role="tab" class="tab active" data-tab="code">Code</button><button role="tab" class="tab" data-tab="output">Output</button><span class="cmd"><code>go run ./docs/examples/01-setup</code></span></div>
-<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 1: create the ledgers once, then build the Ledger your service
+<div class="panel" data-panel="code"><figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/01-setup/main.go" target="_blank" rel="noopener">01-setup/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Chapter 1: create the ledgers once, then build the Client your service
 // uses from their ids.
 package main
 
@@ -134,15 +134,15 @@ func main() {
     // --- Once, at setup (a script or migration, never at start-up) ---
     setup := humanblnk.New(client)
     suffix := time.Now().Format(&#34;150405&#34;) // only so this example can run twice
-    wallets, err := setup.Books.Create(ctx, &#34;Customer Wallets &#34;+suffix, nil)
+    wallets, err := setup.Ledgers.Create(ctx, &#34;Customer Wallets &#34;+suffix, nil)
     if err != nil {
         log.Fatal(err)
     }
-    savings, err := setup.Books.Create(ctx, &#34;Savings &#34;+suffix, nil)
+    savings, err := setup.Ledgers.Create(ctx, &#34;Savings &#34;+suffix, nil)
     if err != nil {
         log.Fatal(err)
     }
-    ops, err := setup.Books.Create(ctx, &#34;Operations &#34;+suffix, nil)
+    ops, err := setup.Ledgers.Create(ctx, &#34;Operations &#34;+suffix, nil)
     if err != nil {
         log.Fatal(err)
     }
@@ -151,22 +151,22 @@ func main() {
     fmt.Println(&#34;  SAVINGS_LEDGER =&#34;, savings.ID)
     fmt.Println(&#34;  OPS_LEDGER     =&#34;, ops.ID)
 
-    // --- At start-up, every time: one Ledger for the whole service ---
-    books := humanblnk.New(client,
+    // --- At start-up, every time: one Client for the whole service ---
+    hb := humanblnk.New(client,
         humanblnk.WithAccountLedger(wallets.ID),   // where customer wallets open
         humanblnk.WithCustomerLedgers(savings.ID), // other customer-only ledgers
     )
 
     // The services hang off it.
-    _ = books.Identities     // owners of customer accounts
-    _ = books.Accounts       // open, create and read accounts
-    _ = books.Transactions   // record, preview, reverse and read money movements
-    _ = books.Holds          // reserve money, then capture or cancel
-    _ = books.Watches        // balance thresholds that fire a webhook
-    _ = books.Reconciliation // match provider statements against entries
-    _ = books.Books          // the ledgers themselves
+    _ = hb.Identities     // owners of customer accounts
+    _ = hb.Accounts       // open, create and read accounts
+    _ = hb.Transactions   // record, preview, reverse and read money movements
+    _ = hb.Holds          // reserve money, then capture or cancel
+    _ = hb.Watches        // balance thresholds that fire a webhook
+    _ = hb.Reconciliation // match provider statements against entries
+    _ = hb.Ledgers        // the ledgers themselves
 
-    all, err := books.Books.List(ctx, 3, 0)
+    all, err := hb.Ledgers.List(ctx, 3, 0)
     if err != nil {
         log.Fatal(err)
     }

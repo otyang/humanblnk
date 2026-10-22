@@ -13,14 +13,14 @@ import (
 )
 
 func main() {
-	ctx, books := demo.Setup()
-	ada := demo.Customer(ctx, books, "ada", demo.NGN)
+	ctx, hb := demo.Setup()
+	ada := demo.Customer(ctx, hb, "ada", demo.NGN)
 
 	// Two deposits HumanBlnk recorded from Paystack webhooks.
 	refs := []string{humanblnk.Reference("deposit", "paystack", "ps_a_"+demo.Run), humanblnk.Reference("deposit", "paystack", "ps_b_"+demo.Run)}
 	for i, amount := range []string{"10000", "2500"} {
 		m := money.MustParse(amount, demo.NGN)
-		if _, err := books.Transactions.Record(ctx, humanblnk.Transaction{
+		if _, err := hb.Transactions.Record(ctx, humanblnk.Transaction{
 			Ref: refs[i], From: humanblnk.Single(humanblnk.ClearingAccount("paystack"), m), To: humanblnk.Single(humanblnk.AccountRef(ada.ID), m),
 			Description: "Bank transfer",
 		}); err != nil {
@@ -30,7 +30,7 @@ func main() {
 
 	// 1. What counts as a match. Make the rule once and reuse it.
 	// snippet:rule
-	rule, err := books.Reconciliation.AddRule(ctx, humanblnk.MatchRule{
+	rule, err := hb.Reconciliation.AddRule(ctx, humanblnk.MatchRule{
 		Name: "paystack: amount and reference " + demo.Run,
 		Criteria: []humanblnk.Criterion{
 			{Field: humanblnk.MatchAmount, Op: humanblnk.MatchEquals},
@@ -50,7 +50,7 @@ func main() {
 		{ID: "stl_2_" + demo.Run, Amount: money.MustParse("2500", demo.NGN), Reference: refs[1], Date: time.Now(), Source: "paystack"},
 		{ID: "stl_3_" + demo.Run, Amount: money.MustParse("7000", demo.NGN), Reference: "deposit:paystack:ps_missing_" + demo.Run, Date: time.Now(), Source: "paystack"},
 	}
-	run, err := books.Reconciliation.RunLines(ctx, report, humanblnk.Run{Rules: []humanblnk.RuleID{rule.ID}})
+	run, err := hb.Reconciliation.RunLines(ctx, report, humanblnk.Run{Rules: []humanblnk.RuleID{rule.ID}})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func main() {
 	// snippet:poll
 	var res humanblnk.RunResult
 	for range 50 {
-		if res, err = books.Reconciliation.Result(ctx, run); err == nil && (res.Status == "completed" || res.Status == "failed") {
+		if res, err = hb.Reconciliation.Result(ctx, run); err == nil && (res.Status == "completed" || res.Status == "failed") {
 			break
 		}
 		time.Sleep(200 * time.Millisecond)
@@ -73,14 +73,14 @@ func main() {
 	// snippet:upload
 	csv := "id,amount,currency,reference,description,date\n" +
 		"stl_file_1_" + demo.Run + ",10000,NGN," + refs[0] + ",Bank transfer," + time.Now().UTC().Format(time.RFC3339) + "\n"
-	statement, lines, err := books.Reconciliation.Upload(ctx, "paystack", "settlement.csv", strings.NewReader(csv))
+	statement, lines, err := hb.Reconciliation.Upload(ctx, "paystack", "settlement.csv", strings.NewReader(csv))
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("uploaded", statement, "with", lines, "line(s); run it with Reconciliation.Run")
 	// end-snippet
 
-	if err := books.Reconciliation.RemoveRule(ctx, rule.ID); err != nil {
+	if err := hb.Reconciliation.RemoveRule(ctx, rule.ID); err != nil {
 		log.Fatal(err)
 	}
 }

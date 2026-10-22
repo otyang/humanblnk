@@ -1,6 +1,6 @@
 // Package watches sets thresholds on accounts: Blnk balance monitors, which
 // fire the webhook event "balance.monitor" while they hold. Use it through
-// humanblnk.Ledger.Watches.
+// humanblnk.Client.Watches.
 package watches
 
 import (

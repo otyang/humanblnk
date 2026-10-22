@@ -56,17 +56,17 @@
   <article>
     <p class="eyebrow">Chapter 13 · Running it</p>
     <h1 id="cheat-sheet"><a class="anchor" href="#cheat-sheet">Cheat sheet</a></h1>
-<p>Everything on one page. Import <code>github.com/otyang/humanblnk</code>; every type below is <code>humanblnk.X</code>. Build one <code>*humanblnk.Ledger</code> at start-up with <code>humanblnk.New(client, humanblnk.WithAccountLedger(id), humanblnk.WithCustomerLedgers(ids...))</code> (chapter 1).</p>
+<p>Everything on one page. Import <code>github.com/otyang/humanblnk</code>; every type below is <code>humanblnk.X</code>. Build one <code>*humanblnk.Client</code> at start-up with <code>humanblnk.New(client, humanblnk.WithAccountLedger(id), humanblnk.WithCustomerLedgers(ids...))</code> (chapter 1).</p>
 <h2 id="services"><a class="anchor" href="#services">Services</a></h2>
 <div class="table"><table>
 <thead><tr><th>Service</th><th>Methods</th></tr></thead><tbody>
-<tr><td><code>books.Identities</code></td><td><code>Create(ctx, meta) (string, error)</code>, <code>Get(ctx, id)</code>, <code>UpdateMeta(ctx, id, meta)</code>, <code>FindByCustomer(ctx, customerID)</code></td></tr>
-<tr><td><code>books.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, AccountQuery)</code></td></tr>
-<tr><td><code>books.Transactions</code></td><td><code>Record(ctx, Transaction)</code>, <code>RecordAll(ctx, []Transaction)</code>, <code>Preview(ctx, Transaction)</code>, <code>Reverse(ctx, Reversal)</code>, <code>Get(ctx, id)</code>, <code>GetByReference(ctx, ref)</code>, <code>List(ctx, EntryQuery)</code></td></tr>
-<tr><td><code>books.Holds</code></td><td><code>Place(ctx, Transaction, expires) (HoldID, error)</code>, <code>Capture(ctx, HoldID, amount)</code>, <code>Cancel(ctx, HoldID)</code></td></tr>
-<tr><td><code>books.Watches</code></td><td><code>Create(ctx, Watch)</code>, <code>Get(ctx, WatchID)</code>, <code>List(ctx, account)</code>, <code>Change(ctx, WatchID, Watch)</code>, <code>Delete(ctx, WatchID)</code></td></tr>
-<tr><td><code>books.Reconciliation</code></td><td><code>AddRule</code>, <code>ChangeRule</code>, <code>RemoveRule</code>, <code>Upload(ctx, source, filename, r)</code>, <code>Run(ctx, StatementID, Run)</code>, <code>RunLines(ctx, []StatementLine, Run)</code>, <code>Result(ctx, RunID)</code></td></tr>
-<tr><td><code>books.Books</code></td><td><code>Create(ctx, name, meta)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, limit, offset)</code>, <code>Rename(ctx, id, name)</code></td></tr>
+<tr><td><code>hb.Identities</code></td><td><code>Create(ctx, meta) (string, error)</code>, <code>Get(ctx, id)</code>, <code>UpdateMeta(ctx, id, meta)</code>, <code>FindByCustomer(ctx, customerID)</code></td></tr>
+<tr><td><code>hb.Accounts</code></td><td><code>OpenForCustomer(ctx, CustomerAccount)</code>, <code>CreateInternal(ctx, NewAccount)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, AccountQuery)</code></td></tr>
+<tr><td><code>hb.Transactions</code></td><td><code>Record(ctx, Transaction)</code>, <code>RecordAll(ctx, []Transaction)</code>, <code>Preview(ctx, Transaction)</code>, <code>Reverse(ctx, Reversal)</code>, <code>Get(ctx, id)</code>, <code>GetByReference(ctx, ref)</code>, <code>List(ctx, EntryQuery)</code></td></tr>
+<tr><td><code>hb.Holds</code></td><td><code>Place(ctx, Transaction, expires) (HoldID, error)</code>, <code>Capture(ctx, HoldID, amount)</code>, <code>Cancel(ctx, HoldID)</code></td></tr>
+<tr><td><code>hb.Watches</code></td><td><code>Create(ctx, Watch)</code>, <code>Get(ctx, WatchID)</code>, <code>List(ctx, account)</code>, <code>Change(ctx, WatchID, Watch)</code>, <code>Delete(ctx, WatchID)</code></td></tr>
+<tr><td><code>hb.Reconciliation</code></td><td><code>AddRule</code>, <code>ChangeRule</code>, <code>RemoveRule</code>, <code>Upload(ctx, source, filename, r)</code>, <code>Run(ctx, StatementID, Run)</code>, <code>RunLines(ctx, []StatementLine, Run)</code>, <code>Result(ctx, RunID)</code></td></tr>
+<tr><td><code>hb.Ledgers</code></td><td><code>Create(ctx, name, meta)</code>, <code>Get(ctx, id)</code>, <code>List(ctx, limit, offset)</code>, <code>Rename(ctx, id, name)</code></td></tr>
 <tr><td>package function</td><td><code>humanblnk.VerifyWebhook(secret, r, tolerance) (Event, error)</code></td></tr>
 </tbody></table></div>
 <h2 id="naming-accounts"><a class="anchor" href="#naming-accounts">Naming accounts</a></h2>

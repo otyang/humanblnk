@@ -1,5 +1,5 @@
 // Package accounts creates and reads ledger accounts: Blnk balances, each
-// money in one currency. Use it through humanblnk.Ledger.Accounts.
+// money in one currency. Use it through humanblnk.Client.Accounts.
 package accounts
 
 import (

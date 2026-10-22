@@ -31,11 +31,11 @@ func (provider) Buy(_ context.Context, id, phone string, _ money.Money) error {
 // end-snippet
 
 func main() {
-	ctx, books := demo.Setup()
-	ada := demo.Customer(ctx, books, "ada", demo.NGN)
-	demo.Deposit(ctx, books, ada, "5000")
+	ctx, hb := demo.Setup()
+	ada := demo.Customer(ctx, hb, "ada", demo.NGN)
+	demo.Deposit(ctx, hb, ada, "5000")
 	// snippet:wire
-	air := airtime.New(books.Holds, provider{}, "vtpass")
+	air := airtime.New(hb.Holds, provider{}, "vtpass")
 
 	buy := func(id, phone string) (humanblnk.HoldID, error) {
 		return air.Buy(ctx, airtime.Purchase{
@@ -45,19 +45,19 @@ func main() {
 	}
 
 	_, err := buy("air_1", "08031234567")
-	fmt.Println("delivered:", err, "| Ada:", demo.Available(ctx, books, ada.ID))
+	fmt.Println("delivered:", err, "| Ada:", demo.Available(ctx, hb, ada.ID))
 
 	_, err = buy("air_2", "08000000000")
-	fmt.Println("declined:", errors.Is(err, airtime.ErrDeclined), "| Ada:", demo.Available(ctx, books, ada.ID))
+	fmt.Println("declined:", errors.Is(err, airtime.ErrDeclined), "| Ada:", demo.Available(ctx, hb, ada.ID))
 
 	pending, err := buy("air_3", "08099999999")
-	fmt.Println("no answer:", errors.Is(err, airtime.ErrPending), "| Ada:", demo.Available(ctx, books, ada.ID), "(1000 still held)")
+	fmt.Println("no answer:", errors.Is(err, airtime.ErrPending), "| Ada:", demo.Available(ctx, hb, ada.ID), "(1000 still held)")
 
 	// Later the provider's webhook says it went through.
 	if err := air.Settle(ctx, pending, true); err != nil {
 		fmt.Println(err)
 	}
-	fmt.Println("settled after the webhook | Ada:", demo.Available(ctx, books, ada.ID))
+	fmt.Println("settled after the webhook | Ada:", demo.Available(ctx, hb, ada.ID))
 	// end-snippet
 
 	// More than she has.

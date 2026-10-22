@@ -33,16 +33,16 @@ func transfer(id string, from, to humanblnk.Account, amount money.Money) humanbl
 // end-snippet
 
 func main() {
-	ctx, books := demo.Setup()
-	ada := demo.Customer(ctx, books, "ada", demo.NGN)
-	bola := demo.Customer(ctx, books, "bola", demo.NGN)
-	demo.Deposit(ctx, books, ada, "50000")
+	ctx, hb := demo.Setup()
+	ada := demo.Customer(ctx, hb, "ada", demo.NGN)
+	bola := demo.Customer(ctx, hb, "bola", demo.NGN)
+	demo.Deposit(ctx, hb, ada, "50000")
 
 	t := transfer("tr_"+demo.Run, ada, bola, money.MustParse("10000", demo.NGN))
 
 	// 1. Dry run: what would happen? Nothing moves, and the reference stays free.
 	// snippet:preview
-	p, err := books.Transactions.Preview(ctx, t)
+	p, err := hb.Transactions.Preview(ctx, t)
 	if err != nil {
 		log.Fatal(err) // the request itself is wrong: bad account, currency, …
 	}
@@ -54,27 +54,27 @@ func main() {
 
 	// 2. Do it, with the same transaction.
 	// snippet:record
-	e, err := books.Transactions.Record(ctx, t)
+	e, err := hb.Transactions.Record(ctx, t)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Printf("recorded %s: %s from Ada, %d postings to\n", e.ID, e.Amount, len(e.To))
-	fmt.Println("Ada:", demo.Available(ctx, books, ada.ID), "| Bola:", demo.Available(ctx, books, bola.ID))
+	fmt.Println("Ada:", demo.Available(ctx, hb, ada.ID), "| Bola:", demo.Available(ctx, hb, bola.ID))
 	// end-snippet
 
 	// 3. Too much: the dry run says why, and Record refuses.
 	// snippet:toomuch
 	big := transfer("tr_big_"+demo.Run, ada, bola, money.MustParse("100000", demo.NGN))
-	p, _ = books.Transactions.Preview(ctx, big)
+	p, _ = hb.Transactions.Preview(ctx, big)
 	fmt.Println("too much, would apply:", p.WouldApply, "| because:", p.Rejection)
-	_, err = books.Transactions.Record(ctx, big)
+	_, err = hb.Transactions.Record(ctx, big)
 	fmt.Println("recording it anyway: insufficient funds?", errors.Is(err, humanblnk.ErrInsufficientFunds))
 	// end-snippet
 
 	// 4. Ada's history: money out of her wallet, newest first. (Money into
 	// it is a second query with To set.)
 	// snippet:history
-	out, n, err := books.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
+	out, n, err := hb.Transactions.List(ctx, humanblnk.EntryQuery{From: humanblnk.AccountRef(ada.ID), Limit: 10})
 	if err != nil {
 		log.Fatal(err)
 	}

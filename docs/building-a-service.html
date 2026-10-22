@@ -67,7 +67,7 @@
 </ol>
 <p>The money goes to the provider&#39;s clearing account, <code>humanblnk.ClearingAccount(&#34;vtpass&#34;)</code>: what HumanBlnk owes the provider, or how much of a prepaid float is used.</p>
 <h2 id="step-1-depend-on-interfaces"><a class="anchor" href="#step-1-depend-on-interfaces">Step 1: depend on interfaces</a></h2>
-<p>The package names the small part of the ledger it uses, so tests can pass a fake. <code>books.Holds</code> satisfies <code>Holds</code>.</p>
+<p>The package names the small part of the ledger it uses, so tests can pass a fake. <code>hb.Holds</code> satisfies <code>Holds</code>.</p>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">type Holds interface {
     Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
     Capture(ctx context.Context, h humanblnk.HoldID, amount money.Money) (humanblnk.Entry, error)
@@ -124,7 +124,7 @@ func (provider) Buy(_ context.Context, id, phone string, _ money.Money) error {
     }
     return nil
 }</code></pre></figure>
-<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/main.go" target="_blank" rel="noopener">07-airtime/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">air := airtime.New(books.Holds, provider{}, &#34;vtpass&#34;)
+<figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/main.go" target="_blank" rel="noopener">07-airtime/main.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">air := airtime.New(hb.Holds, provider{}, &#34;vtpass&#34;)
 
 buy := func(id, phone string) (humanblnk.HoldID, error) {
     return air.Buy(ctx, airtime.Purchase{
@@ -134,19 +134,19 @@ buy := func(id, phone string) (humanblnk.HoldID, error) {
 }
 
 _, err := buy(&#34;air_1&#34;, &#34;08031234567&#34;)
-fmt.Println(&#34;delivered:&#34;, err, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+fmt.Println(&#34;delivered:&#34;, err, &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID))
 
 _, err = buy(&#34;air_2&#34;, &#34;08000000000&#34;)
-fmt.Println(&#34;declined:&#34;, errors.Is(err, airtime.ErrDeclined), &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+fmt.Println(&#34;declined:&#34;, errors.Is(err, airtime.ErrDeclined), &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID))
 
 pending, err := buy(&#34;air_3&#34;, &#34;08099999999&#34;)
-fmt.Println(&#34;no answer:&#34;, errors.Is(err, airtime.ErrPending), &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;(1000 still held)&#34;)
+fmt.Println(&#34;no answer:&#34;, errors.Is(err, airtime.ErrPending), &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID), &#34;(1000 still held)&#34;)
 
 // Later the provider&#39;s webhook says it went through.
 if err := air.Settle(ctx, pending, true); err != nil {
     fmt.Println(err)
 }
-fmt.Println(&#34;settled after the webhook | Ada:&#34;, demo.Available(ctx, books, ada.ID))</code></pre></figure>
+fmt.Println(&#34;settled after the webhook | Ada:&#34;, demo.Available(ctx, hb, ada.ID))</code></pre></figure>
 <h2 id="the-whole-service"><a class="anchor" href="#the-whole-service">The whole service</a></h2>
 <figure class="code"><figcaption><span class="file"><a href="https://github.com/otyang/humanblnk/blob/main/docs/examples/07-airtime/airtime/airtime.go" target="_blank" rel="noopener">07-airtime/airtime/airtime.go</a></span><button class="copy" type="button" aria-label="Copy code">Copy</button></figcaption><pre><code class="language-go">// Package airtime sells airtime, paid from the customer&#39;s wallet. It is the
 // shape every business service takes: it imports humanblnk, names the small
@@ -163,7 +163,7 @@ import (
     &#34;github.com/otyang/humanblnk/money&#34;
 )
 
-// Holds is the part of the ledger airtime uses; books.Holds satisfies it,
+// Holds is the part of the ledger airtime uses; hb.Holds satisfies it,
 // and a test can pass a fake.
 type Holds interface {
     Place(ctx context.Context, t humanblnk.Transaction, expires time.Time) (humanblnk.HoldID, error)
@@ -270,10 +270,10 @@ func (provider) Buy(_ context.Context, id, phone string, _ money.Money) error {
 }
 
 func main() {
-    ctx, books := demo.Setup()
-    ada := demo.Customer(ctx, books, &#34;ada&#34;, demo.NGN)
-    demo.Deposit(ctx, books, ada, &#34;5000&#34;)
-    air := airtime.New(books.Holds, provider{}, &#34;vtpass&#34;)
+    ctx, hb := demo.Setup()
+    ada := demo.Customer(ctx, hb, &#34;ada&#34;, demo.NGN)
+    demo.Deposit(ctx, hb, ada, &#34;5000&#34;)
+    air := airtime.New(hb.Holds, provider{}, &#34;vtpass&#34;)
 
     buy := func(id, phone string) (humanblnk.HoldID, error) {
         return air.Buy(ctx, airtime.Purchase{
@@ -283,19 +283,19 @@ func main() {
     }
 
     _, err := buy(&#34;air_1&#34;, &#34;08031234567&#34;)
-    fmt.Println(&#34;delivered:&#34;, err, &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+    fmt.Println(&#34;delivered:&#34;, err, &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID))
 
     _, err = buy(&#34;air_2&#34;, &#34;08000000000&#34;)
-    fmt.Println(&#34;declined:&#34;, errors.Is(err, airtime.ErrDeclined), &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID))
+    fmt.Println(&#34;declined:&#34;, errors.Is(err, airtime.ErrDeclined), &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID))
 
     pending, err := buy(&#34;air_3&#34;, &#34;08099999999&#34;)
-    fmt.Println(&#34;no answer:&#34;, errors.Is(err, airtime.ErrPending), &#34;| Ada:&#34;, demo.Available(ctx, books, ada.ID), &#34;(1000 still held)&#34;)
+    fmt.Println(&#34;no answer:&#34;, errors.Is(err, airtime.ErrPending), &#34;| Ada:&#34;, demo.Available(ctx, hb, ada.ID), &#34;(1000 still held)&#34;)
 
     // Later the provider&#39;s webhook says it went through.
     if err := air.Settle(ctx, pending, true); err != nil {
         fmt.Println(err)
     }
-    fmt.Println(&#34;settled after the webhook | Ada:&#34;, demo.Available(ctx, books, ada.ID))
+    fmt.Println(&#34;settled after the webhook | Ada:&#34;, demo.Available(ctx, hb, ada.ID))
 
     // More than she has.
     _, err = air.Buy(ctx, airtime.Purchase{

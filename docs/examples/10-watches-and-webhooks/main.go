@@ -41,13 +41,13 @@ func webhook(w http.ResponseWriter, r *http.Request) {
 // end-snippet
 
 func main() {
-	ctx, books := demo.Setup()
-	ada := demo.Customer(ctx, books, "ada", demo.NGN)
-	demo.Deposit(ctx, books, ada, "5000")
+	ctx, hb := demo.Setup()
+	ada := demo.Customer(ctx, hb, "ada", demo.NGN)
+	demo.Deposit(ctx, hb, ada, "5000")
 
 	// 1. Tell Blnk to fire "balance.monitor" while Ada's balance is under ₦1,000.
 	// snippet:watch
-	low, err := books.Watches.Create(ctx, humanblnk.Watch{
+	low, err := hb.Watches.Create(ctx, humanblnk.Watch{
 		Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
 		Threshold: money.MustParse("1000", demo.NGN), Description: "low balance alert",
 	})
@@ -59,14 +59,14 @@ func main() {
 
 	// Move the line: Change makes the new watch before deleting the old one.
 	// snippet:manage
-	low, err = books.Watches.Change(ctx, low.ID, humanblnk.Watch{
+	low, err = hb.Watches.Change(ctx, low.ID, humanblnk.Watch{
 		Account: humanblnk.AccountRef(ada.ID), Field: humanblnk.WatchBalance, Op: humanblnk.WatchBelow,
 		Threshold: money.MustParse("2000", demo.NGN), Description: "low balance alert",
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	watches, _ := books.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
+	watches, _ := hb.Watches.List(ctx, humanblnk.AccountRef(ada.ID))
 	fmt.Println("watches on Ada:", len(watches), "| threshold now", watches[0].Threshold)
 	// end-snippet
 
@@ -94,7 +94,7 @@ func main() {
 
 	// 3. Stop watching.
 	// snippet:delete
-	if err := books.Watches.Delete(ctx, low.ID); err != nil {
+	if err := hb.Watches.Delete(ctx, low.ID); err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println("watch deleted")

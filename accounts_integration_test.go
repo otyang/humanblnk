@@ -13,18 +13,18 @@ import (
 // double-clicks do, gives every caller the same account.
 func TestIntegrationOpenForCustomerRace(t *testing.T) {
 	ctx, w := setup(t)
-	owner, err := w.books.Identities.Create(ctx, humanblnk.Meta{"customer_id": "cus_" + w.run})
+	owner, err := w.hb.Identities.Create(ctx, humanblnk.Meta{"customer_id": "cus_" + w.run})
 	if err != nil {
 		t.Fatal(err)
 	}
-	found, err := w.books.Identities.FindByCustomer(ctx, "cus_"+w.run)
+	found, err := w.hb.Identities.FindByCustomer(ctx, "cus_"+w.run)
 	if err != nil || found.ID != owner {
 		t.Fatalf("FindByCustomer: %+v %v, want %s", found, err, owner)
 	}
-	if _, err := w.books.Identities.UpdateMeta(ctx, owner, humanblnk.Meta{"tier": "gold"}); err != nil {
+	if _, err := w.hb.Identities.UpdateMeta(ctx, owner, humanblnk.Meta{"tier": "gold"}); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := w.books.Identities.Get(ctx, owner); err != nil || got.Meta["tier"] != "gold" || got.Meta["customer_id"] != "cus_"+w.run {
+	if got, err := w.hb.Identities.Get(ctx, owner); err != nil || got.Meta["tier"] != "gold" || got.Meta["customer_id"] != "cus_"+w.run {
 		t.Fatalf("after UpdateMeta: %+v %v", got, err)
 	}
 	want := humanblnk.CustomerAccount{Owner: owner, Currency: iusd}
@@ -36,7 +36,7 @@ func TestIntegrationOpenForCustomerRace(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			a, err := w.books.Accounts.OpenForCustomer(ctx, want)
+			a, err := w.hb.Accounts.OpenForCustomer(ctx, want)
 			if err != nil {
 				t.Error(err)
 				return
@@ -52,15 +52,15 @@ func TestIntegrationOpenForCustomerRace(t *testing.T) {
 	}
 
 	// Later opens return it too, and another currency is a second account.
-	again, err := w.books.Accounts.OpenForCustomer(ctx, want)
+	again, err := w.hb.Accounts.OpenForCustomer(ctx, want)
 	if err != nil || again.ID != ids[0] {
 		t.Fatalf("reopen: %+v %v", again, err)
 	}
-	ngn, err := w.books.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: ingn})
+	ngn, err := w.hb.Accounts.OpenForCustomer(ctx, humanblnk.CustomerAccount{Owner: owner, Currency: ingn})
 	if err != nil || ngn.ID == ids[0] {
 		t.Fatalf("NGN: %+v %v", ngn, err)
 	}
-	all, _, err := w.books.Accounts.List(ctx, humanblnk.AccountQuery{Owner: owner})
+	all, _, err := w.hb.Accounts.List(ctx, humanblnk.AccountQuery{Owner: owner})
 	if err != nil {
 		t.Fatal(err)
 	}
